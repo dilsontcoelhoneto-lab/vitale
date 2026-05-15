@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VITALE — Coach de Saúde Pessoal</title>
+<link rel="stylesheet" href="/assets/css/vitale.css">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Config — preenchida automaticamente em produção (veja docs/install.html)
+  window.VITALE_CONFIG = {
+    SUPABASE_URL: 'https://fwwvlwpmxhmjbpqxaoww.supabase.co',
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3d3Zsd3BteGhtamJwcXhhb3d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjE3ODIsImV4cCI6MjA5NDM5Nzc4Mn0.v60xJidhYw0S6l4ZYPn6IqHCOCBbsQFvOgIkizQJ90w'
+  };
+</script>
+</head>
+<body>
+<div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO...</p></div>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg width="64" height="64" viewBox="0 0 100 100" fill="none" style="margin-bottom:12px">
+        <defs>
+          <linearGradient id="vg" x1="0" y1="100" x2="100" y2="0">
+            <stop offset="0%" stop-color="#27c47d"/><stop offset="100%" stop-color="#d4a843"/>
+          </linearGradient>
+          <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <path d="M15 25 L50 80 L85 25" stroke="url(#vg)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#glow)"/>
+        <circle cx="50" cy="55" r="5" fill="#d4a843"/>
+      </svg>
+      <h1>VITALE</h1>
+      <div class="sub">Coach de Saúde Pessoal</div>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
+      <button class="auth-tab" onclick="switchAuthTab('signup')">Criar Conta</button>
+      <button class="auth-tab" onclick="switchAuthTab('magic')">Link Mágico</button>
+    </div>
+
+    <div id="alertBox"></div>
+
+    <!-- LOGIN -->
+    <div id="loginForm" class="auth-form">
+      <div style="margin-bottom:16px">
+        <label>E-mail</label>
+        <input type="email" id="loginEmail" placeholder="voce@email.com" autocomplete="email">
+      </div>
+      <div style="margin-bottom:20px">
+        <label>Senha</label>
+        <input type="password" id="loginSenha" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" onclick="doLogin()" style="width:100%;padding:14px">ENTRAR</button>
+      <p style="font-size:11px;color:var(--textm);text-align:center;margin-top:14px">
+        Esqueceu a senha? Use o <a href="#" onclick="switchAuthTab('magic');return false" style="color:var(--cyan)">Link Mágico</a>
+      </p>
+    </div>
+
+    <!-- SIGNUP -->
+    <div id="signupForm" class="auth-form" style="display:none">
+      <div class="info-box" style="margin-bottom:18px">
+        🎁 <strong>Acesso por convite</strong> — VITALE está em beta privado.
+      </div>
+      <div style="margin-bottom:16px">
+        <label>E-mail</label>
+        <input type="email" id="signupEmail" placeholder="voce@email.com" autocomplete="email">
+      </div>
+      <div style="margin-bottom:20px">
+        <label>Senha (mínimo 8 caracteres)</label>
+        <input type="password" id="signupSenha" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary" onclick="doSignup()" style="width:100%;padding:14px">CRIAR CONTA</button>
+    </div>
+
+    <!-- MAGIC LINK -->
+    <div id="magicForm" class="auth-form" style="display:none">
+      <div class="info-box" style="margin-bottom:18px">
+        ✨ <strong>Link Mágico:</strong> sem senha. Você recebe um link no e-mail para entrar.
+      </div>
+      <div style="margin-bottom:20px">
+        <label>E-mail</label>
+        <input type="email" id="magicEmail" placeholder="voce@email.com" autocomplete="email">
+      </div>
+      <button class="btn btn-primary" onclick="doMagicLink()" style="width:100%;padding:14px">ENVIAR LINK</button>
+    </div>
+
+    <p style="margin-top:32px;text-align:center;font-size:11px;color:var(--textm);letter-spacing:0.5px">
+      VITALE v4 • Hospedado em vitale.acacianegocios.com.br
+    </p>
+  </div>
+</div>
+
+<script src="/assets/js/supabase-client.js"></script>
+<script>
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.auth-form').forEach(f => f.style.display = 'none');
+  event?.target?.classList?.add('active');
+  if (tab === 'login') { document.querySelector('.auth-tab').classList.add('active'); document.getElementById('loginForm').style.display = 'block'; }
+  else if (tab === 'signup') document.getElementById('signupForm').style.display = 'block';
+  else if (tab === 'magic') document.getElementById('magicForm').style.display = 'block';
+  document.getElementById('alertBox').innerHTML = '';
+}
+
+function showAlert(type, msg) {
+  document.getElementById('alertBox').innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+}
+
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const senha = document.getElementById('loginSenha').value;
+  if (!email || !senha) return showAlert('error', 'Preencha e-mail e senha');
+  showAlert('info', '⏳ Entrando...');
+  const { data, error } = await window.VitaleAuth.signInWithPassword(email, senha);
+  if (error) return showAlert('error', error.message);
+  window.location.href = '/app.html';
+}
+
+async function doSignup() {
+  const email = document.getElementById('signupEmail').value.trim();
+  const senha = document.getElementById('signupSenha').value;
+  if (!email || senha.length < 8) return showAlert('error', 'E-mail válido e senha de no mínimo 8 caracteres');
+  showAlert('info', '⏳ Criando conta...');
+  const { data, error } = await window.VitaleAuth.signUpWithPassword(email, senha);
+  if (error) return showAlert('error', error.message);
+  if (data.user && !data.session) {
+    showAlert('success', '✅ Verifique seu e-mail para confirmar a conta!');
+  } else {
+    window.location.href = '/app.html';
+  }
+}
+
+async function doMagicLink() {
+  const email = document.getElementById('magicEmail').value.trim();
+  if (!email) return showAlert('error', 'Informe o e-mail');
+  showAlert('info', '⏳ Enviando link...');
+  const { error } = await window.VitaleAuth.signInWithMagicLink(email);
+  if (error) return showAlert('error', error.message);
+  showAlert('success', '✅ Link enviado! Verifique seu e-mail.');
+}
+
+// Auto-redirect se já logado
+(async () => {
+  const user = await window.VitaleAuth.getUser();
+  if (user) window.location.href = '/app.html';
+  document.getElementById('initLoader').classList.add('hidden');
+  setTimeout(() => document.getElementById('initLoader').remove(), 500);
+})();
+
+// Enter para submeter
+['loginSenha', 'signupSenha', 'magicEmail'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keypress', e => {
+    if (e.key === 'Enter') {
+      if (id === 'loginSenha') doLogin();
+      else if (id === 'signupSenha') doSignup();
+      else if (id === 'magicEmail') doMagicLink();
+    }
+  });
+});
+</script>
+</body>
+</html>

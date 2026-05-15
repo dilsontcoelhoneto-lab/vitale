@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VITALE — App</title>
+<link rel="stylesheet" href="/assets/css/vitale.css">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  window.VITALE_CONFIG = {
+    SUPABASE_URL: 'https://fwwvlwpmxhmjbpqxaoww.supabase.co',
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3d3Zsd3BteGhtamJwcXhhb3d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjE3ODIsImV4cCI6MjA5NDM5Nzc4Mn0.v60xJidhYw0S6l4ZYPn6IqHCOCBbsQFvOgIkizQJ90w'
+  };
+</script>
+</head>
+<body>
+<div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <svg width="42" height="42" viewBox="0 0 100 100" fill="none">
+      <defs>
+        <linearGradient id="vg" x1="0" y1="100" x2="100" y2="0">
+          <stop offset="0%" stop-color="#27c47d"/><stop offset="100%" stop-color="#d4a843"/>
+        </linearGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <path d="M15 25 L50 80 L85 25" stroke="url(#vg)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#glow)"/>
+      <circle cx="50" cy="55" r="5" fill="#d4a843"/>
+    </svg>
+    <div>
+      <h1>VITALE <span class="logo-badge">v4</span></h1>
+      <div class="logo-sub">Coach de Saúde</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-stat"><div class="header-stat-val" id="hdrPeso">—</div><div class="header-stat-lbl">Peso (kg)</div></div>
+    <div class="header-stat"><div class="header-stat-val" id="hdrIMC">—</div><div class="header-stat-lbl">IMC</div></div>
+    <div class="header-stat"><div class="header-stat-val" id="hdrPerda">—</div><div class="header-stat-lbl">Perdido</div></div>
+    <button class="settings-btn" onclick="VITALE_CORE.openSettings()" title="Configurações">⚙️</button>
+    <div class="user-menu" onclick="toggleUserMenu()">
+      <div class="user-avatar" id="headerUserAvatar">U</div>
+      <span class="user-name" id="headerUserName">Usuário</span>
+    </div>
+    <div id="userMenuDropdown" style="display:none;position:absolute;top:60px;right:24px;background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:8px;z-index:300;min-width:180px">
+      <a href="#" onclick="VITALE_CORE.openSettings();toggleUserMenu();return false" style="display:block;padding:10px 14px;color:var(--text);text-decoration:none;font-size:13px;border-radius:6px">⚙️ Configurações</a>
+      <a id="adminLink" href="/admin.html" style="display:none;padding:10px 14px;color:var(--gold);text-decoration:none;font-size:13px;border-radius:6px">🏛️ Torre de Comando</a>
+      <a href="/docs/install.html" target="_blank" style="display:block;padding:10px 14px;color:var(--text);text-decoration:none;font-size:13px;border-radius:6px">📖 Ajuda</a>
+      <a href="#" onclick="VITALE_CORE.signOut();return false" style="display:block;padding:10px 14px;color:var(--red);text-decoration:none;font-size:13px;border-radius:6px;border-top:1px solid var(--border);margin-top:4px">🚪 Sair</a>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" data-flag="dashboard" onclick="VITALE_CORE.switchTab(event,'dashboard')">📊 DASHBOARD</button>
+    <button class="tab-btn" data-flag="dashboard" onclick="VITALE_CORE.switchTab(event,'metas')">🎯 METAS</button>
+    <button class="tab-btn" data-flag="importar_manual" onclick="VITALE_CORE.switchTab(event,'upload')">📤 IMPORTAR</button>
+    <button class="tab-btn" data-flag="medicacoes" onclick="VITALE_CORE.switchTab(event,'medic')">💊 MEDICAÇÕES</button>
+    <button class="tab-btn" data-flag="historico" onclick="VITALE_CORE.switchTab(event,'historico')">📋 HISTÓRICO</button>
+    <button class="tab-btn" data-flag="relatorio_pdf" onclick="VITALE_CORE.switchTab(event,'relatorio')">📄 RELATÓRIO</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="tab-content active">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Dashboard</h2>
+
+    <div class="coach-card" data-flag="dashboard">
+      <div class="coach-header">
+        <div class="coach-avatar">🤖</div>
+        <div><div class="coach-name">VITALE COACH IA</div><div class="coach-role">Análise Personalizada</div></div>
+      </div>
+      <div class="coach-message" id="coachMessage">Carregando...</div>
+      <div class="coach-footer" id="coachFooter"></div>
+    </div>
+
+    <div class="imc-card">
+      <p class="imc-label">Seu IMC Atual</p>
+      <div class="imc-value" id="imcValue">—</div>
+      <p class="imc-status" id="imcStatus" style="color:var(--gold)">Aguardando dados</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-value" id="pesoAtual">—</div><div class="stat-label">Peso Atual (kg)</div></div>
+      <div class="stat"><div class="stat-value" id="pesoInicial">—</div><div class="stat-label">Peso Inicial (kg)</div></div>
+      <div class="stat"><div class="stat-value" id="perdaTotal">—</div><div class="stat-label">Perda Total</div></div>
+      <div class="stat"><div class="stat-value" id="diasRastro">—</div><div class="stat-label">Dias Rastreando</div></div>
+    </div>
+
+    <div class="card">
+      <h3>📈 Progresso para Meta</h3>
+      <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:12px;color:var(--textm)">Início: <span id="metaInicio" style="color:var(--text)">—</span></span>
+        <span style="font-size:12px;color:var(--textm)">Meta: <span id="metaLabel" style="color:var(--gold)">—</span> kg</span>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" id="metaProgress" style="width:0%"></div></div></div>
+      <p style="font-size:12px;color:var(--textm);margin-top:10px" id="metaText">—</p>
+    </div>
+
+    <div class="chart-card">
+      <h3>📉 Histórico + Projeção</h3>
+      <div class="chart-wrapper"><canvas id="weightChart"></canvas></div>
+      <div class="chart-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#27c47d"></div>Peso real</div>
+        <div class="legend-item"><div class="legend-dot" style="border-top:2px dashed #d4a843;background:none"></div>Projeção</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e8504a"></div>Meta IMC 30</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- METAS -->
+  <div id="metas" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Metas & Projeção</h2>
+    <div class="card" data-flag="dashboard">
+      <h3>📊 Status Atual</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="background:var(--bg1);padding:16px;border-radius:8px;border:1px solid var(--border)"><p style="font-size:10px;color:var(--textm);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Grau</p><p id="statusObesidade" style="font-size:16px;font-weight:800;margin:0">—</p></div>
+        <div style="background:var(--bg1);padding:16px;border-radius:8px;border:1px solid var(--border)"><p style="font-size:10px;color:var(--textm);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Ritmo</p><p id="velocidadePerda" style="font-size:16px;font-weight:800;color:var(--em);margin:0">—</p></div>
+        <div style="background:var(--bg1);padding:16px;border-radius:8px;border:1px solid var(--border)"><p style="font-size:10px;color:var(--textm);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">IMC Atual</p><p id="imcAtualMetas" style="font-size:16px;font-weight:800;color:var(--cyan);margin:0">—</p></div>
+        <div style="background:var(--bg1);padding:16px;border-radius:8px;border:1px solid var(--border)"><p style="font-size:10px;color:var(--textm);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Falta</p><p id="faltaMeta" style="font-size:16px;font-weight:800;color:var(--orange);margin:0">—</p></div>
+      </div>
+    </div>
+    <div class="projection-card">
+      <h4>🔮 Projeção Personalizada</h4>
+      <p id="projecaoTexto" style="font-size:14px;line-height:1.8;color:var(--text)">Carregando...</p>
+    </div>
+
+    <div class="card" data-flag="submetas" style="border-color:rgba(74,157,232,0.2);background:linear-gradient(135deg,rgba(74,157,232,0.03) 0%,var(--card) 60%)">
+      <h3 style="color:var(--cyan)">🎯 Minhas Submetas</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:20px;line-height:1.7">Marcos intermediários com data e propósito.</p>
+      <div class="form-group-3">
+        <div><label>Nome</label><input type="text" id="subNome" placeholder="Ex: Casamento, Viagem..."></div>
+        <div><label>Peso Alvo (kg)</label><input type="number" id="subPeso" step="0.1" placeholder="107.0"></div>
+        <div><label>Data Alvo (opcional)</label><input type="date" id="subData"></div>
+      </div>
+      <div style="margin-bottom:16px">
+        <label>Ícone</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <span class="checkbox-chip" onclick="VITALE_CORE.selectSubIcon(this,'💍')">💍 Evento</span>
+          <span class="checkbox-chip" onclick="VITALE_CORE.selectSubIcon(this,'✈️')">✈️ Viagem</span>
+          <span class="checkbox-chip" onclick="VITALE_CORE.selectSubIcon(this,'👗')">👗 Moda</span>
+          <span class="checkbox-chip" onclick="VITALE_CORE.selectSubIcon(this,'🏋️')">🏋️ Performance</span>
+          <span class="checkbox-chip" onclick="VITALE_CORE.selectSubIcon(this,'🩺')">🩺 Saúde</span>
+          <span class="checkbox-chip selected" onclick="VITALE_CORE.selectSubIcon(this,'🎯')">🎯 Geral</span>
+        </div>
+      </div>
+      <button class="btn btn-secondary" onclick="VITALE_CORE.adicionarSubmeta()" style="width:100%;padding:14px">+ ADICIONAR SUBMETA</button>
+      <div id="submetasContainer" style="margin-top:20px"></div>
+    </div>
+
+    <div class="card" data-flag="marcos_imc">
+      <h3>🏆 Marcos IMC</h3>
+      <div id="marcosContainer"></div>
+    </div>
+
+    <div class="card">
+      <h3>💡 Dicas</h3>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:14px;padding:14px;background:var(--bg1);border-radius:8px"><span>🥗</span><div><p style="font-size:13px;font-weight:600;margin-bottom:4px">Déficit calórico</p><p style="font-size:12px;color:var(--textm)">500–750 kcal/dia → 0.5–0.7 kg/semana de perda sustentável.</p></div></div>
+        <div style="display:flex;gap:14px;padding:14px;background:var(--bg1);border-radius:8px"><span>💪</span><div><p style="font-size:13px;font-weight:600;margin-bottom:4px">Musculação 3×/semana</p><p style="font-size:12px;color:var(--textm)">Preserva massa muscular e aumenta metabolismo basal.</p></div></div>
+        <div style="display:flex;gap:14px;padding:14px;background:var(--bg1);border-radius:8px"><span>📊</span><div><p style="font-size:13px;font-weight:600;margin-bottom:4px">Pesagem consistente</p><p style="font-size:12px;color:var(--textm)">Mesmo dia, mesma hora, em jejum.</p></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMPORTAR -->
+  <div id="upload" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Importar Dados</h2>
+
+    <div class="card" data-flag="ocr_imagem">
+      <h3>📸 Upload de Screenshot (OCR via IA)</h3>
+      <div class="info-box" style="margin-bottom:16px">
+        🤖 A IA do VITALE extrai automaticamente os dados de peso do print do seu app de saúde (Apple Health, Samsung Health, Balança Smart, etc.)
+      </div>
+      <div class="upload-area" onclick="document.getElementById('imageInput').click()">
+        <h4>📷 Clique ou arraste a imagem</h4>
+        <p>PNG, JPG, WebP — Máx 10MB</p>
+        <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="VITALE_CORE.handleImageUpload(event)">
+      </div>
+      <div id="imagePreview" style="margin-top:16px"></div>
+      <div id="ocrResult" style="margin-top:12px"></div>
+      <button class="btn btn-primary" onclick="VITALE_CORE.processarImagemOCR()" style="width:100%;margin-top:12px;display:none" id="btnProcessarImagem">🔍 PROCESSAR COM IA</button>
+    </div>
+
+    <div class="card" data-flag="importar_texto">
+      <h3>✍️ Texto (múltiplas linhas)</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Formato: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--gold)">2026-03-16: 116.4kg</code></p>
+      <textarea id="textInput" placeholder="2026-03-16: 116.4kg&#10;2026-03-09: 117.2kg&#10;2026-03-02: 118.0kg" style="min-height:110px;margin-bottom:14px"></textarea>
+      <button class="btn btn-primary" onclick="VITALE_CORE.importarTexto()" style="width:100%">📥 IMPORTAR DO TEXTO</button>
+    </div>
+
+    <div class="card" data-flag="importar_manual">
+      <h3>⚖️ Registro único</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:14px">Se a data já tiver registro, será solicitada confirmação para substituir.</p>
+      <div class="form-group">
+        <div><label>Data</label><input type="date" id="manualDate"></div>
+        <div><label>Peso (kg)</label><input type="number" id="manualPeso" step="0.1" placeholder="114.3"></div>
+      </div>
+      <button class="btn btn-primary" onclick="VITALE_CORE.adicionarPesoManual()" style="width:100%">➕ ADICIONAR REGISTRO</button>
+    </div>
+  </div>
+
+  <!-- MEDICAÇÕES -->
+  <div id="medic" class="tab-content" data-flag="medicacoes">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Medicações & Suplementos</h2>
+    <div class="card">
+      <h3>💉 Novo Agendamento</h3>
+      <div class="form-group">
+        <div><label>Nome</label><input type="text" id="medNome" placeholder="Ex: Vitamina D, Glifage XR..."></div>
+        <div><label>Dose</label><input type="text" id="medDose" placeholder="Ex: 10.000 IU, 500mg..."></div>
+      </div>
+      <label>Frequência</label>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        <div class="freq-option">
+          <label class="freq-label selected" id="lbl-diario" onclick="VITALE_CORE.selectFreq('diario')">
+            <input type="radio" name="frequencia" value="diario" checked>
+            <div class="freq-indicator"></div>
+            <div><div class="freq-text">📅 Diário</div><div class="freq-sub">Múltiplos horários por dia</div></div>
+          </label>
+          <div class="freq-sub-panel open" id="panel-diario">
+            <label style="margin-bottom:10px">Horários:</label>
+            <div class="checkbox-group" id="horariosChips">
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'horarios','06:30')">06:30</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'horarios','08:00')">08:00</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'horarios','13:00')">13:00</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'horarios','21:30')">21:30</span>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:10px;align-items:flex-end">
+              <div style="flex:1"><label>Horário personalizado</label><input type="time" id="outroHorario"></div>
+              <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.addCustomHorario()">+ Adicionar</button>
+            </div>
+          </div>
+        </div>
+        <div class="freq-option">
+          <label class="freq-label" id="lbl-semanal" onclick="VITALE_CORE.selectFreq('semanal')">
+            <input type="radio" name="frequencia" value="semanal">
+            <div class="freq-indicator"></div>
+            <div><div class="freq-text">📆 Semanal</div><div class="freq-sub">Um dia fixo por semana</div></div>
+          </label>
+          <div class="freq-sub-panel" id="panel-semanal">
+            <label style="margin-bottom:10px">Dia:</label>
+            <div class="checkbox-group" id="diasSemanaChips">
+              <span class="checkbox-chip" onclick="VITALE_CORE.selectDiaSemana(this,'seg')">Seg</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.selectDiaSemana(this,'ter')">Ter</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.selectDiaSemana(this,'qua')">Qua</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.selectDiaSemana(this,'qui')">Qui</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.selectDiaSemana(this,'sex')">Sex</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.selectDiaSemana(this,'sab')">Sáb</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.selectDiaSemana(this,'dom')">Dom</span>
+            </div>
+            <div style="margin-top:12px"><label>Horário</label><input type="time" id="horarioSemanal" value="08:00"></div>
+          </div>
+        </div>
+        <div class="freq-option">
+          <label class="freq-label" id="lbl-especifico" onclick="VITALE_CORE.selectFreq('especifico')">
+            <input type="radio" name="frequencia" value="especifico">
+            <div class="freq-indicator"></div>
+            <div><div class="freq-text">🎯 Dias Específicos</div><div class="freq-sub">Ex: Seg, Qua, Sex</div></div>
+          </label>
+          <div class="freq-sub-panel" id="panel-especifico">
+            <label style="margin-bottom:10px">Dias:</label>
+            <div class="checkbox-group" id="diasEspChips">
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'diasEsp','seg')">Seg</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'diasEsp','ter')">Ter</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'diasEsp','qua')">Qua</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'diasEsp','qui')">Qui</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'diasEsp','sex')">Sex</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'diasEsp','sab')">Sáb</span>
+              <span class="checkbox-chip" onclick="VITALE_CORE.toggleChip(this,'diasEsp','dom')">Dom</span>
+            </div>
+            <div style="margin-top:12px"><label>Horário</label><input type="time" id="horarioEspecifico" value="08:00"></div>
+          </div>
+        </div>
+      </div>
+      <button class="save-btn-mega" onclick="VITALE_CORE.salvarAgendamento()">✅ SALVAR AGENDAMENTO</button>
+    </div>
+    <div class="card">
+      <h3>📋 Agendados</h3>
+      <div id="agendadosContainer"></div>
+    </div>
+  </div>
+
+  <!-- HISTÓRICO -->
+  <div id="historico" class="tab-content" data-flag="historico">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Histórico</h2>
+    <div class="card">
+      <h3>⚖️ Todos os Registros</h3>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Data</th><th>Peso (kg)</th><th>IMC</th><th>Variação</th><th>% Total</th><th></th></tr></thead>
+          <tbody id="pesoTable"><tr><td colspan="6" style="text-align:center;color:var(--textm);padding:24px">Carregando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- RELATÓRIO -->
+  <div id="relatorio" class="tab-content" data-flag="relatorio_pdf">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Relatório & Backup</h2>
+    <div class="card">
+      <h3>📄 PDF para Médico</h3>
+      <p style="font-size:13px;color:var(--textm);margin-bottom:20px;line-height:1.8">PDF profissional com histórico completo. Pronto para o consultório.</p>
+      <button class="btn btn-gold" onclick="VITALE_CORE.gerarRelatorioPDF()" style="width:100%;padding:16px">📥 GERAR PDF</button>
+    </div>
+    <div class="card" data-flag="backup_json">
+      <h3>💾 Backup JSON</h3>
+      <p style="font-size:13px;color:var(--textm);margin-bottom:20px;line-height:1.8">Exporte todos os seus dados para backup.</p>
+      <button class="btn btn-secondary" onclick="VITALE_CORE.exportarJSON()" style="width:100%;padding:14px">📤 EXPORTAR JSON</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ONBOARDING -->
+<div id="modalOnboarding" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 style="font-size:24px;margin:0;color:var(--gold)">Bem-vindo ao VITALE! 🎉</h2>
+    </div>
+    <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">
+      Vamos configurar seu perfil em 30 segundos para personalizar suas projeções e o coach IA.
+    </p>
+    <div style="margin-bottom:16px">
+      <label>Como devemos te chamar?</label>
+      <input type="text" id="onbNome" placeholder="Seu primeiro nome">
+    </div>
+    <div class="form-group">
+      <div><label>Altura (m)</label><input type="text" id="onbAltura" placeholder="1.75"></div>
+      <div><label>Peso atual (kg)</label><input type="text" id="onbPeso" placeholder="80.0"></div>
+    </div>
+    <button class="btn btn-primary" onclick="VITALE_CORE.saveOnboarding()" style="width:100%;padding:14px;margin-top:14px">COMEÇAR MINHA JORNADA 🚀</button>
+  </div>
+</div>
+
+<!-- MODAL: CONFIRMAÇÃO IMPORTAÇÃO -->
+<div id="modalConfirmacao" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 style="font-size:22px;margin:0">Confirmar Importação</h2>
+      <button class="modal-close" onclick="VITALE_CORE.closeModal('modalConfirmacao')">✕</button>
+    </div>
+    <div id="resumoImportacao" style="background:var(--bg);padding:16px;border-radius:8px;margin-bottom:20px;max-height:300px;overflow-y:auto"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <button class="btn btn-secondary" onclick="VITALE_CORE.closeModal('modalConfirmacao')">❌ Cancelar</button>
+      <button class="btn btn-primary" onclick="VITALE_CORE.confirmarImportacao()">✅ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: SETTINGS -->
+<div id="modalSettings" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 style="font-size:22px;margin:0">⚙️ Configurações</h2>
+      <button class="modal-close" onclick="VITALE_CORE.closeModal('modalSettings')">✕</button>
+    </div>
+    <div class="settings-section">
+      <h4>👤 Perfil</h4>
+      <div class="form-group">
+        <div><label>Nome</label><input type="text" id="nomeInput" placeholder="Seu nome"></div>
+        <div><label>Altura (m)</label><input type="text" id="alturaInput" placeholder="1.84"></div>
+      </div>
+      <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.salvarPerfil()">Salvar Perfil</button>
+    </div>
+    <div class="settings-section">
+      <h4>💾 Dados</h4>
+      <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.exportarJSON()">📤 Exportar Backup JSON</button>
+    </div>
+    <div class="settings-section">
+      <h4>🚪 Conta</h4>
+      <button class="btn btn-danger btn-small" onclick="VITALE_CORE.signOut()">Sair da conta</button>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/js/supabase-client.js"></script>
+<script src="/assets/js/feature-flags.js"></script>
+<script src="/assets/js/vitale-core.js"></script>
+<script>
+function toggleUserMenu() {
+  const dd = document.getElementById('userMenuDropdown');
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+document.addEventListener('click', e => {
+  const menu = document.getElementById('userMenuDropdown');
+  if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) {
+    menu.style.display = 'none';
+  }
+});
+
+// Mostra link admin se for admin
+(async () => {
+  try {
+    const profile = await window.VitaleAuth.getProfile();
+    if (profile?.role === 'admin') {
+      document.getElementById('adminLink').style.display = 'block';
+    }
+  } catch (e) {}
+})();
+
+// Inicialização do app
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('manualDate').value = new Date().toISOString().slice(0, 10);
+  VITALE_CORE.init();
+});
+</script>
+</body>
+</html>

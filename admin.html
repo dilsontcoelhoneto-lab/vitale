@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VITALE — Torre de Comando</title>
+<link rel="stylesheet" href="/assets/css/vitale.css">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  window.VITALE_CONFIG = {
+    SUPABASE_URL: 'https://fwwvlwpmxhmjbpqxaoww.supabase.co',
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3d3Zsd3BteGhtamJwcXhhb3d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjE3ODIsImV4cCI6MjA5NDM5Nzc4Mn0.v60xJidhYw0S6l4ZYPn6IqHCOCBbsQFvOgIkizQJ90w'
+  };
+</script>
+</head>
+<body>
+<div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">VERIFICANDO ACESSO ADMIN...</p></div>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <svg width="42" height="42" viewBox="0 0 100 100" fill="none">
+      <defs>
+        <linearGradient id="vg" x1="0" y1="100" x2="100" y2="0">
+          <stop offset="0%" stop-color="#27c47d"/><stop offset="100%" stop-color="#d4a843"/>
+        </linearGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <path d="M15 25 L50 80 L85 25" stroke="url(#vg)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#glow)"/>
+      <circle cx="50" cy="55" r="5" fill="#d4a843"/>
+    </svg>
+    <div>
+      <h1>TORRE DE COMANDO</h1>
+      <div class="logo-sub">Admin · VITALE</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <a href="/app.html" class="btn btn-secondary btn-small">← Voltar ao App</a>
+    <button class="btn btn-danger btn-small" onclick="signOut()">Sair</button>
+  </div>
+</header>
+
+<div class="container">
+  <!-- TABS DA TORRE -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchAdminTab(event,'overview')">📊 VISÃO GERAL</button>
+    <button class="tab-btn" onclick="switchAdminTab(event,'flags')">🎚️ FEATURE FLAGS</button>
+    <button class="tab-btn" onclick="switchAdminTab(event,'users')">👥 USUÁRIOS</button>
+    <button class="tab-btn" onclick="switchAdminTab(event,'errors')">🐛 ERROS</button>
+    <button class="tab-btn" onclick="switchAdminTab(event,'analytics')">📈 USO</button>
+  </div>
+
+  <!-- ===== VISÃO GERAL ===== -->
+  <div id="overview" class="tab-content active">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Visão Geral</h2>
+
+    <div class="torre-grid">
+      <div class="torre-kpi"><div class="v" id="kpiUsers">—</div><div class="l">Total de Usuários</div><div class="delta" id="kpiUsersDelta"></div></div>
+      <div class="torre-kpi"><div class="v" id="kpiActive">—</div><div class="l">Ativos (7d)</div></div>
+      <div class="torre-kpi"><div class="v" id="kpiWeights">—</div><div class="l">Pesos Registrados</div></div>
+      <div class="torre-kpi"><div class="v" id="kpiOcr">—</div><div class="l">OCR Hoje</div></div>
+      <div class="torre-kpi"><div class="v" id="kpiErrors" style="color:var(--orange)">—</div><div class="l">Erros 24h</div></div>
+      <div class="torre-kpi"><div class="v" id="kpiBeta" style="color:var(--cyan)">—</div><div class="l">Em Beta</div></div>
+    </div>
+
+    <div class="card">
+      <h3>🚦 Status do Sistema</h3>
+      <div id="sysStatus" style="display:flex;flex-direction:column;gap:10px"></div>
+    </div>
+
+    <div class="card">
+      <h3>⚡ Atividade Recente (últimas 24h)</h3>
+      <div id="recentActivity" style="font-size:13px"></div>
+    </div>
+  </div>
+
+  <!-- ===== FEATURE FLAGS ===== -->
+  <div id="flags" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Feature Flags</h2>
+    <div class="info-box" style="margin-bottom:20px">
+      <strong>Como funciona:</strong> Ative ou desative qualquer funcionalidade em tempo real. Use o slider de rollout para liberar gradualmente (ex: 25% dos usuários).<br>
+      <strong>Rollout %:</strong> 0% = ninguém vê, 50% = metade dos usuários, 100% = todos.
+    </div>
+    <div id="flagsList"></div>
+  </div>
+
+  <!-- ===== USUÁRIOS ===== -->
+  <div id="users" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Usuários</h2>
+    <div class="card">
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <input type="text" id="userSearch" placeholder="Buscar por e-mail ou nome..." style="flex:1;min-width:200px" oninput="renderUsers()">
+        <select id="userFilter" onchange="renderUsers()" style="max-width:160px">
+          <option value="all">Todos status</option>
+          <option value="active">Ativos</option>
+          <option value="beta">Beta</option>
+          <option value="suspended">Suspensos</option>
+        </select>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Usuário</th><th>Status</th><th>Cadastro</th><th>Peso Atual</th><th>Registros</th><th>Último Acesso</th><th>Ações</th></tr></thead>
+          <tbody id="usersTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ERROS ===== -->
+  <div id="errors" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Logs de Erro</h2>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:16px;align-items:center;flex-wrap:wrap;gap:10px">
+        <p style="font-size:13px;color:var(--textm);margin:0">Erros capturados pelo frontend nas últimas 72h.</p>
+        <button class="btn btn-secondary btn-small" onclick="loadErrors()">🔄 Recarregar</button>
+      </div>
+      <div id="errorsList"></div>
+    </div>
+  </div>
+
+  <!-- ===== ANALYTICS ===== -->
+  <div id="analytics" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Uso da Aplicação</h2>
+    <div class="card">
+      <h3>Ações por Tipo (últimos 7 dias)</h3>
+      <div id="analyticsBreakdown"></div>
+    </div>
+    <div class="card">
+      <h3>Eventos Recentes</h3>
+      <div id="analyticsRecent" style="font-size:12px;font-family:monospace"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/js/supabase-client.js"></script>
+<script>
+let allFlags = [], allUsers = [];
+
+async function signOut() {
+  if (!confirm('Sair?')) return;
+  await window.VitaleAuth.signOut();
+}
+
+function switchAdminTab(e, name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+  e.currentTarget.classList.add('active');
+  if (name === 'flags') loadFlags();
+  else if (name === 'users') loadUsers();
+  else if (name === 'errors') loadErrors();
+  else if (name === 'analytics') loadAnalytics();
+  else if (name === 'overview') loadOverview();
+}
+
+// ===== VISÃO GERAL =====
+async function loadOverview() {
+  try {
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+    // Total usuários
+    const { count: totalUsers } = await window.sb.from('profiles').select('*', { count: 'exact', head: true });
+    setVal('kpiUsers', totalUsers ?? 0);
+
+    // Ativos 7d (com analytics nos últimos 7 dias)
+    const d7 = new Date(); d7.setDate(d7.getDate() - 7);
+    const { data: active7 } = await window.sb
+      .from('usage_analytics').select('user_id').gte('created_at', d7.toISOString());
+    const uniqueActive = new Set((active7 || []).map(a => a.user_id)).size;
+    setVal('kpiActive', uniqueActive);
+
+    // Pesos
+    const { count: totalW } = await window.sb.from('weights').select('*', { count: 'exact', head: true });
+    setVal('kpiWeights', totalW ?? 0);
+
+    // OCR hoje
+    const dayStart = new Date(); dayStart.setHours(0,0,0,0);
+    const { count: ocrToday } = await window.sb.from('usage_analytics')
+      .select('*', { count: 'exact', head: true })
+      .eq('acao', 'ocr_success').gte('created_at', dayStart.toISOString());
+    setVal('kpiOcr', ocrToday ?? 0);
+
+    // Erros 24h
+    const d1 = new Date(); d1.setDate(d1.getDate() - 1);
+    const { count: errors24 } = await window.sb.from('error_logs')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', d1.toISOString());
+    setVal('kpiErrors', errors24 ?? 0);
+
+    // Em beta
+    const { count: betaC } = await window.sb.from('profiles').select('*', { count: 'exact', head: true }).eq('status','beta');
+    setVal('kpiBeta', betaC ?? 0);
+
+    // Status do sistema
+    const sys = document.getElementById('sysStatus');
+    sys.innerHTML = `
+      <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg1);border-radius:8px;border-left:3px solid var(--em)">
+        <span style="font-size:13px">🟢 Supabase</span><span style="color:var(--em);font-size:12px">Online</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg1);border-radius:8px;border-left:3px solid ${ocrToday > 0 ? 'var(--em)' : 'var(--textm)'}">
+        <span style="font-size:13px">🤖 Proxy IA (OCR + Coach)</span>
+        <span style="color:${ocrToday > 0 ? 'var(--em)' : 'var(--textm)'};font-size:12px">${ocrToday > 0 ? 'Operacional' : 'Sem chamadas hoje'}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--bg1);border-radius:8px;border-left:3px solid ${(errors24||0) > 20 ? 'var(--red)' : (errors24||0) > 5 ? 'var(--orange)' : 'var(--em)'}">
+        <span style="font-size:13px">🐛 Taxa de Erros 24h</span>
+        <span style="color:${(errors24||0) > 20 ? 'var(--red)' : (errors24||0) > 5 ? 'var(--orange)' : 'var(--em)'};font-size:12px">${errors24 || 0} erros</span>
+      </div>
+    `;
+
+    // Atividade recente
+    const { data: recent } = await window.sb.from('usage_analytics')
+      .select('acao, created_at, user_id')
+      .order('created_at', { ascending: false }).limit(15);
+    const rec = document.getElementById('recentActivity');
+    if (!recent || !recent.length) {
+      rec.innerHTML = '<p style="color:var(--textm);text-align:center;padding:16px">Nenhuma atividade recente.</p>';
+    } else {
+      rec.innerHTML = recent.map(r => `
+        <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span><strong style="color:var(--gold)">${r.acao}</strong> <span style="color:var(--textm);font-size:11px">• ${r.user_id?.slice(0,8) || '—'}</span></span>
+          <span style="color:var(--textm);font-size:11px">${new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}</span>
+        </div>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('Overview error:', e);
+  }
+}
+
+// ===== FEATURE FLAGS =====
+async function loadFlags() {
+  const { data, error } = await window.sb.from('feature_flags')
+    .select('*').order('fase').order('flag_key');
+  if (error) return alert('Erro: ' + error.message);
+  allFlags = data || [];
+  renderFlags();
+}
+
+function renderFlags() {
+  const el = document.getElementById('flagsList');
+  const byFase = {};
+  allFlags.forEach(f => {
+    if (!byFase[f.fase]) byFase[f.fase] = [];
+    byFase[f.fase].push(f);
+  });
+  el.innerHTML = Object.keys(byFase).sort().map(fase => `
+    <div class="card">
+      <h3>Fase ${fase}</h3>
+      ${byFase[fase].map(f => `
+        <div class="flag-row">
+          <div class="flag-info" style="flex:1">
+            <h4>${f.flag_name} <span class="fase-tag">Fase ${f.fase}</span></h4>
+            <div class="meta">${f.descricao || ''} · key: <code>${f.flag_key}</code></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+              <input type="range" min="0" max="100" value="${f.rollout_pct}" 
+                onchange="updateFlagRollout('${f.flag_key}', this.value)" 
+                style="flex:1;max-width:240px">
+              <span id="rollout-${f.flag_key}" style="font-size:12px;color:var(--cyan);font-weight:700;min-width:50px">${f.rollout_pct}%</span>
+            </div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange="toggleFlag('${f.flag_key}', this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+async function toggleFlag(key, enabled) {
+  const { error } = await window.sb.from('feature_flags')
+    .update({ enabled, updated_at: new Date().toISOString() })
+    .eq('flag_key', key);
+  if (error) return alert('Erro: ' + error.message);
+  showToast(`✅ ${enabled ? 'Habilitada' : 'Desabilitada'}: ${key}`);
+}
+
+async function updateFlagRollout(key, pct) {
+  document.getElementById('rollout-' + key).textContent = pct + '%';
+  const { error } = await window.sb.from('feature_flags')
+    .update({ rollout_pct: parseInt(pct), updated_at: new Date().toISOString() })
+    .eq('flag_key', key);
+  if (error) return alert('Erro: ' + error.message);
+}
+
+// ===== USUÁRIOS =====
+async function loadUsers() {
+  const { data, error } = await window.sb.from('admin_user_stats')
+    .select('*').order('cadastrado_em', { ascending: false });
+  if (error) return alert('Erro: ' + error.message);
+  allUsers = data || [];
+  renderUsers();
+}
+
+function renderUsers() {
+  const search = document.getElementById('userSearch').value.toLowerCase();
+  const filter = document.getElementById('userFilter').value;
+  const filtered = allUsers.filter(u => {
+    if (filter !== 'all' && u.status !== filter) return false;
+    if (search) {
+      const s = (u.email + ' ' + (u.nome || '')).toLowerCase();
+      if (!s.includes(search)) return false;
+    }
+    return true;
+  });
+  const tbody = document.getElementById('usersTable');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--textm);padding:24px">Nenhum usuário</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(u => {
+    const statusColor = u.status === 'active' ? 'var(--em)' : u.status === 'beta' ? 'var(--cyan)' : 'var(--red)';
+    return `<tr>
+      <td>
+        <div style="font-weight:600">${u.nome || '—'}</div>
+        <div style="font-size:11px;color:var(--textm)">${u.email}</div>
+        ${u.role === 'admin' ? '<span style="font-size:9px;background:rgba(212,168,67,0.15);color:var(--gold);padding:2px 6px;border-radius:8px;letter-spacing:0.5px">ADMIN</span>' : ''}
+      </td>
+      <td><span style="color:${statusColor};font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px">${u.status}</span></td>
+      <td style="font-size:11px;color:var(--textm)">${new Date(u.cadastrado_em).toLocaleDateString('pt-BR')}</td>
+      <td>${u.peso_atual ? u.peso_atual.toFixed(1) + ' kg' : '—'}</td>
+      <td style="font-size:11px"><span style="color:var(--em)">${u.total_pesos}</span> pesos · <span style="color:var(--cyan)">${u.total_medicacoes}</span> meds</td>
+      <td style="font-size:11px;color:var(--textm)">${u.ultimo_acesso ? new Date(u.ultimo_acesso).toLocaleDateString('pt-BR') : 'Nunca'}</td>
+      <td>
+        <select onchange="updateUserStatus('${u.id}', this.value)" style="padding:6px;font-size:11px;width:auto">
+          <option value="">Ações ▾</option>
+          <option value="active">Ativar</option>
+          <option value="beta">Marcar Beta</option>
+          <option value="suspended">Suspender</option>
+          <option value="promote_admin">Promover Admin</option>
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function updateUserStatus(userId, action) {
+  if (!action) return;
+  let update = {};
+  let msg = '';
+  if (action === 'promote_admin') {
+    if (!confirm('Promover este usuário a ADMIN? Ele terá acesso total à Torre.')) return;
+    update = { role: 'admin' };
+    msg = 'Promovido a admin';
+  } else {
+    update = { status: action };
+    msg = `Status alterado para "${action}"`;
+  }
+  const { error } = await window.sb.from('profiles').update(update).eq('id', userId);
+  if (error) return alert('Erro: ' + error.message);
+  showToast('✅ ' + msg);
+  loadUsers();
+}
+
+// ===== ERROS =====
+async function loadErrors() {
+  const d3 = new Date(); d3.setDate(d3.getDate() - 3);
+  const { data, error } = await window.sb.from('error_logs')
+    .select('*').gte('created_at', d3.toISOString())
+    .order('created_at', { ascending: false }).limit(100);
+  if (error) return alert('Erro: ' + error.message);
+  const el = document.getElementById('errorsList');
+  if (!data || !data.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">✨</div><h4>Nenhum erro nas últimas 72h</h4><p>Bom sinal!</p></div>';
+    return;
+  }
+  el.innerHTML = data.map(e => `
+    <div style="background:var(--bg1);border-left:3px solid var(--red);padding:14px;border-radius:0 8px 8px 0;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <strong style="color:var(--red);font-size:13px">${e.contexto || 'desconhecido'}</strong>
+        <span style="font-size:11px;color:var(--textm)">${new Date(e.created_at).toLocaleString('pt-BR')}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:6px">${e.mensagem}</div>
+      <div style="font-size:11px;color:var(--textm)">${e.user_email || 'sem usuário'} · ${(e.user_agent || '').slice(0, 60)}</div>
+      ${e.stack ? `<details style="margin-top:8px"><summary style="font-size:11px;color:var(--cyan);cursor:pointer">Stack trace</summary><pre style="background:var(--bg);padding:8px;border-radius:6px;font-size:10px;color:var(--textm);overflow-x:auto;margin-top:6px">${e.stack}</pre></details>` : ''}
+    </div>
+  `).join('');
+}
+
+// ===== ANALYTICS =====
+async function loadAnalytics() {
+  const d7 = new Date(); d7.setDate(d7.getDate() - 7);
+  const { data } = await window.sb.from('usage_analytics')
+    .select('acao').gte('created_at', d7.toISOString());
+
+  const counts = {};
+  (data || []).forEach(r => { counts[r.acao] = (counts[r.acao] || 0) + 1; });
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const total = sorted.reduce((s, [, c]) => s + c, 0);
+
+  const bd = document.getElementById('analyticsBreakdown');
+  if (!sorted.length) {
+    bd.innerHTML = '<p style="color:var(--textm);text-align:center;padding:20px">Sem dados ainda.</p>';
+  } else {
+    bd.innerHTML = sorted.map(([acao, count]) => {
+      const pct = (count / total * 100).toFixed(1);
+      return `<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <strong style="font-size:13px">${acao}</strong>
+          <span style="color:var(--gold);font-size:12px">${count} (${pct}%)</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join('');
+  }
+
+  const { data: recent } = await window.sb.from('usage_analytics')
+    .select('*').order('created_at', { ascending: false }).limit(30);
+  const r = document.getElementById('analyticsRecent');
+  r.innerHTML = (recent || []).map(e =>
+    `<div style="padding:4px 0;border-bottom:1px solid var(--border)">
+      <span style="color:var(--gold)">${e.acao}</span> · 
+      <span style="color:var(--textm)">${e.user_id?.slice(0,8)}</span> · 
+      <span style="color:var(--cyan)">${new Date(e.created_at).toLocaleString('pt-BR')}</span>
+      ${e.detalhes && Object.keys(e.detalhes).length ? ' · ' + JSON.stringify(e.detalhes) : ''}
+    </div>`
+  ).join('');
+}
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--em);border-radius:10px;padding:14px 20px;color:var(--text);font-size:13px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+// ===== INIT =====
+(async () => {
+  const profile = await window.VitaleAuth.requireAdmin();
+  if (!profile) return;
+  document.getElementById('initLoader').classList.add('hidden');
+  setTimeout(() => document.getElementById('initLoader').remove(), 500);
+  loadOverview();
+})();
+</script>
+</body>
+</html>
