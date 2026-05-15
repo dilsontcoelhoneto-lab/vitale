@@ -1,9 +1,5 @@
-# =====================================================
-# VITALE — URLs limpas (sem .html)
-# =====================================================
-
-/app             /app.html             200
-/admin           /admin.html           200
-/instalacao      /docs/install.html    200
-/install         /docs/install.html    200
-/login           /index.html           301
+# VITALE — URLs limpas
+/app         /app.html         200
+/admin       /admin.html       200
+/instalacao  /docs/install.html  200
+/install     /docs/install.html  200
