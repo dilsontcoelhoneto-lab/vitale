@@ -141,11 +141,25 @@ async function doMagicLink() {
   if (error) return showAlert('error', error.message);
   showAlert('success', '✅ Link enviado! Verifique seu e-mail.');
 }
-
-// Auto-redirect se já logado
+// Auto-redirect se já logado (aguarda Supabase processar tokens do URL primeiro)
 (async () => {
+  if (window.location.hash && window.location.hash.includes('access_token')) {
+    await new Promise(resolve => {
+      const timeout = setTimeout(resolve, 3000);
+      const { data: { subscription } } = window.sb.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          clearTimeout(timeout);
+          subscription.unsubscribe();
+          resolve();
+        }
+      });
+    });
+  }
   const user = await window.VitaleAuth.getUser();
-  if (user) window.location.href = '/app.html';
+  if (user) {
+    window.location.href = '/app.html';
+    return;
+  }
   document.getElementById('initLoader').classList.add('hidden');
   setTimeout(() => document.getElementById('initLoader').remove(), 500);
 })();
