@@ -68,8 +68,21 @@ window.VitaleAuth = {
     await sb.auth.signOut();
     window.location.href = '/index.html';
   },
-
   async requireAuth() {
+    // Se há tokens de auth na URL (signup/magic-link), aguarda Supabase processar
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      await new Promise(resolve => {
+        const timeout = setTimeout(resolve, 3000);
+        const { data: { subscription } } = sb.auth.onAuthStateChange((event) => {
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+            clearTimeout(timeout);
+            subscription.unsubscribe();
+            history.replaceState(null, '', window.location.pathname);
+            resolve();
+          }
+        });
+      });
+    }
     const user = await this.getUser();
     if (!user) {
       window.location.href = '/index.html';
