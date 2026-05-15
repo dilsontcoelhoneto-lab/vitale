@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VITALE — Manual de Instalação</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#040608;--bg1:#070a12;--bg2:#0b0f1e;--card:#0d1223;--card2:#111829;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --gold:#d4a843;--gold2:#f0c86a;--em:#27c47d;--em2:#43e896;
+  --red:#e8504a;--orange:#e8924a;--cyan:#4a9de8;--purple:#9b59e8;
+  --text:#ede8e0;--textm:#8c8880;
+}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;line-height:1.7;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;opacity:0.4}
+h1,h2,h3,h4{font-family:'Cormorant Garamond',serif;font-weight:300;letter-spacing:1.5px;color:var(--gold)}
+
+.wrap{max-width:980px;margin:0 auto;padding:32px 24px;position:relative;z-index:1}
+
+header{
+  background:linear-gradient(135deg,var(--bg1) 0%,var(--bg2) 100%);
+  padding:32px 28px;border-bottom:1px solid var(--border2);margin-bottom:32px;
+  position:relative;border-radius:14px;
+}
+header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+header h1{font-size:42px;letter-spacing:5px;margin-bottom:8px}
+header .sub{font-size:13px;color:var(--textm);letter-spacing:2px;text-transform:uppercase}
+header .meta{font-size:12px;color:var(--cyan);margin-top:14px}
+
+.toc{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:24px;margin-bottom:32px;
+}
+.toc h3{font-size:14px;color:var(--gold);margin-bottom:14px;letter-spacing:2px;text-transform:uppercase}
+.toc ol{list-style:none;counter-reset:item}
+.toc ol li{counter-increment:item;padding:8px 0;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.toc ol li::before{content:counter(item,decimal-leading-zero);color:var(--gold);font-weight:700;font-size:13px;min-width:32px}
+.toc ol li:last-child{border-bottom:none}
+.toc a{color:var(--text);text-decoration:none;font-size:13px;flex:1}
+.toc a:hover{color:var(--gold)}
+.toc .tag{font-size:10px;background:rgba(212,168,67,0.1);color:var(--gold);padding:3px 8px;border-radius:10px;letter-spacing:1px}
+
+.step{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:32px;margin-bottom:24px;position:relative;
+}
+.step::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.06),transparent);
+}
+.step-num{
+  display:inline-block;background:linear-gradient(135deg,var(--em),var(--gold));
+  color:var(--bg);padding:4px 14px;border-radius:20px;
+  font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:16px;
+}
+.step h2{font-size:28px;margin-bottom:8px;letter-spacing:2px}
+.step .step-time{font-size:11px;color:var(--cyan);margin-bottom:20px;letter-spacing:1px}
+
+.step p{color:var(--text);margin-bottom:16px;font-size:14px}
+.step ol,.step ul{padding-left:24px;margin-bottom:16px}
+.step li{padding:6px 0;font-size:14px}
+.step li strong{color:var(--gold2)}
+
+code{
+  background:var(--bg);padding:2px 8px;border-radius:4px;
+  color:var(--em2);font-family:'JetBrains Mono',monospace;font-size:13px;
+  border:1px solid rgba(39,196,125,0.15);
+}
+pre{
+  background:var(--bg);border:1px solid var(--border2);border-radius:10px;
+  padding:18px;margin:14px 0;overflow-x:auto;font-family:'JetBrains Mono',monospace;
+  font-size:12px;line-height:1.7;color:var(--em2);position:relative;
+}
+pre.sql{color:#c5b8ff}
+pre.bash::before{content:'$ ';color:var(--gold);font-weight:700}
+.copy-btn{
+  position:absolute;top:10px;right:10px;background:var(--card2);
+  border:1px solid var(--border2);color:var(--textm);font-size:10px;
+  padding:4px 10px;border-radius:6px;cursor:pointer;letter-spacing:1px;
+}
+.copy-btn:hover{color:var(--gold);border-color:var(--gold)}
+.copy-btn.copied{color:var(--em);border-color:var(--em)}
+
+.alert{
+  padding:16px 20px;border-radius:10px;margin:16px 0;border-left:4px solid;font-size:13px;line-height:1.7;
+}
+.alert strong{font-weight:700}
+.alert-info{background:rgba(74,157,232,0.08);border-color:var(--cyan);color:var(--cyan)}
+.alert-info strong{color:var(--cyan)}
+.alert-warning{background:rgba(232,146,74,0.08);border-color:var(--orange);color:var(--orange)}
+.alert-warning strong{color:var(--orange)}
+.alert-danger{background:rgba(232,80,74,0.08);border-color:var(--red);color:var(--red)}
+.alert-danger strong{color:var(--red)}
+.alert-success{background:rgba(39,196,125,0.08);border-color:var(--em);color:var(--em)}
+.alert-success strong{color:var(--em)}
+
+a{color:var(--cyan);text-decoration:none;border-bottom:1px dotted var(--cyan)}
+a:hover{color:var(--gold);border-bottom-color:var(--gold)}
+
+.checklist{
+  background:var(--bg1);border:1px solid var(--border2);border-radius:10px;
+  padding:20px;margin:16px 0;
+}
+.checklist h4{color:var(--gold);font-size:14px;margin-bottom:14px;letter-spacing:1.5px;text-transform:uppercase;font-family:'DM Sans',sans-serif;font-weight:700}
+.check-item{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.check-item:last-child{border-bottom:none}
+.check-box{
+  width:22px;height:22px;border:2px solid var(--border2);border-radius:6px;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;background:var(--bg);
+}
+.check-item.done .check-box{background:var(--em);border-color:var(--em)}
+.check-item.done .check-box::after{content:'✓';color:var(--bg);font-weight:700;font-size:14px}
+.check-item.done .check-text{color:var(--textm);text-decoration:line-through}
+.check-text{font-size:13px;line-height:1.6;color:var(--text);flex:1}
+.check-text small{display:block;color:var(--textm);font-size:11px;margin-top:2px}
+
+.progress-summary{
+  position:sticky;top:20px;background:var(--card);border:1px solid var(--gold);
+  border-radius:12px;padding:18px 24px;margin-bottom:24px;
+  display:flex;justify-content:space-between;align-items:center;
+  box-shadow:0 8px 24px rgba(0,0,0,0.4);z-index:100;
+}
+.progress-bar{flex:1;margin:0 20px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--em),var(--gold));transition:width .4s;border-radius:3px}
+.progress-label{font-size:12px;color:var(--gold);font-weight:700;letter-spacing:1px}
+
+.screenshot-note{
+  background:rgba(155,89,232,0.08);border:1px solid rgba(155,89,232,0.25);
+  border-radius:8px;padding:14px 18px;margin:14px 0;font-size:12px;color:var(--text);
+  display:flex;gap:10px;align-items:flex-start;
+}
+.screenshot-note::before{content:'📸';font-size:18px}
+
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+table th{background:var(--bg1);padding:12px;text-align:left;color:var(--gold);font-weight:600;border-bottom:1px solid var(--border2);font-family:'DM Sans',sans-serif;letter-spacing:1px;font-size:11px;text-transform:uppercase}
+table td{padding:12px;border-bottom:1px solid var(--border)}
+
+.troubleshoot{
+  background:var(--bg1);border:1px solid var(--border2);border-radius:10px;
+  padding:20px;margin:14px 0;
+}
+.troubleshoot h4{color:var(--orange);font-size:14px;margin-bottom:10px;font-family:'DM Sans',sans-serif;letter-spacing:1px;font-weight:700}
+.troubleshoot .q{color:var(--gold);font-weight:600;margin-bottom:6px;font-size:13px}
+.troubleshoot .a{color:var(--text);font-size:13px;line-height:1.7}
+
+.kbd{
+  display:inline-block;padding:2px 8px;background:var(--card2);
+  border:1px solid var(--border2);border-radius:4px;font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text);box-shadow:0 2px 0 var(--border);
+}
+
+.footer-note{
+  text-align:center;padding:32px 20px;margin-top:32px;
+  border-top:1px solid var(--border);color:var(--textm);font-size:12px;
+}
+
+@media(max-width:680px){
+  header h1{font-size:32px;letter-spacing:3px}
+  .step{padding:24px 20px}
+  .step h2{font-size:22px}
+  .progress-summary{flex-direction:column;gap:10px;align-items:stretch;text-align:center}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">
+    <svg width="56" height="56" viewBox="0 0 100 100" fill="none">
+      <defs>
+        <linearGradient id="vg" x1="0" y1="100" x2="100" y2="0">
+          <stop offset="0%" stop-color="#27c47d"/><stop offset="100%" stop-color="#d4a843"/>
+        </linearGradient>
+        <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <path d="M15 25 L50 80 L85 25" stroke="url(#vg)" stroke-width="7" stroke-linecap="round" fill="none" filter="url(#glow)"/>
+      <circle cx="50" cy="55" r="5" fill="#d4a843"/>
+    </svg>
+    <div>
+      <h1>VITALE</h1>
+      <div class="sub">Manual de Instalação · v4.0</div>
+    </div>
+  </div>
+  <p style="color:var(--text);font-size:14px;line-height:1.7;max-width:720px">
+    Guia completo para colocar o VITALE no ar em <strong style="color:var(--gold)">vitale.acacianegocios.com.br</strong> usando Cloudflare Pages + Supabase + Claude API. 
+    Sem código de produção a editar — apenas configuração e copy-paste.
+  </p>
+  <div class="meta">⏱ Tempo total estimado: <strong>45-60 minutos</strong> · Custo inicial: <strong>R$ 0,00</strong></div>
+</header>
+
+<div class="progress-summary">
+  <div class="progress-label" id="progLabel">Progresso: 0 de 0</div>
+  <div class="progress-bar"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+  <div class="progress-label" id="progPct">0%</div>
+</div>
+
+<div class="toc">
+  <h3>📋 O que você vai fazer</h3>
+  <ol>
+    <li><a href="#step1">Criar projeto no Supabase</a> <span class="tag">5 min</span></li>
+    <li><a href="#step2">Rodar o schema SQL (criar banco de dados)</a> <span class="tag">3 min</span></li>
+    <li><a href="#step3">Configurar autenticação (e-mail + magic link)</a> <span class="tag">5 min</span></li>
+    <li><a href="#step4">Criar conta na Anthropic e gerar API Key</a> <span class="tag">5 min</span></li>
+    <li><a href="#step5">Subir projeto no GitHub</a> <span class="tag">10 min</span></li>
+    <li><a href="#step6">Configurar Cloudflare Pages</a> <span class="tag">8 min</span></li>
+    <li><a href="#step7">Apontar domínio vitale.acacianegocios.com.br</a> <span class="tag">5 min</span></li>
+    <li><a href="#step8">Primeiro acesso e promoção a admin</a> <span class="tag">3 min</span></li>
+    <li><a href="#step9">Testes pós-deploy (checklist)</a> <span class="tag">10 min</span></li>
+    <li><a href="#step10">Liberar usuários gradualmente</a> <span class="tag">5 min</span></li>
+    <li><a href="#troubleshoot">⚠️ Problemas comuns & soluções</a></li>
+  </ol>
+</div>
+
+<div class="alert alert-info">
+  <strong>💡 Como usar este guia:</strong> Marque cada item conforme conclui. Sua progressão é salva no navegador automaticamente. Use os botões <strong>📋 Copiar</strong> nos blocos de código para evitar erros de digitação.
+</div>
+
+<!-- ============================================
+     STEP 1 — SUPABASE
+============================================ -->
+<div class="step" id="step1">
+  <div class="step-num">PASSO 01</div>
+  <h2>Criar projeto no Supabase</h2>
+  <div class="step-time">⏱ ~5 minutos</div>
+
+  <p>O Supabase será o banco de dados e sistema de autenticação. Tier gratuito comporta até ~200 usuários ativos.</p>
+
+  <ol>
+    <li>Acesse <a href="https://supabase.com" target="_blank">supabase.com</a> e clique em <strong>Start your project</strong></li>
+    <li>Faça login com GitHub (recomendado) ou e-mail</li>
+    <li>Clique em <strong>New project</strong></li>
+    <li>Preencha:
+      <ul style="margin-top:8px">
+        <li><strong>Name</strong>: <code>vitale-prod</code></li>
+        <li><strong>Database password</strong>: gere uma senha forte e <strong style="color:var(--red)">salve em local seguro</strong> (gerenciador de senhas). Você vai precisar caso queira acessar o banco diretamente.</li>
+        <li><strong>Region</strong>: <code>South America (São Paulo)</code> — menor latência para Brasil</li>
+        <li><strong>Pricing plan</strong>: Free</li>
+      </ul>
+    </li>
+    <li>Clique em <strong>Create new project</strong> e aguarde ~2 minutos enquanto o Supabase provisiona</li>
+  </ol>
+
+  <div class="alert alert-warning">
+    <strong>⚠️ Senha do banco:</strong> Anote agora. O Supabase só mostra essa senha UMA vez. Se perder, precisa fazer reset (mais trabalho).
+  </div>
+
+  <p style="margin-top:20px"><strong style="color:var(--gold)">Depois que o projeto subir</strong>, copie estas duas chaves (você vai precisar):</p>
+  <ol>
+    <li>No menu lateral esquerdo: <strong>⚙️ Project Settings → API</strong></li>
+    <li>Copie e <strong>guarde em um arquivo de texto temporário</strong> dois valores:
+      <ul style="margin-top:6px">
+        <li><strong>Project URL</strong> — algo como <code>https://xxxxx.supabase.co</code></li>
+        <li><strong>anon public key</strong> — chave longa começando com <code>eyJ...</code> (é segura para usar no frontend)</li>
+      </ul>
+    </li>
+  </ol>
+
+  <div class="alert alert-danger">
+    <strong>🚨 NUNCA</strong> copie a chave <code>service_role</code> (também mostrada nessa página). Ela tem acesso total e jamais pode ir para o frontend.
+  </div>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 1</h4>
+    <div class="check-item" data-id="s1-1"><div class="check-box"></div><div class="check-text">Projeto Supabase criado e provisionamento concluído</div></div>
+    <div class="check-item" data-id="s1-2"><div class="check-box"></div><div class="check-text">Senha do banco salva em local seguro</div></div>
+    <div class="check-item" data-id="s1-3"><div class="check-box"></div><div class="check-text">SUPABASE_URL copiada</div></div>
+    <div class="check-item" data-id="s1-4"><div class="check-box"></div><div class="check-text">SUPABASE_ANON_KEY copiada</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 2 — SCHEMA SQL
+============================================ -->
+<div class="step" id="step2">
+  <div class="step-num">PASSO 02</div>
+  <h2>Rodar o schema SQL</h2>
+  <div class="step-time">⏱ ~3 minutos</div>
+
+  <p>Vamos criar todas as tabelas (perfis, pesos, medicações, etc.), políticas de segurança (RLS) e inserir as feature flags padrão.</p>
+
+  <ol>
+    <li>No Supabase, menu lateral: <strong>SQL Editor</strong> (ícone <code>&lt;/&gt;</code>)</li>
+    <li>Clique em <strong>+ New query</strong></li>
+    <li>Abra o arquivo <code>supabase/schema.sql</code> do projeto VITALE (em seu computador, descompactado do zip)</li>
+    <li>Copie TODO o conteúdo do arquivo e cole no SQL Editor do Supabase</li>
+    <li>Clique em <strong>Run</strong> (botão verde, canto inferior direito) ou pressione <span class="kbd">Ctrl+Enter</span></li>
+    <li>Aguarde a mensagem <strong style="color:var(--em)">Success. No rows returned</strong> aparecer</li>
+  </ol>
+
+  <div class="alert alert-info">
+    <strong>O que esse SQL faz:</strong> Cria 7 tabelas (profiles, weights, medicacoes, submetas, feature_flags, error_logs, usage_analytics), define triggers que criam o perfil automaticamente quando alguém se cadastra, configura Row Level Security para que cada usuário só veja seus próprios dados, e insere 12 feature flags na tabela (3 já habilitadas, 9 desabilitadas para você liberar pela Torre).
+  </div>
+
+  <div class="screenshot-note">
+    Depois de rodar, vá em <strong>Table Editor</strong> (menu lateral) e confira: você deve ver as 7 tabelas listadas. Clique em <code>feature_flags</code> — deve ter 12 linhas.
+  </div>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 2</h4>
+    <div class="check-item" data-id="s2-1"><div class="check-box"></div><div class="check-text">SQL rodado com sucesso (mensagem de Success)</div></div>
+    <div class="check-item" data-id="s2-2"><div class="check-box"></div><div class="check-text">7 tabelas aparecem em Table Editor</div></div>
+    <div class="check-item" data-id="s2-3"><div class="check-box"></div><div class="check-text">Tabela feature_flags tem 12 linhas</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 3 — AUTH
+============================================ -->
+<div class="step" id="step3">
+  <div class="step-num">PASSO 03</div>
+  <h2>Configurar autenticação</h2>
+  <div class="step-time">⏱ ~5 minutos</div>
+
+  <p>Vamos ativar login por e-mail+senha e por link mágico (passwordless), e ajustar as URLs de redirecionamento para que o domínio final funcione.</p>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:20px 0 10px">3.1 — URLs de redirect</h4>
+  <ol>
+    <li>No Supabase, menu lateral: <strong>Authentication → URL Configuration</strong></li>
+    <li>Em <strong>Site URL</strong>, coloque:
+      <pre>https://vitale.acacianegocios.com.br</pre>
+    </li>
+    <li>Em <strong>Redirect URLs</strong> (lista), adicione UMA POR LINHA:
+      <pre>https://vitale.acacianegocios.com.br
+https://vitale.acacianegocios.com.br/app.html
+https://vitale.acacianegocios.com.br/app
+http://localhost:8788
+http://localhost:8788/app.html</pre>
+    </li>
+    <li>Clique em <strong>Save changes</strong></li>
+  </ol>
+
+  <div class="alert alert-warning">
+    <strong>localhost:8788</strong> é necessário se você quiser testar com <code>wrangler pages dev</code> antes de subir. Pode remover depois do deploy.
+  </div>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">3.2 — Email templates em português</h4>
+  <ol>
+    <li><strong>Authentication → Email Templates</strong></li>
+    <li>Para <strong>Confirm signup</strong>, customize o subject e o corpo:
+      <ul style="margin-top:6px">
+        <li><strong>Subject</strong>: <code>VITALE — Confirme seu cadastro</code></li>
+        <li>No corpo, troque o texto padrão por uma mensagem em português (mantenha a variável <code>{{ .ConfirmationURL }}</code>):
+          <pre>&lt;h2&gt;Bem-vindo ao VITALE&lt;/h2&gt;
+&lt;p&gt;Clique no link abaixo para confirmar seu cadastro:&lt;/p&gt;
+&lt;p&gt;&lt;a href="{{ .ConfirmationURL }}"&gt;Confirmar cadastro&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Se você não pediu este cadastro, ignore este e-mail.&lt;/p&gt;</pre>
+        </li>
+      </ul>
+    </li>
+    <li>Faça o mesmo para <strong>Magic Link</strong>:
+      <ul style="margin-top:6px">
+        <li><strong>Subject</strong>: <code>VITALE — Seu link de acesso</code></li>
+        <li><strong>Body</strong>:
+          <pre>&lt;h2&gt;Acesso ao VITALE&lt;/h2&gt;
+&lt;p&gt;Clique no link abaixo para entrar (válido por 1 hora):&lt;/p&gt;
+&lt;p&gt;&lt;a href="{{ .ConfirmationURL }}"&gt;Entrar no VITALE&lt;/a&gt;&lt;/p&gt;
+&lt;p&gt;Se não foi você, ignore este e-mail.&lt;/p&gt;</pre>
+        </li>
+      </ul>
+    </li>
+    <li>Clique em <strong>Save changes</strong> ao final</li>
+  </ol>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">3.3 — Confirme as providers</h4>
+  <ol>
+    <li><strong>Authentication → Providers</strong></li>
+    <li>Confirme que <strong>Email</strong> está habilitado (geralmente já está por padrão)</li>
+    <li>Em <strong>Email Settings</strong>:
+      <ul>
+        <li><strong>Confirm email</strong>: <strong style="color:var(--em)">ON</strong> (recomendado — evita signups com e-mails falsos)</li>
+        <li><strong>Secure email change</strong>: ON</li>
+      </ul>
+    </li>
+  </ol>
+
+  <div class="alert alert-info">
+    <strong>💡 Sobre Google OAuth:</strong> Pulamos no MVP para você lançar mais rápido. Adicionar Google depois é simples: vai em <strong>Authentication → Providers → Google → Enable</strong> e segue a configuração do Google Cloud Console. Mas por enquanto, e-mail+senha + magic link já atende ótimo.
+  </div>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 3</h4>
+    <div class="check-item" data-id="s3-1"><div class="check-box"></div><div class="check-text">Site URL configurada</div></div>
+    <div class="check-item" data-id="s3-2"><div class="check-box"></div><div class="check-text">Redirect URLs adicionadas (5 entradas)</div></div>
+    <div class="check-item" data-id="s3-3"><div class="check-box"></div><div class="check-text">Email template "Confirm signup" em português</div></div>
+    <div class="check-item" data-id="s3-4"><div class="check-box"></div><div class="check-text">Email template "Magic Link" em português</div></div>
+    <div class="check-item" data-id="s3-5"><div class="check-box"></div><div class="check-text">Confirm email = ON</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 4 — ANTHROPIC API KEY
+============================================ -->
+<div class="step" id="step4">
+  <div class="step-num">PASSO 04</div>
+  <h2>Criar conta Anthropic e gerar API Key</h2>
+  <div class="step-time">⏱ ~5 minutos</div>
+
+  <p>A API Claude alimenta o OCR de screenshots e o Coach IA. <strong>Pagamento por uso</strong> — sem mensalidade fixa. Estimativa para beta de 5-10 usuários: <strong>R$ 30-80/mês</strong>.</p>
+
+  <ol>
+    <li>Acesse <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> e crie uma conta (ou use uma existente)</li>
+    <li>Vá em <strong>Settings → Billing</strong> e adicione um cartão de crédito (Anthropic cobra em USD)</li>
+    <li>Recomendo <strong>adicionar créditos pré-pagos</strong> de USD 20 inicialmente (~R$ 100). É melhor que pay-as-you-go porque você não corre risco de receber uma fatura enorme se algo der errado</li>
+    <li>Vá em <strong>Settings → Limits</strong> e configure um <strong>spend limit</strong> mensal (ex: USD 30) como segurança extra</li>
+    <li>Vá em <strong>Settings → API Keys</strong></li>
+    <li>Clique em <strong>+ Create Key</strong>, dê o nome <code>vitale-prod</code></li>
+    <li>Copie a chave (formato <code>sk-ant-api03-...</code>) e <strong style="color:var(--red)">guarde em local seguro</strong>. Aparece UMA vez só.</li>
+  </ol>
+
+  <div class="alert alert-warning">
+    <strong>⚠️ Segurança crítica:</strong> Essa chave dá acesso à sua conta paga. NUNCA a coloque em código JavaScript do frontend. NUNCA a commite no Git. Ela vai como variável de ambiente no Cloudflare (Passo 6).
+  </div>
+
+  <div class="alert alert-info">
+    <strong>Quais modelos o VITALE usa:</strong><br>
+    • <strong>OCR de imagens</strong>: <code>claude-haiku-4-5-20251001</code> — barato e excelente para visão computacional<br>
+    • <strong>Coach IA (mensagens motivacionais)</strong>: <code>claude-sonnet-4-6</code> — análise mais nuançada<br>
+    Esses modelos estão hardcoded em <code>functions/api/ocr.js</code> e <code>functions/api/chat.js</code>. Se quiser trocar depois, é só editar essas duas linhas.
+  </div>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 4</h4>
+    <div class="check-item" data-id="s4-1"><div class="check-box"></div><div class="check-text">Conta Anthropic criada</div></div>
+    <div class="check-item" data-id="s4-2"><div class="check-box"></div><div class="check-text">Cartão / créditos pré-pagos adicionados</div></div>
+    <div class="check-item" data-id="s4-3"><div class="check-box"></div><div class="check-text">Spend limit mensal configurado</div></div>
+    <div class="check-item" data-id="s4-4"><div class="check-box"></div><div class="check-text">API key gerada e salva em local seguro</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 5 — GITHUB
+============================================ -->
+<div class="step" id="step5">
+  <div class="step-num">PASSO 05</div>
+  <h2>Subir projeto no GitHub</h2>
+  <div class="step-time">⏱ ~10 minutos</div>
+
+  <p>O Cloudflare Pages faz deploy automático cada vez que você dá <code>git push</code>. Sem GitHub, não há deploy automático.</p>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:20px 0 10px">5.1 — Substituir as chaves do Supabase no código</h4>
+  <p>Antes de subir, você precisa colar a URL e a chave do Supabase em <strong>3 arquivos</strong>:</p>
+  <ul>
+    <li><code>index.html</code></li>
+    <li><code>app.html</code></li>
+    <li><code>admin.html</code></li>
+  </ul>
+  <p>Em cada um, procure o bloco:</p>
+  <pre>window.VITALE_CONFIG = {
+  SUPABASE_URL: 'COLE_SUA_URL_AQUI',
+  SUPABASE_ANON_KEY: 'COLE_SUA_ANON_KEY_AQUI'
+};</pre>
+  <p>Substitua <code>COLE_SUA_URL_AQUI</code> pela sua URL real e <code>COLE_SUA_ANON_KEY_AQUI</code> pela anon key.</p>
+
+  <div class="alert alert-info">
+    <strong>💡 Por que a anon key pode ir no frontend?</strong> Ela só permite operações limitadas pelas suas políticas RLS (que você criou no Passo 2). Mesmo se alguém pegar essa chave, ela é inútil sem credenciais de usuário válidas.
+  </div>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">5.2 — Criar repositório no GitHub</h4>
+  <ol>
+    <li>Acesse <a href="https://github.com" target="_blank">github.com</a> e logue</li>
+    <li>Canto superior direito: <strong>+ → New repository</strong></li>
+    <li>Preencha:
+      <ul>
+        <li><strong>Repository name</strong>: <code>vitale</code></li>
+        <li><strong>Visibility</strong>: <strong style="color:var(--orange)">Private</strong> (importante — seu código tem chaves)</li>
+        <li>Deixe os demais campos vazios (não marque "Add README")</li>
+      </ul>
+    </li>
+    <li>Clique em <strong>Create repository</strong></li>
+  </ol>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">5.3 — Subir os arquivos</h4>
+
+  <p><strong>Opção A — Pelo navegador (mais simples):</strong></p>
+  <ol>
+    <li>No repositório recém-criado, clique em <strong>uploading an existing file</strong></li>
+    <li>Arraste TODA a pasta <code>vitale/</code> descompactada (não a pasta zipada — só o conteúdo dela)</li>
+    <li>Em <strong>Commit message</strong>, escreva <code>Initial commit — VITALE v4</code></li>
+    <li>Clique em <strong>Commit changes</strong></li>
+  </ol>
+
+  <p style="margin-top:16px"><strong>Opção B — Pelo terminal (se você tem git instalado):</strong></p>
+  <pre class="bash">cd caminho/para/vitale
+git init
+git add .
+git commit -m "Initial commit — VITALE v4"
+git branch -M main
+git remote add origin https://github.com/SEU_USUARIO/vitale.git
+git push -u origin main</pre>
+
+  <div class="alert alert-warning">
+    <strong>⚠️ Antes de fazer commit:</strong> Confirme que o repositório está <strong>privado</strong>. Mesmo a anon key sendo "segura", é boa prática não expor o código de auth publicamente até maturação.
+  </div>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 5</h4>
+    <div class="check-item" data-id="s5-1"><div class="check-box"></div><div class="check-text">SUPABASE_URL e ANON_KEY coladas em index.html</div></div>
+    <div class="check-item" data-id="s5-2"><div class="check-box"></div><div class="check-text">SUPABASE_URL e ANON_KEY coladas em app.html</div></div>
+    <div class="check-item" data-id="s5-3"><div class="check-box"></div><div class="check-text">SUPABASE_URL e ANON_KEY coladas em admin.html</div></div>
+    <div class="check-item" data-id="s5-4"><div class="check-box"></div><div class="check-text">Repositório privado criado no GitHub</div></div>
+    <div class="check-item" data-id="s5-5"><div class="check-box"></div><div class="check-text">Arquivos do projeto subidos no repo</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 6 — CLOUDFLARE PAGES
+============================================ -->
+<div class="step" id="step6">
+  <div class="step-num">PASSO 06</div>
+  <h2>Configurar Cloudflare Pages</h2>
+  <div class="step-time">⏱ ~8 minutos</div>
+
+  <p>O Cloudflare Pages é o hosting. Ele puxa o repositório do GitHub e serve o site através de uma CDN global super rápida. <strong>Free tier</strong>: 500 deploys/mês + 100.000 invocações de Pages Functions/dia.</p>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:20px 0 10px">6.1 — Conectar o repositório</h4>
+  <ol>
+    <li>Acesse <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> (mesma conta que tem o domínio <code>acacianegocios.com.br</code>)</li>
+    <li>Menu lateral: <strong>Workers & Pages</strong></li>
+    <li>Clique em <strong>Create → Pages → Connect to Git</strong></li>
+    <li>Autorize o Cloudflare a acessar seu GitHub (primeira vez)</li>
+    <li>Selecione o repositório <code>vitale</code></li>
+    <li>Clique em <strong>Begin setup</strong></li>
+  </ol>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">6.2 — Configurar o build</h4>
+  <ol>
+    <li><strong>Project name</strong>: <code>vitale</code></li>
+    <li><strong>Production branch</strong>: <code>main</code></li>
+    <li><strong>Framework preset</strong>: <code>None</code></li>
+    <li><strong>Build command</strong>: deixe <strong>VAZIO</strong> (não temos build step, é HTML puro)</li>
+    <li><strong>Build output directory</strong>: <code>/</code> (raiz)</li>
+    <li>Clique em <strong>Save and Deploy</strong></li>
+  </ol>
+
+  <p>Aguarde 1-2 minutos. Você verá no painel: <strong style="color:var(--em)">Success! Your project is live</strong> com uma URL temporária tipo <code>vitale-xyz.pages.dev</code>.</p>
+
+  <div class="alert alert-success">
+    <strong>🎉 O site já está no ar nesse domínio temporário!</strong> Mas ainda falta a variável de ambiente do Claude API e o subdomínio personalizado.
+  </div>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">6.3 — Adicionar variável de ambiente ANTHROPIC_API_KEY</h4>
+  <ol>
+    <li>No projeto recém-criado: <strong>Settings → Environment variables</strong></li>
+    <li>Em <strong>Production</strong>, clique em <strong>Add variable</strong></li>
+    <li>Preencha:
+      <ul>
+        <li><strong>Variable name</strong>: <code>ANTHROPIC_API_KEY</code></li>
+        <li><strong>Value</strong>: cole a chave que você criou no Passo 4 (<code>sk-ant-api03-...</code>)</li>
+        <li><strong>Type</strong>: marque <strong>Encrypted</strong> (importante!)</li>
+      </ul>
+    </li>
+    <li>Clique em <strong>Save</strong></li>
+    <li><strong>IMPORTANTE</strong>: depois de adicionar a variável, vá em <strong>Deployments</strong> e clique em <strong>Retry deployment</strong> no último deploy (variáveis novas só pegam efeito em deploys subsequentes)</li>
+  </ol>
+
+  <div class="alert alert-danger">
+    <strong>🚨 Se esquecer essa variável:</strong> O OCR e o Coach IA vão retornar erro 500. É a causa mais comum de problemas no deploy.
+  </div>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 6</h4>
+    <div class="check-item" data-id="s6-1"><div class="check-box"></div><div class="check-text">Repo conectado ao Cloudflare Pages</div></div>
+    <div class="check-item" data-id="s6-2"><div class="check-box"></div><div class="check-text">Build configurado (sem build command, output /)</div></div>
+    <div class="check-item" data-id="s6-3"><div class="check-box"></div><div class="check-text">Deploy inicial concluído com sucesso</div></div>
+    <div class="check-item" data-id="s6-4"><div class="check-box"></div><div class="check-text">ANTHROPIC_API_KEY adicionada como Encrypted</div></div>
+    <div class="check-item" data-id="s6-5"><div class="check-box"></div><div class="check-text">Retry deployment executado após adicionar a env var</div></div>
+    <div class="check-item" data-id="s6-6"><div class="check-box"></div><div class="check-text">URL temporária .pages.dev acessível</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 7 — DOMÍNIO
+============================================ -->
+<div class="step" id="step7">
+  <div class="step-num">PASSO 07</div>
+  <h2>Apontar vitale.acacianegocios.com.br</h2>
+  <div class="step-time">⏱ ~5 minutos</div>
+
+  <p>Como o domínio <code>acacianegocios.com.br</code> já está no Cloudflare, adicionar um subdomínio é trivial.</p>
+
+  <ol>
+    <li>No projeto Pages: <strong>Custom domains → Set up a custom domain</strong></li>
+    <li>Digite: <code>vitale.acacianegocios.com.br</code></li>
+    <li>Clique em <strong>Continue</strong></li>
+    <li>O Cloudflare detecta que o domínio raiz é dele e oferece <strong>Activate domain</strong> automaticamente — clique nisso</li>
+    <li>Cloudflare cria sozinho o registro CNAME apontando para o <code>.pages.dev</code></li>
+    <li>Aguarde ~30 segundos a 5 minutos para propagar</li>
+    <li>Acesse <a href="https://vitale.acacianegocios.com.br" target="_blank">https://vitale.acacianegocios.com.br</a> — você deve ver a tela de login do VITALE</li>
+  </ol>
+
+  <div class="alert alert-info">
+    <strong>💡 Se algo der errado:</strong> Vá em <strong>Cloudflare Dashboard → acacianegocios.com.br → DNS → Records</strong> e confirme que existe um registro <code>CNAME vitale</code> apontando para <code>vitale.pages.dev</code> (ou similar) com a nuvem <span style="color:var(--orange)">laranja</span> (proxied).
+  </div>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 7</h4>
+    <div class="check-item" data-id="s7-1"><div class="check-box"></div><div class="check-text">Custom domain vitale.acacianegocios.com.br adicionado</div></div>
+    <div class="check-item" data-id="s7-2"><div class="check-box"></div><div class="check-text">Registro CNAME criado no DNS</div></div>
+    <div class="check-item" data-id="s7-3"><div class="check-box"></div><div class="check-text">https://vitale.acacianegocios.com.br carrega a tela de login</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 8 — PROMOVER ADMIN
+============================================ -->
+<div class="step" id="step8">
+  <div class="step-num">PASSO 08</div>
+  <h2>Primeiro acesso e promoção a admin</h2>
+  <div class="step-time">⏱ ~3 minutos</div>
+
+  <p>Você precisa ser admin para acessar a Torre de Comando. Para isso, primeiro cria a conta normal, depois roda um SQL para promover-se.</p>
+
+  <ol>
+    <li>Acesse <code>https://vitale.acacianegocios.com.br</code></li>
+    <li>Aba <strong>Criar Conta</strong></li>
+    <li>Use seu e-mail principal e uma senha forte</li>
+    <li>Cheque a caixa de entrada — deve chegar o e-mail de confirmação. Clique no link</li>
+    <li>Após confirmar, você será redirecionado para o app. Vai aparecer o onboarding pedindo nome + altura + peso atual. Preencha</li>
+  </ol>
+
+  <p style="margin-top:20px">Agora você está logado como usuário comum. Para virar admin:</p>
+
+  <ol>
+    <li>Volte ao Supabase: <strong>SQL Editor → + New query</strong></li>
+    <li>Cole e ajuste com seu e-mail real:
+      <pre class="sql">update public.profiles
+set role = 'admin'
+where email = 'seu.email@gmail.com';</pre>
+    </li>
+    <li>Clique em <strong>Run</strong></li>
+    <li>No app VITALE, faça <strong>logout</strong> (menu do usuário → Sair)</li>
+    <li>Logue novamente</li>
+    <li>Clique no seu avatar no canto superior direito — deve aparecer agora <strong>🏛️ Torre de Comando</strong> em dourado</li>
+    <li>Clique e navegue pela Torre. Pronto, você é admin!</li>
+  </ol>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 8</h4>
+    <div class="check-item" data-id="s8-1"><div class="check-box"></div><div class="check-text">Conta criada e e-mail confirmado</div></div>
+    <div class="check-item" data-id="s8-2"><div class="check-box"></div><div class="check-text">Onboarding completado</div></div>
+    <div class="check-item" data-id="s8-3"><div class="check-box"></div><div class="check-text">SQL de promoção a admin rodado com sucesso</div></div>
+    <div class="check-item" data-id="s8-4"><div class="check-box"></div><div class="check-text">Logout + login feito após promoção</div></div>
+    <div class="check-item" data-id="s8-5"><div class="check-box"></div><div class="check-text">Link da Torre de Comando aparece no menu</div></div>
+    <div class="check-item" data-id="s8-6"><div class="check-box"></div><div class="check-text">Torre de Comando abre e mostra os KPIs</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 9 — TESTES
+============================================ -->
+<div class="step" id="step9">
+  <div class="step-num">PASSO 09</div>
+  <h2>Testes pós-deploy (checklist completo)</h2>
+  <div class="step-time">⏱ ~10 minutos</div>
+
+  <p>Antes de liberar para outros usuários, valide TODO o fluxo principal. Cada item testado é um bug a menos chegando ao usuário final.</p>
+
+  <div class="checklist">
+    <h4>🧪 Bateria de testes</h4>
+
+    <div class="check-item" data-id="t-1"><div class="check-box"></div><div class="check-text">Login com senha funciona <small>Logue com a conta criada no Passo 8</small></div></div>
+
+    <div class="check-item" data-id="t-2"><div class="check-box"></div><div class="check-text">Logout funciona <small>Menu → Sair, deve voltar para tela de login</small></div></div>
+
+    <div class="check-item" data-id="t-3"><div class="check-box"></div><div class="check-text">Magic link funciona <small>Faça logout, peça um magic link com seu e-mail, abra o link da caixa de entrada</small></div></div>
+
+    <div class="check-item" data-id="t-4"><div class="check-box"></div><div class="check-text">Adicionar peso manual funciona <small>Aba "Importar" → Registro único → preencha data e peso → ADICIONAR</small></div></div>
+
+    <div class="check-item" data-id="t-5"><div class="check-box"></div><div class="check-text">Dashboard reflete o peso novo <small>Volte ao Dashboard, peso atual e IMC devem aparecer</small></div></div>
+
+    <div class="check-item" data-id="t-6"><div class="check-box"></div><div class="check-text">Importar 5+ pesos via texto funciona <small>Aba Importar → Texto → cole várias linhas no formato YYYY-MM-DD: XX.Xkg</small></div></div>
+
+    <div class="check-item" data-id="t-7"><div class="check-box"></div><div class="check-text">Gráfico aparece com projeção <small>Dashboard mostra linha verde (real) + dourada tracejada (projeção)</small></div></div>
+
+    <div class="check-item" data-id="t-8"><div class="check-box"></div><div class="check-text">Histórico mostra todos os pesos <small>Aba Histórico, tabela com data/peso/IMC/variação</small></div></div>
+
+    <div class="check-item" data-id="t-9"><div class="check-box"></div><div class="check-text">Deletar peso funciona <small>Histórico → 🗑️ em qualquer linha → confirma → recarrega</small></div></div>
+
+    <div class="check-item" data-id="t-10"><div class="check-box"></div><div class="check-text">Tentativa de adicionar peso com data futura é rejeitada <small>Erro claro deve aparecer</small></div></div>
+
+    <div class="check-item" data-id="t-11"><div class="check-box"></div><div class="check-text">Substituir peso de data existente funciona <small>Adicione peso de uma data que já existe → confirma substituição</small></div></div>
+
+    <div class="check-item" data-id="t-12"><div class="check-box"></div><div class="check-text">Settings → Salvar perfil funciona <small>Mude o nome, salve, recarregue — deve persistir</small></div></div>
+
+    <div class="check-item" data-id="t-13"><div class="check-box"></div><div class="check-text">Torre — Feature flags: toggle funciona <small>Desligue uma flag enabled → recarregue o app → a tab/seção some</small></div></div>
+
+    <div class="check-item" data-id="t-14"><div class="check-box"></div><div class="check-text">Torre — Logs de Erro acessível <small>Aba Erros, mesmo que vazia</small></div></div>
+
+    <div class="check-item" data-id="t-15"><div class="check-box"></div><div class="check-text">Torre — Visão Geral mostra os KPIs <small>Número de usuários, pesos, erros</small></div></div>
+
+    <div class="check-item" data-id="t-16"><div class="check-box"></div><div class="check-text">Coach IA (Fase 3) — ative a flag e teste <small>Torre → flag <code>coach_ia</code> ON → recarregue o app → mensagem do coach deve vir da IA real (mais longa e personalizada)</small></div></div>
+
+    <div class="check-item" data-id="t-17"><div class="check-box"></div><div class="check-text">OCR (Fase 3) — ative a flag e teste <small>Torre → flag <code>ocr_imagem</code> ON → Importar → faça upload de screenshot do Apple Health/balança → IA extrai os dados</small></div></div>
+
+    <div class="check-item" data-id="t-18"><div class="check-box"></div><div class="check-text">Medicações (Fase 4) — ative e adicione uma <small>Torre → <code>medicacoes</code> ON → tab aparece → cadastre uma medicação</small></div></div>
+
+    <div class="check-item" data-id="t-19"><div class="check-box"></div><div class="check-text">PDF (Fase 5) — ative e gere <small>Torre → <code>relatorio_pdf</code> ON → Relatório → Gerar PDF (deve baixar)</small></div></div>
+
+    <div class="check-item" data-id="t-20"><div class="check-box"></div><div class="check-text">Mobile — abrir o site no celular funciona <small>Layout responsivo, header empilha, tabs roláveis</small></div></div>
+  </div>
+
+  <div class="alert alert-warning">
+    <strong>Encontrou bug?</strong> Anote em algum lugar — talvez em uma issue no GitHub. Mesmo se for cosmético. Bugs cosméticos viram bugs grandes quando se acumulam.
+  </div>
+</div>
+
+<!-- ============================================
+     STEP 10 — LIBERAR USUÁRIOS
+============================================ -->
+<div class="step" id="step10">
+  <div class="step-num">PASSO 10</div>
+  <h2>Liberar usuários gradualmente</h2>
+  <div class="step-time">⏱ ~5 minutos</div>
+
+  <p>Agora você pode convidar suas primeiras pessoas. Recomendo a estratégia abaixo:</p>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:20px 0 10px">10.1 — Estratégia de rollout</h4>
+  <table>
+    <thead><tr><th>Semana</th><th>Quantos</th><th>O que fazer</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>1-2 pessoas próximas</td><td>Feedback rápido, bugs críticos</td></tr>
+      <tr><td>2</td><td>5 pessoas</td><td>Testar variedade de devices/sistemas</td></tr>
+      <tr><td>3</td><td>10-15 pessoas</td><td>Liberar Fase 3 (Coach IA, OCR)</td></tr>
+      <tr><td>4</td><td>20+ pessoas</td><td>Liberar Fase 4 e 5</td></tr>
+    </tbody>
+  </table>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">10.2 — Como convidar</h4>
+  <p>Não tem "sistema de convites" no MVP — basta passar o link <code>https://vitale.acacianegocios.com.br</code> e a pessoa se cadastra direto. Para controlar quem pode entrar, use UM dos dois caminhos:</p>
+
+  <ul>
+    <li><strong>Confiança</strong>: você passa o link só para pessoas selecionadas. Mais simples.</li>
+    <li><strong>Aprovação manual</strong>: deixe <code>Confirm email = ON</code> e, antes de cada confirmação chegar, vá em <strong>Supabase → Authentication → Users</strong> e remova quem não devia. Mais trabalhoso, mas seguro.</li>
+  </ul>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">10.3 — Acompanhamento</h4>
+  <p>Acesse a Torre de Comando diariamente nos primeiros 7-14 dias:</p>
+  <ul>
+    <li><strong>Visão Geral</strong>: vê quantos signaram, quantos estão ativos</li>
+    <li><strong>Erros</strong>: se aparecer erro novo, ataque imediatamente</li>
+    <li><strong>Usuários</strong>: monitora se alguém parou de usar (pode ser bug ou tédio — pergunte!)</li>
+  </ul>
+
+  <h4 style="font-size:16px;color:var(--gold2);margin:24px 0 10px">10.4 — Liberação por % de rollout</h4>
+  <p>Para liberar uma feature gradualmente:</p>
+  <ol>
+    <li>Torre → Feature Flags → ache a flag</li>
+    <li>Toggle ON</li>
+    <li>Slider de <strong>Rollout %</strong>: comece com <strong>25%</strong></li>
+    <li>Aguarde 24h, sem erros novos? Suba para <strong>50%</strong></li>
+    <li>Mais 24h ok? <strong>100%</strong></li>
+  </ol>
+  <p>Cada usuário "cai" deterministicamente em um % (sempre o mesmo % para o mesmo user_id). Então 25% de rollout significa que 25% dos seus usuários veem a feature, e os mesmos 25% continuam vendo na próxima sessão.</p>
+
+  <div class="checklist">
+    <h4>✓ Checklist do Passo 10</h4>
+    <div class="check-item" data-id="s10-1"><div class="check-box"></div><div class="check-text">Primeiro usuário externo convidado</div></div>
+    <div class="check-item" data-id="s10-2"><div class="check-box"></div><div class="check-text">Primeiro usuário externo conseguiu se cadastrar e usar</div></div>
+    <div class="check-item" data-id="s10-3"><div class="check-box"></div><div class="check-text">Estratégia de rollout das próximas semanas planejada</div></div>
+  </div>
+</div>
+
+<!-- ============================================
+     TROUBLESHOOTING
+============================================ -->
+<div class="step" id="troubleshoot">
+  <div class="step-num">⚠️ TROUBLESHOOTING</div>
+  <h2>Problemas comuns & soluções</h2>
+
+  <div class="troubleshoot">
+    <div class="q">❓ O site abre mas dá erro ao tentar logar/cadastrar</div>
+    <div class="a"><strong>Causa provável:</strong> Você esqueceu de colar SUPABASE_URL e ANON_KEY nos arquivos HTML.<br>
+    <strong>Solução:</strong> Abra o console do navegador (F12). Se aparecer erro como <code>Invalid URL</code> ou <code>SUPABASE_URL not configured</code>, é isso. Volte ao Passo 5.1.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ OCR / Coach IA retornam "Servidor não configurado"</div>
+    <div class="a"><strong>Causa:</strong> ANTHROPIC_API_KEY não foi adicionada OU foi adicionada mas o deploy não foi refeito depois.<br>
+    <strong>Solução:</strong> Cloudflare Pages → Settings → Environment variables → confirme que está lá. Depois: Deployments → Retry deployment no último.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ E-mail de confirmação não chega</div>
+    <div class="a"><strong>Causa 1:</strong> Caixa de spam — sempre cheque primeiro.<br>
+    <strong>Causa 2:</strong> Você usou um domínio que o Supabase free tier limita (4 e-mails/hora). Aguarde ou use outro e-mail.<br>
+    <strong>Causa 3:</strong> Rate limit da Supabase. Veja em <strong>Authentication → Rate Limits</strong>.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Magic link clicado, mas volta para tela de login</div>
+    <div class="a"><strong>Causa:</strong> Redirect URL faltando em Authentication → URL Configuration.<br>
+    <strong>Solução:</strong> Confirme que <code>https://vitale.acacianegocios.com.br</code> E <code>https://vitale.acacianegocios.com.br/app.html</code> estão na lista de Redirect URLs.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Torre de Comando dá redirect para /app.html</div>
+    <div class="a"><strong>Causa:</strong> Sua conta não é admin.<br>
+    <strong>Solução:</strong> Rode o SQL do Passo 8 com seu e-mail correto. Verifique em Supabase → Table Editor → profiles que sua linha tem <code>role = 'admin'</code>. Faça logout e login.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Feature flag toggleada mas não muda no app</div>
+    <div class="a"><strong>Causa:</strong> Cache de flags do frontend (60 segundos).<br>
+    <strong>Solução:</strong> Aguarde 1 minuto OU recarregue forçado com <span class="kbd">Ctrl+Shift+R</span> (Cmd+Shift+R no Mac).</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Gráfico não aparece no Dashboard</div>
+    <div class="a"><strong>Causa:</strong> Você precisa de pelo menos <strong>2 registros de peso</strong> para o gráfico ser construído.<br>
+    <strong>Solução:</strong> Adicione mais um peso em outra data.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Custo da Claude API subindo demais</div>
+    <div class="a"><strong>Solução:</strong> Torre → Feature Flags → diminua o rollout_pct de <code>coach_ia</code> e <code>ocr_imagem</code> para 25% ou 50%. Confirme o spend limit em console.anthropic.com → Settings → Limits.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Site fora do ar / lento</div>
+    <div class="a"><strong>Causa 1:</strong> Cloudflare Pages teve um incidente — cheque <a href="https://www.cloudflarestatus.com" target="_blank">cloudflarestatus.com</a>.<br>
+    <strong>Causa 2:</strong> Supabase teve um incidente — cheque <a href="https://status.supabase.com" target="_blank">status.supabase.com</a>.<br>
+    <strong>Causa 3:</strong> Você atingiu free tier (improvável com beta pequeno).</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Erros aparecendo na aba Erros da Torre</div>
+    <div class="a"><strong>Solução:</strong> Cada erro mostra <strong>contexto</strong> (qual função quebrou), <strong>mensagem</strong> e <strong>stack trace</strong>. Copie o erro e envie para o desenvolvedor / Claude para diagnóstico. Enquanto isso, considere desligar a feature relacionada pelo flag para não impactar mais usuários.</div>
+  </div>
+
+  <div class="troubleshoot">
+    <div class="q">❓ Quero atualizar o código depois do primeiro deploy</div>
+    <div class="a"><strong>Solução:</strong> É só dar <code>git push</code> com o código novo no branch <code>main</code>. O Cloudflare Pages detecta sozinho e refaz o deploy em ~1 minuto.</div>
+  </div>
+</div>
+
+<div class="alert alert-success" style="margin-top:32px">
+  <strong>🎉 Pronto!</strong> Se chegou até aqui, o VITALE está oficialmente no ar. Acompanhe a Torre de Comando nos primeiros dias com atenção — é onde você vai descobrir bugs e padrões de uso antes dos seus usuários sentirem.
+</div>
+
+<div class="footer-note">
+  VITALE v4 — Manual de Instalação · Atualizado em maio/2026<br>
+  Em caso de problemas não cobertos aqui, consulte o repositório no GitHub ou abra um chat de troubleshooting.
+</div>
+
+</div>
+
+<script>
+// Persistência do checklist no localStorage
+const STORAGE_KEY = 'vitale_install_checklist';
+const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+
+document.querySelectorAll('.check-item').forEach(item => {
+  const id = item.dataset.id;
+  if (state[id]) item.classList.add('done');
+  item.addEventListener('click', () => {
+    item.classList.toggle('done');
+    state[id] = item.classList.contains('done');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    updateProgress();
+  });
+});
+
+function updateProgress() {
+  const all = document.querySelectorAll('.check-item').length;
+  const done = document.querySelectorAll('.check-item.done').length;
+  const pct = all ? Math.round(done / all * 100) : 0;
+  document.getElementById('progLabel').textContent = `Progresso: ${done} de ${all}`;
+  document.getElementById('progPct').textContent = pct + '%';
+  document.getElementById('progFill').style.width = pct + '%';
+}
+
+// Botões de copiar nos blocos <pre>
+document.querySelectorAll('pre').forEach(pre => {
+  const btn = document.createElement('button');
+  btn.className = 'copy-btn';
+  btn.textContent = '📋 COPIAR';
+  btn.onclick = (e) => {
+    e.preventDefault();
+    const txt = pre.textContent.replace('📋 COPIAR', '').trim();
+    navigator.clipboard.writeText(txt).then(() => {
+      btn.textContent = '✓ COPIADO';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '📋 COPIAR'; btn.classList.remove('copied'); }, 2000);
+    });
+  };
+  pre.appendChild(btn);
+});
+
+// Smooth scroll para TOC
+document.querySelectorAll('.toc a').forEach(a => {
+  a.addEventListener('click', e => {
+    const targetId = a.getAttribute('href').slice(1);
+    const el = document.getElementById(targetId);
+    if (el) {
+      e.preventDefault();
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  });
+});
+
+updateProgress();
+</script>
+</body>
+</html>
