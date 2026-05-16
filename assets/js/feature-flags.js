@@ -1,12 +1,11 @@
 // =====================================================
-// VITALE — Sistema de Feature Flags
-// Permite liberar/bloquear funcionalidades pela Torre de Comando
+// VITALE — Sistema de Feature Flags (v2 — bugs corrigidos)
 // =====================================================
 
 window.VitaleFlags = {
   _cache: null,
   _cacheTime: 0,
-  CACHE_TTL: 60000, // 1 minuto
+  CACHE_TTL: 30000, // 30 segundos (era 60s — mais responsivo)
 
   async load(force = false) {
     const now = Date.now();
@@ -23,8 +22,7 @@ window.VitaleFlags = {
       this._cacheTime = now;
       return this._cache;
     } catch (e) {
-      console.warn('[Flags] erro ao carregar, usando defaults conservadores:', e);
-      // fallback: tudo habilitado para não travar
+      console.warn('[Flags] erro ao carregar:', e);
       this._cache = {};
       return this._cache;
     }
@@ -33,19 +31,21 @@ window.VitaleFlags = {
   async isEnabled(flagKey) {
     const flags = await this.load();
     const f = flags[flagKey];
-    if (!f) return false; // se a flag não existe, fica oculta
+    if (!f) return false;
     if (!f.enabled) return false;
-    // rollout percentual: usa hash determinístico do user_id
-    if (f.rollout_pct < 100) {
-      const user = await window.VitaleAuth.getUser();
-      if (!user) return false;
-      const hash = this._hashCode(user.id) % 100;
-      return hash < f.rollout_pct;
-    }
-    return true;
+    
+    // BUG FIX: rollout_pct = 0 com enabled = true significa "liga pra todos"
+    // (interpretação correta: 0 = sem limitação de rollout)
+    // Para limitar rollout, use 1-99
+    if (f.rollout_pct === 0 || f.rollout_pct >= 100) return true;
+    
+    // Rollout parcial: hash determinístico do user_id
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return false;
+    const hash = this._hashCode(user.id) % 100;
+    return hash < f.rollout_pct;
   },
 
-  // hash determinístico simples — mesmo usuário sempre cai no mesmo bucket
   _hashCode(str) {
     let h = 0;
     for (let i = 0; i < str.length; i++) {
@@ -55,7 +55,7 @@ window.VitaleFlags = {
     return Math.abs(h);
   },
 
-  // Aplica visibilidade em elementos com [data-flag="nome_da_flag"]
+  // BUG FIX: restaura display original quando flag está ligada
   async applyToUI() {
     const flags = await this.load();
     const elements = document.querySelectorAll('[data-flag]');
@@ -63,19 +63,29 @@ window.VitaleFlags = {
       const flagKey = el.getAttribute('data-flag');
       const enabled = await this.isEnabled(flagKey);
       if (!enabled) {
+        // Salva o display original antes de esconder (uma vez só)
+        if (!el.hasAttribute('data-orig-display')) {
+          const computed = window.getComputedStyle(el).display;
+          el.setAttribute('data-orig-display', computed === 'none' ? '' : computed);
+        }
         el.style.display = 'none';
         el.classList.add('flag-disabled');
       } else {
+        // Restaura display original (ou remove inline display:none)
+        const orig = el.getAttribute('data-orig-display');
+        if (orig !== null) {
+          el.style.display = orig || '';
+        } else {
+          el.style.removeProperty('display');
+        }
         el.classList.remove('flag-disabled');
       }
     }
-    // Tabs com data-flag também
-    document.querySelectorAll('.tab-btn[data-flag]').forEach(async (btn) => {
-      const flagKey = btn.getAttribute('data-flag');
-      const enabled = await this.isEnabled(flagKey);
-      if (!enabled) {
-        btn.style.display = 'none';
-      }
-    });
+  },
+
+  // Força recarga das flags e reaplica na UI
+  async refresh() {
+    await this.load(true);
+    await this.applyToUI();
   }
 };
