@@ -1,11 +1,11 @@
 // =====================================================
-// VITALE — Sistema de Feature Flags (v2 — bugs corrigidos)
+// VITALE — Sistema de Feature Flags (v2 — 3 bugs corrigidos)
 // =====================================================
 
 window.VitaleFlags = {
   _cache: null,
   _cacheTime: 0,
-  CACHE_TTL: 30000, // 30 segundos (era 60s — mais responsivo)
+  CACHE_TTL: 30000,
 
   async load(force = false) {
     const now = Date.now();
@@ -33,13 +33,8 @@ window.VitaleFlags = {
     const f = flags[flagKey];
     if (!f) return false;
     if (!f.enabled) return false;
-    
-    // BUG FIX: rollout_pct = 0 com enabled = true significa "liga pra todos"
-    // (interpretação correta: 0 = sem limitação de rollout)
-    // Para limitar rollout, use 1-99
+    // BUG FIX: rollout_pct = 0 com enabled = true = liga pra todos
     if (f.rollout_pct === 0 || f.rollout_pct >= 100) return true;
-    
-    // Rollout parcial: hash determinístico do user_id
     const user = await window.VitaleAuth.getUser();
     if (!user) return false;
     const hash = this._hashCode(user.id) % 100;
@@ -55,7 +50,7 @@ window.VitaleFlags = {
     return Math.abs(h);
   },
 
-  // BUG FIX: restaura display original quando flag está ligada
+  // BUG FIX: restaura display quando flag é religada
   async applyToUI() {
     const flags = await this.load();
     const elements = document.querySelectorAll('[data-flag]');
@@ -63,7 +58,6 @@ window.VitaleFlags = {
       const flagKey = el.getAttribute('data-flag');
       const enabled = await this.isEnabled(flagKey);
       if (!enabled) {
-        // Salva o display original antes de esconder (uma vez só)
         if (!el.hasAttribute('data-orig-display')) {
           const computed = window.getComputedStyle(el).display;
           el.setAttribute('data-orig-display', computed === 'none' ? '' : computed);
@@ -71,19 +65,12 @@ window.VitaleFlags = {
         el.style.display = 'none';
         el.classList.add('flag-disabled');
       } else {
-        // Restaura display original (ou remove inline display:none)
-        const orig = el.getAttribute('data-orig-display');
-        if (orig !== null) {
-          el.style.display = orig || '';
-        } else {
-          el.style.removeProperty('display');
-        }
+        el.style.removeProperty('display');
         el.classList.remove('flag-disabled');
       }
     }
   },
 
-  // Força recarga das flags e reaplica na UI
   async refresh() {
     await this.load(true);
     await this.applyToUI();
