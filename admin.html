@@ -247,24 +247,42 @@ function renderFlags() {
   el.innerHTML = Object.keys(byFase).sort().map(fase => `
     <div class="card">
       <h3>Fase ${fase}</h3>
-      ${byFase[fase].map(f => `
+      ${byFase[fase].map(f => {
+        // Status visual
+        const statusColor = f.enabled ? 'var(--em)' : 'var(--textm)';
+        const statusText = f.enabled ? '🟢 LIGADA' : '⚫ DESLIGADA';
+        const rolloutInfo = f.enabled && f.rollout_pct > 0 && f.rollout_pct < 100
+          ? ` · Visível para ${f.rollout_pct}% dos usuários`
+          : '';
+        return `
         <div class="flag-row">
           <div class="flag-info" style="flex:1">
             <h4>${f.flag_name} <span class="fase-tag">Fase ${f.fase}</span></h4>
-            <div class="meta">${f.descricao || ''} · key: <code>${f.flag_key}</code></div>
-            <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
-              <input type="range" min="0" max="100" value="${f.rollout_pct}" 
-                onchange="updateFlagRollout('${f.flag_key}', this.value)" 
-                style="flex:1;max-width:240px">
-              <span id="rollout-${f.flag_key}" style="font-size:12px;color:var(--cyan);font-weight:700;min-width:50px">${f.rollout_pct}%</span>
+            <div class="meta">${f.descricao || ''}</div>
+            <div style="margin-top:6px;font-size:11px;color:${statusColor};font-weight:700;letter-spacing:1px">
+              ${statusText}${rolloutInfo}
             </div>
+            <details style="margin-top:8px">
+              <summary style="cursor:pointer;font-size:11px;color:var(--textm);user-select:none">⚙️ Avançado (rollout gradual)</summary>
+              <div style="display:flex;align-items:center;gap:12px;margin-top:8px;padding-left:12px">
+                <input type="range" min="0" max="100" value="${f.rollout_pct}" 
+                  oninput="document.getElementById('rollout-${f.flag_key}').textContent = this.value + '%'"
+                  onchange="updateFlagRollout('${f.flag_key}', this.value)" 
+                  style="flex:1;max-width:240px">
+                <span id="rollout-${f.flag_key}" style="font-size:12px;color:var(--cyan);font-weight:700;min-width:50px">${f.rollout_pct}%</span>
+              </div>
+              <p style="font-size:10px;color:var(--textm);margin-top:6px;padding-left:12px;line-height:1.5">
+                💡 0% ou 100% = liga para todos. Use 1-99% só se quiser testar com parte dos usuários.
+              </p>
+            </details>
           </div>
           <label class="toggle">
             <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange="toggleFlag('${f.flag_key}', this.checked)">
             <span class="slider"></span>
           </label>
         </div>
-      `).join('')}
+      `;
+      }).join('')}
     </div>
   `).join('');
 }
