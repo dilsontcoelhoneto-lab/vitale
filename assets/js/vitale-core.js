@@ -19,52 +19,55 @@ const VITALE_CORE = {
   // =====================================================
   // INIT
   // =====================================================
-  async init() {
-    try {
-      const user = await window.VitaleAuth.requireAuth();
-      if (!user) return;
+async init() {
+  try {
+    const user = await window.VitaleAuth.requireAuth();
+    if (!user) return;
 
-      // Carrega profile + dados em paralelo
-      const [profile, weights, meds, submetas] = await Promise.all([
-        window.VitaleAuth.getProfile(),
-        this.loadWeights(),
-        this.loadMedicacoes(),
-        this.loadSubmetas()
-      ]);
+    const [profile, weights, meds, submetas, healthProfile] = await Promise.all([
+      window.VitaleAuth.getProfile(),
+      this.loadWeights(),
+      this.loadMedicacoes(),
+      this.loadSubmetas(),
+      this.loadHealthProfile()
+    ]);
 
-      this.state.profile = profile;
-      this.state.weights = weights;
-      this.state.medicacoes = meds;
-      this.state.submetas = submetas;
+    this.state.profile = profile;
+    this.state.weights = weights;
+    this.state.medicacoes = meds;
+    this.state.submetas = submetas;
+    this.state.healthProfile = healthProfile;
 
-      // Aplica feature flags
-      await window.VitaleFlags.applyToUI();
+    await window.VitaleFlags.applyToUI();
 
-      // Render UI
-      this.renderHeader();
-      this.updateDashboard();
-      this.updateAgendamentos();
+    this.renderHeader();
+    this.updateDashboard();
+    this.updateAgendamentos();
+    this.fillHealthProfileForm();
 
-      window.VitaleAnalytics.track('app_open');
+    window.VitaleAnalytics.track('app_open');
 
-      // Esconde loader
-      const loader = document.getElementById('initLoader');
-      if (loader) {
-        loader.classList.add('hidden');
-        setTimeout(() => loader.remove(), 500);
-      }
-
-      // Se for primeiro acesso, abre onboarding
-      if (!profile?.altura || profile.altura === 1.70) {
-        this.checkOnboarding();
-      }
-    } catch (e) {
-      console.error('[VITALE] init error:', e);
-      window.VitaleErr.log('app_init', e);
-      this.showAlert('error', 'Erro ao carregar. Recarregue a página.');
+    const loader = document.getElementById('initLoader');
+    if (loader) {
+      loader.classList.add('hidden');
+      setTimeout(() => loader.remove(), 500);
     }
-  },
 
+    // Onboarding: se ainda não tem altura customizada nem peso
+    if ((!profile?.altura || profile.altura === 1.70) && this.state.weights.length === 0) {
+      this.showOnboarding();
+    }
+
+    // Tenta gerar coach IA se flag estiver ativa
+    setTimeout(() => this.generateCoachMessageAI(), 1000);
+  } catch (e) {
+    console.error('[VITALE] init error:', e);
+    window.VitaleErr.log('app_init', e);
+    this.showAlert('error', 'Erro ao carregar. Recarregue a página.');
+  }
+},
+
+  
   // =====================================================
   // DATABASE LOADERS
   // =====================================================
