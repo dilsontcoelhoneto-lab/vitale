@@ -19,7 +19,6 @@
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
 
-<!-- HEADER -->
 <header>
   <div class="logo">
     <svg width="42" height="42" viewBox="0 0 100 100" fill="none">
@@ -59,6 +58,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-flag="dashboard" onclick="VITALE_CORE.switchTab(event,'dashboard')">📊 DASHBOARD</button>
     <button class="tab-btn" data-flag="dashboard" onclick="VITALE_CORE.switchTab(event,'metas')">🎯 METAS</button>
+    <button class="tab-btn" data-flag="perfil_clinico" onclick="VITALE_CORE.switchTab(event,'saude')">❤️ SAÚDE</button>
     <button class="tab-btn" data-flag="importar_manual" onclick="VITALE_CORE.switchTab(event,'upload')">📤 IMPORTAR</button>
     <button class="tab-btn" data-flag="medicacoes" onclick="VITALE_CORE.switchTab(event,'medic')">💊 MEDICAÇÕES</button>
     <button class="tab-btn" data-flag="historico" onclick="VITALE_CORE.switchTab(event,'historico')">📋 HISTÓRICO</button>
@@ -68,7 +68,6 @@
   <!-- DASHBOARD -->
   <div id="dashboard" class="tab-content active">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Dashboard</h2>
-
     <div class="coach-card" data-flag="dashboard">
       <div class="coach-header">
         <div class="coach-avatar">🤖</div>
@@ -77,20 +76,17 @@
       <div class="coach-message" id="coachMessage">Carregando...</div>
       <div class="coach-footer" id="coachFooter"></div>
     </div>
-
     <div class="imc-card">
       <p class="imc-label">Seu IMC Atual</p>
       <div class="imc-value" id="imcValue">—</div>
       <p class="imc-status" id="imcStatus" style="color:var(--gold)">Aguardando dados</p>
     </div>
-
     <div class="stats-grid">
       <div class="stat"><div class="stat-value" id="pesoAtual">—</div><div class="stat-label">Peso Atual (kg)</div></div>
       <div class="stat"><div class="stat-value" id="pesoInicial">—</div><div class="stat-label">Peso Inicial (kg)</div></div>
       <div class="stat"><div class="stat-value" id="perdaTotal">—</div><div class="stat-label">Perda Total</div></div>
       <div class="stat"><div class="stat-value" id="diasRastro">—</div><div class="stat-label">Dias Rastreando</div></div>
     </div>
-
     <div class="card">
       <h3>📈 Progresso para Meta</h3>
       <div style="display:flex;justify-content:space-between;margin-bottom:12px">
@@ -100,7 +96,6 @@
       <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" id="metaProgress" style="width:0%"></div></div></div>
       <p style="font-size:12px;color:var(--textm);margin-top:10px" id="metaText">—</p>
     </div>
-
     <div class="chart-card">
       <h3>📉 Histórico + Projeção</h3>
       <div class="chart-wrapper"><canvas id="weightChart"></canvas></div>
@@ -128,7 +123,6 @@
       <h4>🔮 Projeção Personalizada</h4>
       <p id="projecaoTexto" style="font-size:14px;line-height:1.8;color:var(--text)">Carregando...</p>
     </div>
-
     <div class="card" data-flag="submetas" style="border-color:rgba(74,157,232,0.2);background:linear-gradient(135deg,rgba(74,157,232,0.03) 0%,var(--card) 60%)">
       <h3 style="color:var(--cyan)">🎯 Minhas Submetas</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:20px;line-height:1.7">Marcos intermediários com data e propósito.</p>
@@ -151,31 +145,113 @@
       <button class="btn btn-secondary" onclick="VITALE_CORE.adicionarSubmeta()" style="width:100%;padding:14px">+ ADICIONAR SUBMETA</button>
       <div id="submetasContainer" style="margin-top:20px"></div>
     </div>
-
     <div class="card" data-flag="marcos_imc">
       <h3>🏆 Marcos IMC</h3>
       <div id="marcosContainer"></div>
     </div>
+  </div>
+
+  <!-- SAUDE (NOVA ABA) -->
+  <div id="saude" class="tab-content" data-flag="perfil_clinico">
+    <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Saúde</h2>
+    <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Seu perfil clínico é usado pelo Coach IA para análises mais precisas e gera relatórios profissionais para seu médico.</p>
 
     <div class="card">
-      <h3>💡 Dicas</h3>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        <div style="display:flex;gap:14px;padding:14px;background:var(--bg1);border-radius:8px"><span>🥗</span><div><p style="font-size:13px;font-weight:600;margin-bottom:4px">Déficit calórico</p><p style="font-size:12px;color:var(--textm)">500–750 kcal/dia → 0.5–0.7 kg/semana de perda sustentável.</p></div></div>
-        <div style="display:flex;gap:14px;padding:14px;background:var(--bg1);border-radius:8px"><span>💪</span><div><p style="font-size:13px;font-weight:600;margin-bottom:4px">Musculação 3×/semana</p><p style="font-size:12px;color:var(--textm)">Preserva massa muscular e aumenta metabolismo basal.</p></div></div>
-        <div style="display:flex;gap:14px;padding:14px;background:var(--bg1);border-radius:8px"><span>📊</span><div><p style="font-size:13px;font-weight:600;margin-bottom:4px">Pesagem consistente</p><p style="font-size:12px;color:var(--textm)">Mesmo dia, mesma hora, em jejum.</p></div></div>
+      <h3>🩺 Sinais Vitais</h3>
+      <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Médias de aferição. Atualize com base nas últimas medições.</p>
+      <div class="form-group">
+        <div><label>Pressão Sistólica (mmHg)</label><input type="number" id="hPaSistolica" placeholder="120"></div>
+        <div><label>Pressão Diastólica (mmHg)</label><input type="number" id="hPaDiastolica" placeholder="80"></div>
+      </div>
+      <div class="form-group">
+        <div><label>Glicemia em jejum (mg/dL)</label><input type="number" id="hGlicemia" placeholder="92" step="0.1"></div>
+        <div><label>FC em repouso (bpm)</label><input type="number" id="hFc" placeholder="68"></div>
       </div>
     </div>
+
+    <div class="card">
+      <h3>💉 Medicações em Uso</h3>
+      <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Marque tudo que se aplica. Isso é importante para projeções precisas.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        <label class="check-card"><input type="checkbox" id="hMedGlp1" onchange="document.getElementById('hMedGlp1NomeWrap').style.display=this.checked?'block':'none'"><span class="check-content"><strong>💉 GLP-1</strong><small>Mounjaro, Ozempic, Wegovy, Saxenda...</small></span></label>
+        <label class="check-card"><input type="checkbox" id="hMedAntiHip"><span class="check-content"><strong>🫀 Anti-hipertensivo</strong><small>Para pressão alta</small></span></label>
+        <label class="check-card"><input type="checkbox" id="hMedEstatina"><span class="check-content"><strong>🧪 Estatina</strong><small>Para colesterol</small></span></label>
+        <label class="check-card"><input type="checkbox" id="hMedMetformina"><span class="check-content"><strong>💊 Metformina</strong><small>Glifage e similares</small></span></label>
+        <label class="check-card"><input type="checkbox" id="hMedInsulina"><span class="check-content"><strong>💉 Insulina</strong><small>Qualquer tipo</small></span></label>
+        <label class="check-card"><input type="checkbox" id="hMedTireoide"><span class="check-content"><strong>🦋 Tireoide</strong><small>Levotiroxina, etc</small></span></label>
+        <label class="check-card"><input type="checkbox" id="hMedVitaminas"><span class="check-content"><strong>🌿 Vitaminas/Suplementos</strong><small>Multi, B12, D, ômega...</small></span></label>
+      </div>
+      <div id="hMedGlp1NomeWrap" style="display:none;margin-top:14px">
+        <label>Qual GLP-1 e dose atual?</label>
+        <input type="text" id="hMedGlp1Nome" placeholder="Ex: Mounjaro 5mg semanal, Ozempic 1mg semanal...">
+      </div>
+      <div style="margin-top:14px">
+        <label>Outras medicações (texto livre)</label>
+        <textarea id="hMedOutros" placeholder="Ex: Ezetimiba 10mg, Rosuvastatina 10mg..." style="min-height:60px"></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🩻 Condições de Saúde</h3>
+      <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Diagnósticos confirmados pelo médico.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+        <label class="check-card"><input type="checkbox" id="hCondDt2"><span class="check-content"><strong>Diabetes Tipo 2</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondDt1"><span class="check-content"><strong>Diabetes Tipo 1</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondHip"><span class="check-content"><strong>Hipertensão</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondHipoT"><span class="check-content"><strong>Hipotireoidismo</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondHiperT"><span class="check-content"><strong>Hipertireoidismo</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondDisli"><span class="check-content"><strong>Dislipidemia</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondApneia"><span class="check-content"><strong>Apneia do Sono</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondSop"><span class="check-content"><strong>SOP (Ovários Policísticos)</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="hCondEsteatose"><span class="check-content"><strong>Esteatose Hepática</strong></span></label>
+      </div>
+      <div style="margin-top:14px">
+        <label>Outras condições</label>
+        <textarea id="hCondOutros" placeholder="Liste outras condições relevantes..." style="min-height:60px"></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🏃 Estilo de Vida</h3>
+      <div class="form-group">
+        <div>
+          <label>Nível de Atividade Física</label>
+          <select id="hNivelAtividade">
+            <option value="">Selecione...</option>
+            <option value="sedentario">Sedentário (sem exercício)</option>
+            <option value="leve">Leve (1-2x/semana)</option>
+            <option value="moderado">Moderado (3-4x/semana)</option>
+            <option value="intenso">Intenso (5-6x/semana)</option>
+            <option value="muito_intenso">Muito Intenso (diário pesado)</option>
+          </select>
+        </div>
+        <div><label>Treinos por semana</label><input type="number" id="hFreqTreino" min="0" max="14" placeholder="3"></div>
+      </div>
+      <div class="form-group">
+        <div><label>Horas de sono (média)</label><input type="number" id="hSono" step="0.5" placeholder="7.5"></div>
+        <div>
+          <label>Nível de stress (1-5)</label>
+          <select id="hStress">
+            <option value="">Selecione...</option>
+            <option value="1">1 - Muito baixo</option>
+            <option value="2">2 - Baixo</option>
+            <option value="3">3 - Moderado</option>
+            <option value="4">4 - Alto</option>
+            <option value="5">5 - Muito alto</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <button class="save-btn-mega" onclick="VITALE_CORE.salvarHealthProfile()">💾 SALVAR PERFIL DE SAÚDE</button>
   </div>
 
   <!-- IMPORTAR -->
   <div id="upload" class="tab-content">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Importar Dados</h2>
-
     <div class="card" data-flag="ocr_imagem">
       <h3>📸 Upload de Screenshot (OCR via IA)</h3>
-      <div class="info-box" style="margin-bottom:16px">
-        🤖 A IA do VITALE extrai automaticamente os dados de peso do print do seu app de saúde (Apple Health, Samsung Health, Balança Smart, etc.)
-      </div>
+      <div class="info-box" style="margin-bottom:16px">🤖 A IA do VITALE extrai automaticamente os dados de peso do print do seu app de saúde.</div>
       <div class="upload-area" onclick="document.getElementById('imageInput').click()">
         <h4>📷 Clique ou arraste a imagem</h4>
         <p>PNG, JPG, WebP — Máx 10MB</p>
@@ -185,14 +261,12 @@
       <div id="ocrResult" style="margin-top:12px"></div>
       <button class="btn btn-primary" onclick="VITALE_CORE.processarImagemOCR()" style="width:100%;margin-top:12px;display:none" id="btnProcessarImagem">🔍 PROCESSAR COM IA</button>
     </div>
-
     <div class="card" data-flag="importar_texto">
       <h3>✍️ Texto (múltiplas linhas)</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Formato: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--gold)">2026-03-16: 116.4kg</code></p>
       <textarea id="textInput" placeholder="2026-03-16: 116.4kg&#10;2026-03-09: 117.2kg&#10;2026-03-02: 118.0kg" style="min-height:110px;margin-bottom:14px"></textarea>
       <button class="btn btn-primary" onclick="VITALE_CORE.importarTexto()" style="width:100%">📥 IMPORTAR DO TEXTO</button>
     </div>
-
     <div class="card" data-flag="importar_manual">
       <h3>⚖️ Registro único</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:14px">Se a data já tiver registro, será solicitada confirmação para substituir.</p>
@@ -303,7 +377,7 @@
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Relatório & Backup</h2>
     <div class="card">
       <h3>📄 PDF para Médico</h3>
-      <p style="font-size:13px;color:var(--textm);margin-bottom:20px;line-height:1.8">PDF profissional com histórico completo. Pronto para o consultório.</p>
+      <p style="font-size:13px;color:var(--textm);margin-bottom:20px;line-height:1.8">PDF profissional com histórico, IMC, medicações, condições e perfil clínico completo.</p>
       <button class="btn btn-gold" onclick="VITALE_CORE.gerarRelatorioPDF()" style="width:100%;padding:16px">📥 GERAR PDF</button>
     </div>
     <div class="card" data-flag="backup_json">
@@ -314,65 +388,147 @@
   </div>
 </div>
 
-<!-- MODAL: ONBOARDING -->
+<!-- ===== MODAL: ONBOARDING CLÍNICO (5 telas) ===== -->
 <div id="modalOnboarding" class="modal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h2 style="font-size:24px;margin:0;color:var(--gold)">Bem-vindo ao VITALE! 🎉</h2>
+  <div class="modal-content wide">
+    <div id="onbProgressBar" style="display:flex;gap:6px;margin-bottom:24px">
+      <div class="onb-step current" data-step="1"></div>
+      <div class="onb-step" data-step="2"></div>
+      <div class="onb-step" data-step="3"></div>
+      <div class="onb-step" data-step="4"></div>
+      <div class="onb-step" data-step="5"></div>
     </div>
-    <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">
-      Vamos configurar seu perfil em 30 segundos para personalizar suas projeções e o coach IA.
-    </p>
-    <div style="margin-bottom:16px">
-      <label>Como devemos te chamar?</label>
-      <input type="text" id="onbNome" placeholder="Seu primeiro nome">
+
+    <div class="onb-tela" data-tela="1">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">Bem-vindo ao VITALE 🎉</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Vamos configurar seu perfil em 5 telinhas (2 minutos). <strong>Tudo é opcional</strong> — pule o que quiser e complete depois na aba Saúde.</p>
+      <div style="margin-bottom:16px">
+        <label>Como devemos te chamar?</label>
+        <input type="text" id="onbNome" placeholder="Seu primeiro nome">
+      </div>
+      <div class="form-group">
+        <div><label>Altura (m)</label><input type="text" id="onbAltura" placeholder="1.75"></div>
+        <div><label>Peso atual (kg)</label><input type="text" id="onbPeso" placeholder="80.0"></div>
+      </div>
+      <div class="form-group">
+        <div><label>Data de nascimento</label><input type="date" id="onbDataNasc"></div>
+        <div>
+          <label>Sexo biológico</label>
+          <select id="onbSexo">
+            <option value="">Selecione...</option>
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+            <option value="outro">Prefiro não informar</option>
+          </select>
+        </div>
+      </div>
     </div>
-    <div class="form-group">
-      <div><label>Altura (m)</label><input type="text" id="onbAltura" placeholder="1.75"></div>
-      <div><label>Peso atual (kg)</label><input type="text" id="onbPeso" placeholder="80.0"></div>
+
+    <div class="onb-tela" data-tela="2" style="display:none">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🩺 Sinais Vitais</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Se não souber agora, <strong>pule</strong> — pode preencher depois na aba Saúde.</p>
+      <div class="form-group">
+        <div><label>Pressão Sistólica</label><input type="number" id="onbPaSist" placeholder="120"></div>
+        <div><label>Pressão Diastólica</label><input type="number" id="onbPaDiast" placeholder="80"></div>
+      </div>
+      <div class="form-group">
+        <div><label>Glicemia em jejum (mg/dL)</label><input type="number" id="onbGlicemia" placeholder="92" step="0.1"></div>
+        <div><label>FC em repouso (bpm)</label><input type="number" id="onbFc" placeholder="68"></div>
+      </div>
     </div>
-    <button class="btn btn-primary" onclick="VITALE_CORE.saveOnboarding()" style="width:100%;padding:14px;margin-top:14px">COMEÇAR MINHA JORNADA 🚀</button>
+
+    <div class="onb-tela" data-tela="3" style="display:none">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">💉 Medicações em Uso</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Marque tudo que se aplica. Ajuda a IA a personalizar suas projeções e dicas.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label class="check-card"><input type="checkbox" id="onbMedGlp1" onchange="document.getElementById('onbMedGlp1Wrap').style.display=this.checked?'block':'none'"><span class="check-content"><strong>💉 GLP-1</strong><small>Mounjaro, Ozempic, Wegovy...</small></span></label>
+        <label class="check-card"><input type="checkbox" id="onbMedAntiHip"><span class="check-content"><strong>🫀 Anti-hipertensivo</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbMedEstatina"><span class="check-content"><strong>🧪 Estatina (colesterol)</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbMedMetformina"><span class="check-content"><strong>💊 Metformina</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbMedInsulina"><span class="check-content"><strong>💉 Insulina</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbMedTireoide"><span class="check-content"><strong>🦋 Tireoide</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbMedVitaminas"><span class="check-content"><strong>🌿 Vitaminas/Suplementos</strong></span></label>
+      </div>
+      <div id="onbMedGlp1Wrap" style="display:none;margin-top:14px">
+        <label>Qual GLP-1 e dose?</label>
+        <input type="text" id="onbMedGlp1Nome" placeholder="Ex: Mounjaro 5mg semanal">
+      </div>
+    </div>
+
+    <div class="onb-tela" data-tela="4" style="display:none">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🩻 Condições de Saúde</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Apenas diagnósticos confirmados pelo médico.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <label class="check-card"><input type="checkbox" id="onbCondDt2"><span class="check-content"><strong>Diabetes Tipo 2</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbCondDt1"><span class="check-content"><strong>Diabetes Tipo 1</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbCondHip"><span class="check-content"><strong>Hipertensão</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbCondHipoT"><span class="check-content"><strong>Hipotireoidismo</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbCondDisli"><span class="check-content"><strong>Dislipidemia</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbCondApneia"><span class="check-content"><strong>Apneia do Sono</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbCondSop"><span class="check-content"><strong>SOP</strong></span></label>
+        <label class="check-card"><input type="checkbox" id="onbCondEsteatose"><span class="check-content"><strong>Esteatose Hepática</strong></span></label>
+      </div>
+    </div>
+
+    <div class="onb-tela" data-tela="5" style="display:none">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🏃 Estilo de Vida</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Última tela — para o coach IA ajustar conselhos.</p>
+      <div class="form-group">
+        <div>
+          <label>Nível de Atividade</label>
+          <select id="onbNivelAtividade">
+            <option value="">Selecione...</option>
+            <option value="sedentario">Sedentário</option>
+            <option value="leve">Leve (1-2x/sem)</option>
+            <option value="moderado">Moderado (3-4x/sem)</option>
+            <option value="intenso">Intenso (5-6x/sem)</option>
+            <option value="muito_intenso">Muito Intenso</option>
+          </select>
+        </div>
+        <div><label>Treinos/semana</label><input type="number" id="onbFreqTreino" min="0" max="14" placeholder="3"></div>
+      </div>
+      <div class="form-group">
+        <div><label>Horas de sono (média)</label><input type="number" id="onbSono" step="0.5" placeholder="7.5"></div>
+        <div>
+          <label>Stress (1-5)</label>
+          <select id="onbStress">
+            <option value="">Selecione...</option>
+            <option value="1">1 - Muito baixo</option>
+            <option value="2">2 - Baixo</option>
+            <option value="3">3 - Moderado</option>
+            <option value="4">4 - Alto</option>
+            <option value="5">5 - Muito alto</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:24px;justify-content:space-between;align-items:center">
+      <button id="onbVoltar" class="btn btn-secondary" onclick="VITALE_CORE.onbVoltar()" style="display:none">← Voltar</button>
+      <span id="onbPular" style="color:var(--textm);font-size:12px;cursor:pointer" onclick="VITALE_CORE.onbPular()">Pular esta etapa →</span>
+      <button id="onbAvancar" class="btn btn-primary" onclick="VITALE_CORE.onbAvancar()" style="padding:14px 28px">Continuar →</button>
+    </div>
   </div>
 </div>
 
-<!-- MODAL: CONFIRMAÇÃO IMPORTAÇÃO -->
 <div id="modalConfirmacao" class="modal">
   <div class="modal-content">
-    <div class="modal-header">
-      <h2 style="font-size:22px;margin:0">Confirmar Importação</h2>
-      <button class="modal-close" onclick="VITALE_CORE.closeModal('modalConfirmacao')">✕</button>
-    </div>
+    <div class="modal-header"><h2 style="font-size:22px;margin:0">Confirmar Importação</h2><button class="modal-close" onclick="VITALE_CORE.closeModal('modalConfirmacao')">✕</button></div>
     <div id="resumoImportacao" style="background:var(--bg);padding:16px;border-radius:8px;margin-bottom:20px;max-height:300px;overflow-y:auto"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <button class="btn btn-secondary" onclick="VITALE_CORE.closeModal('modalConfirmacao')">❌ Cancelar</button>
-      <button class="btn btn-primary" onclick="VITALE_CORE.confirmarImportacao()">✅ Confirmar</button>
-    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px"><button class="btn btn-secondary" onclick="VITALE_CORE.closeModal('modalConfirmacao')">❌ Cancelar</button><button class="btn btn-primary" onclick="VITALE_CORE.confirmarImportacao()">✅ Confirmar</button></div>
   </div>
 </div>
 
-<!-- MODAL: SETTINGS -->
 <div id="modalSettings" class="modal">
   <div class="modal-content">
-    <div class="modal-header">
-      <h2 style="font-size:22px;margin:0">⚙️ Configurações</h2>
-      <button class="modal-close" onclick="VITALE_CORE.closeModal('modalSettings')">✕</button>
-    </div>
+    <div class="modal-header"><h2 style="font-size:22px;margin:0">⚙️ Configurações</h2><button class="modal-close" onclick="VITALE_CORE.closeModal('modalSettings')">✕</button></div>
     <div class="settings-section">
       <h4>👤 Perfil</h4>
-      <div class="form-group">
-        <div><label>Nome</label><input type="text" id="nomeInput" placeholder="Seu nome"></div>
-        <div><label>Altura (m)</label><input type="text" id="alturaInput" placeholder="1.84"></div>
-      </div>
+      <div class="form-group"><div><label>Nome</label><input type="text" id="nomeInput" placeholder="Seu nome"></div><div><label>Altura (m)</label><input type="text" id="alturaInput" placeholder="1.84"></div></div>
       <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.salvarPerfil()">Salvar Perfil</button>
     </div>
-    <div class="settings-section">
-      <h4>💾 Dados</h4>
-      <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.exportarJSON()">📤 Exportar Backup JSON</button>
-    </div>
-    <div class="settings-section">
-      <h4>🚪 Conta</h4>
-      <button class="btn btn-danger btn-small" onclick="VITALE_CORE.signOut()">Sair da conta</button>
-    </div>
+    <div class="settings-section"><h4>💾 Dados</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.exportarJSON()">📤 Exportar Backup JSON</button></div>
+    <div class="settings-section"><h4>🚪 Conta</h4><button class="btn btn-danger btn-small" onclick="VITALE_CORE.signOut()">Sair da conta</button></div>
   </div>
 </div>
 
@@ -380,32 +536,10 @@
 <script src="/assets/js/feature-flags.js"></script>
 <script src="/assets/js/vitale-core.js"></script>
 <script>
-function toggleUserMenu() {
-  const dd = document.getElementById('userMenuDropdown');
-  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
-}
-document.addEventListener('click', e => {
-  const menu = document.getElementById('userMenuDropdown');
-  if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) {
-    menu.style.display = 'none';
-  }
-});
-
-// Mostra link admin se for admin
-(async () => {
-  try {
-    const profile = await window.VitaleAuth.getProfile();
-    if (profile?.role === 'admin') {
-      document.getElementById('adminLink').style.display = 'block';
-    }
-  } catch (e) {}
-})();
-
-// Inicialização do app
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('manualDate').value = new Date().toISOString().slice(0, 10);
-  VITALE_CORE.init();
-});
+function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
+document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
+(async () => { try { const profile = await window.VitaleAuth.getProfile(); if (profile?.role === 'admin') document.getElementById('adminLink').style.display = 'block'; } catch (e) {} })();
+document.addEventListener('DOMContentLoaded', () => { document.getElementById('manualDate').value = new Date().toISOString().slice(0, 10); VITALE_CORE.init(); });
 </script>
 </body>
 </html>
