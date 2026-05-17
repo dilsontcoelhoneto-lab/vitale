@@ -567,3 +567,40 @@ table tr:hover td{background:rgba(255,255,255,0.02)}
   .container{padding:16px 14px}
   .modal-content{padding:20px}
 }
+/* ============================================
+   VITALE BLOCO A — Adições
+   ============================================ */
+.check-card{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 16px;border-radius:10px;
+  border:1px solid var(--border2);background:var(--bg1);
+  cursor:pointer;transition:all .2s;user-select:none;
+}
+.check-card:hover{border-color:var(--gold);background:rgba(212,168,67,0.04)}
+.check-card input[type="checkbox"]{
+  width:20px;height:20px;accent-color:var(--em);
+  cursor:pointer;flex-shrink:0;
+}
+.check-card:has(input:checked){
+  border-color:var(--em);
+  background:rgba(39,196,125,0.06);
+}
+.check-content{display:flex;flex-direction:column;gap:2px;flex:1}
+.check-content strong{font-size:13px;font-weight:600;color:var(--text)}
+.check-content small{font-size:11px;color:var(--textm)}
+
+.onb-step{
+  flex:1;height:6px;border-radius:3px;
+  background:var(--border2);transition:background .3s;
+}
+.onb-step.done{background:var(--em)}
+.onb-step.current{background:var(--gold);box-shadow:0 0 8px rgba(212,168,67,0.5)}
+
+.onb-tela{animation:fadeUp .3s ease}
+.modal-content.wide{max-width:720px}
+
+@media (max-width:768px){
+  .check-card{padding:12px}
+  .check-content strong{font-size:12px}
+  .check-content small{font-size:10px}
+}
