@@ -278,14 +278,18 @@ async init() {
     };
 
     try {
+      const { data: { session } } = await window.sb.auth.getSession();
       const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipo: 'coach',
-          contexto: ctx
-        })
-      });
+          method: 'POST',
+          headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`
+       },
+  body: JSON.stringify({
+    tipo: 'coach',
+    contexto: ctx
+  })
+});
       if (!res.ok) throw new Error('API ' + res.status);
       const data = await res.json();
       if (data.message) el.innerHTML = data.message;
