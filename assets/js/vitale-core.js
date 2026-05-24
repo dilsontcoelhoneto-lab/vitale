@@ -1,11 +1,13 @@
 // =====================================================
-// VITALE — Core (lógica principal)
-// Baseado no v3.3 mas com persistência via Supabase
+// VITALE — Core (lógica principal) — v4.1 BLOCO A
+// Inclui: persistência Supabase + health_profile +
+//         onboarding wizard 5 telas + auth headers em /api
 // =====================================================
 
 const VITALE_CORE = {
   state: {
     profile: null,
+    healthProfile: null,
     weights: [],
     medicacoes: [],
     submetas: [],
@@ -19,55 +21,61 @@ const VITALE_CORE = {
   // =====================================================
   // INIT
   // =====================================================
-async init() {
-  try {
-    const user = await window.VitaleAuth.requireAuth();
-    if (!user) return;
+  async init() {
+    try {
+      const user = await window.VitaleAuth.requireAuth();
+      if (!user) return;
 
-    const [profile, weights, meds, submetas, healthProfile] = await Promise.all([
-      window.VitaleAuth.getProfile(),
-      this.loadWeights(),
-      this.loadMedicacoes(),
-      this.loadSubmetas(),
-      this.loadHealthProfile()
-    ]);
+      // Carrega tudo em paralelo
+      const [profile, weights, meds, submetas, healthProfile] = await Promise.all([
+        window.VitaleAuth.getProfile(),
+        this.loadWeights(),
+        this.loadMedicacoes(),
+        this.loadSubmetas(),
+        this.loadHealthProfile()
+      ]);
 
-    this.state.profile = profile;
-    this.state.weights = weights;
-    this.state.medicacoes = meds;
-    this.state.submetas = submetas;
-    this.state.healthProfile = healthProfile;
+      this.state.profile = profile;
+      this.state.weights = weights;
+      this.state.medicacoes = meds;
+      this.state.submetas = submetas;
+      this.state.healthProfile = healthProfile;
 
-    await window.VitaleFlags.applyToUI();
+      // Aplica feature flags
+      await window.VitaleFlags.applyToUI();
 
-    this.renderHeader();
-    this.updateDashboard();
-    this.updateAgendamentos();
-    this.fillHealthProfileForm();
+      // Render UI
+      this.renderHeader();
+      this.updateDashboard();
+      this.updateAgendamentos();
+      this.fillHealthProfileForm();
 
-    window.VitaleAnalytics.track('app_open');
+      window.VitaleAnalytics.track('app_open');
 
-    const loader = document.getElementById('initLoader');
-    if (loader) {
-      loader.classList.add('hidden');
-      setTimeout(() => loader.remove(), 500);
+      // Esconde loader
+      const loader = document.getElementById('initLoader');
+      if (loader) {
+        loader.classList.add('hidden');
+        setTimeout(() => loader.remove(), 500);
+      }
+
+      // Se for primeiro acesso, abre onboarding wizard
+      if ((!profile?.altura || profile.altura === 1.70) && weights.length === 0) {
+        this.showOnboarding();
+      }
+
+      // Coach IA via API (com fallback determinístico)
+      setTimeout(() => this.generateCoachMessageAI(), 1000);
+    } catch (e) {
+      console.error('[VITALE] init error:', e);
+      if (window.VitaleErr) window.VitaleErr.log('app_init', e);
+      this.showAlert('error', 'Erro ao carregar. Recarregue a página.');
+      // Esconde loader mesmo em erro pra usuário não ficar travado
+      const loader = document.getElementById('initLoader');
+      if (loader) loader.remove();
     }
+  },
 
-    // Onboarding: se ainda não tem altura customizada nem peso
-    if ((!profile?.altura || profile.altura === 1.70) && this.state.weights.length === 0) {
-      this.showOnboarding();
-    }
-
-    // Tenta gerar coach IA se flag estiver ativa
-    setTimeout(() => this.generateCoachMessageAI(), 1000);
-  } catch (e) {
-    console.error('[VITALE] init error:', e);
-    window.VitaleErr.log('app_init', e);
-    this.showAlert('error', 'Erro ao carregar. Recarregue a página.');
-  }
-},
-
-  
   // =====================================================
   // DATABASE LOADERS
   // =====================================================
@@ -106,8 +114,28 @@ async init() {
     }));
   },
 
+  async loadHealthProfile() {
+    try {
+      const user = await window.VitaleAuth.getUser();
+      if (!user) return null;
+      const { data, error } = await window.sb
+        .from('health_profile')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) {
+        console.warn('Health profile error:', error);
+        return null;
+      }
+      return data;
+    } catch (e) {
+      console.warn('Health profile load failed:', e);
+      return null;
+    }
+  },
+
   // =====================================================
-  // UTILS (do v3.3, idêntico)
+  // UTILS
   // =====================================================
   calcIMC(kg, h) { return (kg / (h * h)).toFixed(1); },
 
@@ -203,7 +231,7 @@ async init() {
   },
 
   // =====================================================
-  // COACH IA (v3.3 com fallback se IA desabilitada)
+  // COACH IA — fallback determinístico
   // =====================================================
   generateCoachMessage() {
     const el = document.getElementById('coachMessage');
@@ -258,7 +286,7 @@ async init() {
     }
   },
 
-  // Coach IA via API (Fase 3)
+  // Coach IA via API (Fase 3) — FIX: agora envia Authorization Bearer
   async generateCoachMessageAI() {
     const enabled = await window.VitaleFlags.isEnabled('coach_ia');
     if (!enabled) return this.generateCoachMessage();
@@ -274,29 +302,27 @@ async init() {
       meta_kg: this.metaKg.toFixed(1),
       nome: this.state.profile?.nome || null,
       historico: sorted.slice(-12),
-      submetas: this.state.submetas.slice(0, 5)
+      submetas: this.state.submetas.slice(0, 5),
+      health_profile: this.state.healthProfile || null
     };
 
     try {
       const { data: { session } } = await window.sb.auth.getSession();
       const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token || ''}`
-       },
-  body: JSON.stringify({
-    tipo: 'coach',
-    contexto: ctx
-  })
-});
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`
+        },
+        body: JSON.stringify({ tipo: 'coach', contexto: ctx })
+      });
       if (!res.ok) throw new Error('API ' + res.status);
       const data = await res.json();
       if (data.message) el.innerHTML = data.message;
-      else this.generateCoachMessage(); // fallback determinístico
+      else this.generateCoachMessage();
     } catch (e) {
-      window.VitaleErr.log('coach_ia', e);
-      this.generateCoachMessage(); // fallback
+      if (window.VitaleErr) window.VitaleErr.log('coach_ia', e);
+      this.generateCoachMessage();
     }
   },
 
@@ -429,7 +455,6 @@ async init() {
   // PESOS — CRUD
   // =====================================================
   async addWeight(date, peso, origem = 'manual') {
-    const altura = this.altura;
     if (!date || isNaN(peso) || peso <= 0) throw new Error('Dados inválidos');
     if (peso > 500) throw new Error('Peso parece inválido');
 
@@ -443,13 +468,12 @@ async init() {
       .single();
     if (error) throw error;
 
-    // Atualiza state local
     const existing = this.state.weights.findIndex(w => w.date === date);
     if (existing >= 0) this.state.weights[existing] = { id: data.id, date, peso, origem };
     else this.state.weights.push({ id: data.id, date, peso, origem });
     this.state.weights.sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    window.VitaleAnalytics.track('weight_add', { origem });
+    if (window.VitaleAnalytics) window.VitaleAnalytics.track('weight_add', { origem });
     this.updateDashboard();
     return data;
   },
@@ -485,7 +509,7 @@ async init() {
       this.showAlert('success', `✅ ${peso.toFixed(1)} kg adicionado para ${this.fmt(date)}!`);
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
-      window.VitaleErr.log('add_weight_manual', e);
+      if (window.VitaleErr) window.VitaleErr.log('add_weight_manual', e);
     }
   },
 
@@ -546,7 +570,7 @@ async init() {
       this.updateDashboard();
       count = items.length;
       this.showAlert('success', `✅ ${count} registro(s) importado(s)!`);
-      window.VitaleAnalytics.track('import_batch', { count });
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('import_batch', { count });
 
       const imgEl = document.querySelector('#imagePreview img');
       if (imgEl) {
@@ -556,12 +580,12 @@ async init() {
       }
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
-      window.VitaleErr.log('import_batch', e);
+      if (window.VitaleErr) window.VitaleErr.log('import_batch', e);
     }
   },
 
   // =====================================================
-  // OCR
+  // OCR — FIX: agora envia Authorization Bearer
   // =====================================================
   handleImageUpload(e) {
     const file = e.target.files[0];
@@ -594,9 +618,13 @@ async init() {
       const base64 = imgEl.src.split(',')[1];
       const mimeType = imgEl.src.split(';')[0].replace('data:', '') || 'image/jpeg';
 
+      const { data: { session } } = await window.sb.auth.getSession();
       const res = await fetch('/api/ocr', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`
+        },
         body: JSON.stringify({ image: base64, mime: mimeType })
       });
 
@@ -607,18 +635,17 @@ async init() {
 
       const data = await res.json();
       if (data.registros && data.registros.length > 0) {
-        // Marca origem como OCR
         const items = data.registros.map(r => ({ ...r, origem: 'ocr' }));
         this.state.tempImportacao = items;
         this.showConfirmModal(items, 'Extraído via IA');
         ocrDiv.innerHTML = `<div class="alert alert-success">✅ IA encontrou ${items.length} registro(s). Confirme abaixo.</div>`;
-        window.VitaleAnalytics.track('ocr_success', { count: items.length });
+        if (window.VitaleAnalytics) window.VitaleAnalytics.track('ocr_success', { count: items.length });
       } else {
         ocrDiv.innerHTML = `<div class="alert alert-warning">⚠️ Nenhum dado de peso identificado na imagem.</div>`;
       }
     } catch (err) {
       ocrDiv.innerHTML = `<div class="alert alert-error">❌ ${err.message}</div>`;
-      window.VitaleErr.log('ocr_processar', err);
+      if (window.VitaleErr) window.VitaleErr.log('ocr_processar', err);
     } finally {
       btn.disabled = false;
       btn.textContent = '🔍 PROCESSAR COM IA';
@@ -660,7 +687,7 @@ async init() {
       this.showAlert('success', `✅ Submeta "${nome}" adicionada!`);
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
-      window.VitaleErr.log('add_submeta', e);
+      if (window.VitaleErr) window.VitaleErr.log('add_submeta', e);
     }
   },
 
@@ -793,7 +820,7 @@ async init() {
       this.showAlert('success', `✅ "${nome}" agendado!`);
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
-      window.VitaleErr.log('add_medicacao', e);
+      if (window.VitaleErr) window.VitaleErr.log('add_medicacao', e);
     }
   },
 
@@ -816,7 +843,7 @@ async init() {
           <p>💊 ${med.dose}</p>
           <p>⏰ ${freq}</p>
         </div>
-        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerAgendamento(${med.id})">🗑️</button>
+        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerAgendamento('${med.id}')">🗑️</button>
       </div>`;
     }).join('');
   },
@@ -897,48 +924,244 @@ async init() {
         jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
       }).from(html).save();
       this.showAlert('success', '✅ PDF gerado!');
-      window.VitaleAnalytics.track('pdf_generated');
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('pdf_generated');
     } catch (err) {
       this.showAlert('error', '❌ Erro ao gerar PDF: ' + err.message);
-      window.VitaleErr.log('pdf_gen', err);
+      if (window.VitaleErr) window.VitaleErr.log('pdf_gen', err);
     }
   },
 
   // =====================================================
-  // ONBOARDING
+  // HEALTH PROFILE — Aba Saúde
   // =====================================================
-  checkOnboarding() {
-    if (this.state.weights.length === 0 && (!this.state.profile?.altura || this.state.profile.altura === 1.70)) {
-      this.showOnboarding();
+  fillHealthProfileForm() {
+    const hp = this.state.healthProfile;
+    if (!hp) return;
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v !== null && v !== undefined) el.value = v; };
+    const setCheck = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+
+    setVal('hPaSistolica', hp.pa_sistolica);
+    setVal('hPaDiastolica', hp.pa_diastolica);
+    setVal('hGlicemia', hp.glicemia_jejum);
+    setVal('hFc', hp.fc_repouso);
+
+    setCheck('hMedGlp1', hp.med_glp1);
+    setCheck('hMedAntiHip', hp.med_anti_hipertensivo);
+    setCheck('hMedEstatina', hp.med_estatina);
+    setCheck('hMedMetformina', hp.med_metformina);
+    setCheck('hMedInsulina', hp.med_insulina);
+    setCheck('hMedTireoide', hp.med_tireoide);
+    setCheck('hMedVitaminas', hp.med_vitaminas);
+    setVal('hMedGlp1Nome', hp.med_glp1_nome);
+    setVal('hMedOutros', hp.med_outros);
+
+    if (hp.med_glp1) {
+      const wrap = document.getElementById('hMedGlp1NomeWrap');
+      if (wrap) wrap.style.display = 'block';
+    }
+
+    setCheck('hCondDt2', hp.cond_diabetes_t2);
+    setCheck('hCondDt1', hp.cond_diabetes_t1);
+    setCheck('hCondHip', hp.cond_hipertensao);
+    setCheck('hCondHipoT', hp.cond_hipotireoidismo);
+    setCheck('hCondHiperT', hp.cond_hipertireoidismo);
+    setCheck('hCondDisli', hp.cond_dislipidemia);
+    setCheck('hCondApneia', hp.cond_apneia_sono);
+    setCheck('hCondSop', hp.cond_sop);
+    setCheck('hCondEsteatose', hp.cond_esteatose);
+    setVal('hCondOutros', hp.cond_outros);
+
+    setVal('hNivelAtividade', hp.nivel_atividade);
+    setVal('hFreqTreino', hp.freq_treino);
+    setVal('hSono', hp.horas_sono);
+    setVal('hStress', hp.nivel_stress);
+  },
+
+  async salvarHealthProfile() {
+    try {
+      const user = await window.VitaleAuth.getUser();
+      if (!user) return;
+      const getNum = (id) => { const v = document.getElementById(id)?.value; return v ? parseFloat(v.replace(',', '.')) : null; };
+      const getInt = (id) => { const v = document.getElementById(id)?.value; return v ? parseInt(v) : null; };
+      const getStr = (id) => { const v = document.getElementById(id)?.value?.trim(); return v || null; };
+      const getCheck = (id) => !!document.getElementById(id)?.checked;
+
+      const data = {
+        id: user.id,
+        pa_sistolica: getInt('hPaSistolica'),
+        pa_diastolica: getInt('hPaDiastolica'),
+        glicemia_jejum: getNum('hGlicemia'),
+        fc_repouso: getInt('hFc'),
+        med_glp1: getCheck('hMedGlp1'),
+        med_glp1_nome: getStr('hMedGlp1Nome'),
+        med_anti_hipertensivo: getCheck('hMedAntiHip'),
+        med_estatina: getCheck('hMedEstatina'),
+        med_metformina: getCheck('hMedMetformina'),
+        med_insulina: getCheck('hMedInsulina'),
+        med_tireoide: getCheck('hMedTireoide'),
+        med_vitaminas: getCheck('hMedVitaminas'),
+        med_outros: getStr('hMedOutros'),
+        cond_diabetes_t2: getCheck('hCondDt2'),
+        cond_diabetes_t1: getCheck('hCondDt1'),
+        cond_hipertensao: getCheck('hCondHip'),
+        cond_hipotireoidismo: getCheck('hCondHipoT'),
+        cond_hipertireoidismo: getCheck('hCondHiperT'),
+        cond_dislipidemia: getCheck('hCondDisli'),
+        cond_apneia_sono: getCheck('hCondApneia'),
+        cond_sop: getCheck('hCondSop'),
+        cond_esteatose: getCheck('hCondEsteatose'),
+        cond_outros: getStr('hCondOutros'),
+        nivel_atividade: getStr('hNivelAtividade'),
+        freq_treino: getInt('hFreqTreino'),
+        horas_sono: getNum('hSono'),
+        nivel_stress: getInt('hStress'),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await window.sb.from('health_profile').upsert(data);
+      if (error) throw error;
+
+      this.state.healthProfile = data;
+      this.showAlert('success', '✅ Perfil de saúde salvo!');
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('health_profile_saved');
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('save_health_profile', e);
     }
   },
+
+  // =====================================================
+  // ONBOARDING WIZARD — 5 telas
+  // =====================================================
+  onbCurrentStep: 1,
 
   showOnboarding() {
+    this.onbCurrentStep = 1;
+    this.onbRenderStep();
     document.getElementById('modalOnboarding')?.classList.add('active');
   },
 
-  async saveOnboarding() {
-    const nome = document.getElementById('onbNome').value.trim();
-    const altura = parseFloat(document.getElementById('onbAltura').value.replace(',', '.'));
-    const peso = parseFloat(document.getElementById('onbPeso').value.replace(',', '.'));
+  onbRenderStep() {
+    document.querySelectorAll('.onb-tela').forEach(t => t.style.display = 'none');
+    const tela = document.querySelector(`.onb-tela[data-tela="${this.onbCurrentStep}"]`);
+    if (tela) tela.style.display = 'block';
 
-    if (!nome) return this.showAlert('error', 'Como devemos te chamar?');
-    if (isNaN(altura) || altura < 1.2 || altura > 2.5) return this.showAlert('error', 'Altura inválida (ex: 1.75)');
-    if (isNaN(peso) || peso < 30 || peso > 500) return this.showAlert('error', 'Peso inválido');
+    document.querySelectorAll('.onb-step').forEach((s, i) => {
+      s.classList.remove('current', 'done');
+      const idx = i + 1;
+      if (idx < this.onbCurrentStep) s.classList.add('done');
+      else if (idx === this.onbCurrentStep) s.classList.add('current');
+    });
 
+    const btnVoltar = document.getElementById('onbVoltar');
+    if (btnVoltar) btnVoltar.style.display = this.onbCurrentStep > 1 ? 'inline-block' : 'none';
+
+    const avancar = document.getElementById('onbAvancar');
+    if (avancar) avancar.textContent = this.onbCurrentStep === 5 ? 'Finalizar 🎉' : 'Continuar →';
+
+    const pular = document.getElementById('onbPular');
+    if (pular) pular.style.display = this.onbCurrentStep === 1 ? 'none' : 'inline';
+  },
+
+  onbVoltar() {
+    if (this.onbCurrentStep > 1) {
+      this.onbCurrentStep--;
+      this.onbRenderStep();
+    }
+  },
+
+  onbPular() {
+    if (this.onbCurrentStep < 5) {
+      this.onbCurrentStep++;
+      this.onbRenderStep();
+    } else {
+      this.onbFinalizar();
+    }
+  },
+
+  async onbAvancar() {
+    if (this.onbCurrentStep === 1) {
+      const nome = document.getElementById('onbNome').value.trim();
+      const altura = parseFloat((document.getElementById('onbAltura').value || '').replace(',', '.'));
+      const peso = parseFloat((document.getElementById('onbPeso').value || '').replace(',', '.'));
+      if (!nome) return this.showAlert('error', 'Como devemos te chamar?');
+      if (isNaN(altura) || altura < 1.2 || altura > 2.5) return this.showAlert('error', 'Altura inválida (ex: 1.75)');
+      if (isNaN(peso) || peso < 30 || peso > 500) return this.showAlert('error', 'Peso inválido');
+    }
+
+    if (this.onbCurrentStep < 5) {
+      this.onbCurrentStep++;
+      this.onbRenderStep();
+    } else {
+      await this.onbFinalizar();
+    }
+  },
+
+  async onbFinalizar() {
     try {
-      const userId = (await window.VitaleAuth.getUser()).id;
-      await window.sb.from('profiles').update({ nome, altura, updated_at: new Date().toISOString() }).eq('id', userId);
-      this.state.profile = { ...this.state.profile, nome, altura };
+      const user = await window.VitaleAuth.getUser();
+      const getNum = (id) => { const v = document.getElementById(id)?.value; return v ? parseFloat(v.replace(',', '.')) : null; };
+      const getInt = (id) => { const v = document.getElementById(id)?.value; return v ? parseInt(v) : null; };
+      const getStr = (id) => { const v = document.getElementById(id)?.value?.trim(); return v || null; };
+      const getCheck = (id) => !!document.getElementById(id)?.checked;
+
+      // 1) profile
+      const nome = document.getElementById('onbNome').value.trim();
+      const altura = parseFloat((document.getElementById('onbAltura').value || '').replace(',', '.'));
+      const peso = parseFloat((document.getElementById('onbPeso').value || '').replace(',', '.'));
+      await window.sb.from('profiles').update({ nome, altura, updated_at: new Date().toISOString() }).eq('id', user.id);
+
+      // 2) health_profile
+      const hpData = {
+        id: user.id,
+        data_nascimento: document.getElementById('onbDataNasc')?.value || null,
+        sexo: getStr('onbSexo'),
+        pa_sistolica: getInt('onbPaSist'),
+        pa_diastolica: getInt('onbPaDiast'),
+        glicemia_jejum: getNum('onbGlicemia'),
+        fc_repouso: getInt('onbFc'),
+        med_glp1: getCheck('onbMedGlp1'),
+        med_glp1_nome: getStr('onbMedGlp1Nome'),
+        med_anti_hipertensivo: getCheck('onbMedAntiHip'),
+        med_estatina: getCheck('onbMedEstatina'),
+        med_metformina: getCheck('onbMedMetformina'),
+        med_insulina: getCheck('onbMedInsulina'),
+        med_tireoide: getCheck('onbMedTireoide'),
+        med_vitaminas: getCheck('onbMedVitaminas'),
+        cond_diabetes_t2: getCheck('onbCondDt2'),
+        cond_diabetes_t1: getCheck('onbCondDt1'),
+        cond_hipertensao: getCheck('onbCondHip'),
+        cond_hipotireoidismo: getCheck('onbCondHipoT'),
+        cond_dislipidemia: getCheck('onbCondDisli'),
+        cond_apneia_sono: getCheck('onbCondApneia'),
+        cond_sop: getCheck('onbCondSop'),
+        cond_esteatose: getCheck('onbCondEsteatose'),
+        nivel_atividade: getStr('onbNivelAtividade'),
+        freq_treino: getInt('onbFreqTreino'),
+        horas_sono: getNum('onbSono'),
+        nivel_stress: getInt('onbStress'),
+        updated_at: new Date().toISOString()
+      };
+      await window.sb.from('health_profile').upsert(hpData);
+
+      // 3) primeiro peso
       const today = new Date().toISOString().slice(0, 10);
-      await this.addWeight(today, peso, 'manual');
+      await window.sb.from('weights').upsert({ user_id: user.id, data: today, peso, origem: 'manual' }, { onConflict: 'user_id,data' });
+
+      // 4) update state local
+      this.state.profile = { ...this.state.profile, nome, altura };
+      this.state.healthProfile = hpData;
+      this.state.weights = await this.loadWeights();
+
       this.closeModal('modalOnboarding');
-      this.showAlert('success', `Bem-vindo(a), ${nome}! 🎉`);
+      this.showAlert('success', `Bem-vindo(a), ${nome}! Seu perfil está pronto 🎉`);
       this.renderHeader();
-      window.VitaleAnalytics.track('onboarding_complete');
+      this.updateDashboard();
+      this.fillHealthProfileForm();
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('onboarding_complete');
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
-      window.VitaleErr.log('onboarding', e);
+      if (window.VitaleErr) window.VitaleErr.log('onboarding_final', e);
     }
   },
 
@@ -972,9 +1195,10 @@ async init() {
   // =====================================================
   exportarJSON() {
     const data = {
-      vitale_version: '4.0',
+      vitale_version: '4.1',
       exportedAt: new Date().toISOString(),
       profile: this.state.profile,
+      healthProfile: this.state.healthProfile,
       weights: this.state.weights,
       medicacoes: this.state.medicacoes,
       submetas: this.state.submetas
