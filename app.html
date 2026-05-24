@@ -10,7 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-  window.VITALE_CONFIG = {
+ window.VITALE_CONFIG = {
     SUPABASE_URL: 'https://fwwvlwpmxhmjbpqxaoww.supabase.co',
     SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3d3Zsd3BteGhtamJwcXhhb3d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MjE3ODIsImV4cCI6MjA5NDM5Nzc4Mn0.v60xJidhYw0S6l4ZYPn6IqHCOCBbsQFvOgIkizQJ90w'
   };
@@ -143,6 +143,17 @@
         </div>
       </div>
       <button class="btn btn-secondary" onclick="VITALE_CORE.adicionarSubmeta()" style="width:100%;padding:14px">+ ADICIONAR SUBMETA</button>
+
+      <!-- Bloco A.1: Gerar metas automáticas -->
+      <div style="margin-top:14px;padding:14px;background:rgba(212,168,67,0.06);border:1px solid rgba(212,168,67,0.2);border-radius:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:20px">🪄</span>
+          <strong style="color:var(--gold);font-size:13px;letter-spacing:0.5px">Submetas Automáticas em Cascata</strong>
+        </div>
+        <p style="font-size:12px;color:var(--textm);margin-bottom:12px;line-height:1.6">Cria submetas em sequência: Sair Obesidade III → II → I → Sobrepeso → Peso Normal. Pula marcos já atingidos. Datas estimadas conforme sua <strong>urgência</strong> (definida na aba Saúde).</p>
+        <button class="btn btn-gold" onclick="VITALE_CORE.gerarMetasAutomaticas()" style="width:100%;padding:12px">🪄 GERAR METAS AUTOMÁTICAS</button>
+      </div>
+
       <div id="submetasContainer" style="margin-top:20px"></div>
     </div>
     <div class="card" data-flag="marcos_imc">
@@ -243,7 +254,47 @@
       </div>
     </div>
 
+    <!-- Bloco A.1: Objetivo & Urgência -->
+    <div class="card">
+      <h3>🎯 Objetivo & Urgência</h3>
+      <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Define como o Coach IA personaliza feedback e ajuda a gerar metas automáticas.</p>
+      <div class="form-group">
+        <div>
+          <label>Objetivo principal</label>
+          <select id="hObjetivo" onchange="VITALE_CORE.onSaudeObjetivoChange()">
+            <option value="">Selecione...</option>
+            <option value="emagrecimento">⚖️ Emagrecimento</option>
+            <option value="recomposicao">💪 Recomposição</option>
+            <option value="hipertrofia">🏋️ Hipertrofia</option>
+            <option value="saude">❤️ Saúde Geral</option>
+            <option value="manutencao">🧘 Manutenção</option>
+            <option value="outro">🎯 Outro / Misto</option>
+          </select>
+        </div>
+        <div id="hUrgenciaWrap" style="display:none">
+          <label>Urgência (emagrecimento)</label>
+          <select id="hUrgencia">
+            <option value="">Selecione...</option>
+            <option value="sem_pressa">🐢 Sem pressa (~0,3-0,5 kg/sem)</option>
+            <option value="moderada">🚶 Moderada (~0,5-0,7 kg/sem)</option>
+            <option value="acelerada">🏃 Acelerada (~0,7-1,0 kg/sem) ⚠️</option>
+          </select>
+        </div>
+      </div>
+      <div id="hObjetivoOutroWrap" style="display:none;margin-top:10px">
+        <label>Descreva</label>
+        <textarea id="hObjetivoOutro" placeholder="Descreva seu objetivo..." style="min-height:60px"></textarea>
+      </div>
+    </div>
+
     <button class="save-btn-mega" onclick="VITALE_CORE.salvarHealthProfile()">💾 SALVAR PERFIL DE SAÚDE</button>
+
+    <!-- Botão: Refazer questionário inicial -->
+    <div class="card" style="margin-top:16px;background:rgba(74,157,232,0.04);border-color:rgba(74,157,232,0.15)">
+      <h3 style="color:var(--cyan)">🔄 Refazer Questionário Inicial</h3>
+      <p style="font-size:13px;color:var(--textm);margin-bottom:14px;line-height:1.7">Reabre o wizard de 6 telas <strong>pré-preenchido com seus dados atuais</strong>. Útil pra revisar tudo de uma vez de forma guiada.</p>
+      <button class="btn btn-secondary" onclick="VITALE_CORE.reabrirOnboarding()" style="width:100%;padding:14px">🔄 ABRIR QUESTIONÁRIO</button>
+    </div>
   </div>
 
   <!-- IMPORTAR -->
@@ -397,6 +448,7 @@
       <div class="onb-step" data-step="3"></div>
       <div class="onb-step" data-step="4"></div>
       <div class="onb-step" data-step="5"></div>
+      <div class="onb-step" data-step="6"></div>
     </div>
 
     <div class="onb-tela" data-tela="1">
@@ -503,6 +555,75 @@
       </div>
     </div>
 
+    <!-- TELA 6: OBJETIVO (Bloco A.1) -->
+    <div class="onb-tela" data-tela="6" style="display:none">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🎯 Seu Objetivo Principal</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:20px;line-height:1.7">Pra IA ajustar feedback e gerar metas relevantes. <strong>Escolha um:</strong></p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="objetivo-card" data-objetivo="emagrecimento" onclick="VITALE_CORE.selectObjetivo(this,'emagrecimento')">
+          <div class="obj-icon">⚖️</div>
+          <div class="obj-title">Emagrecimento</div>
+          <div class="obj-sub">Perder peso (gordura)</div>
+        </div>
+        <div class="objetivo-card" data-objetivo="recomposicao" onclick="VITALE_CORE.selectObjetivo(this,'recomposicao')">
+          <div class="obj-icon">💪</div>
+          <div class="obj-title">Recomposição</div>
+          <div class="obj-sub">Perder gordura + ganhar músculo</div>
+        </div>
+        <div class="objetivo-card" data-objetivo="hipertrofia" onclick="VITALE_CORE.selectObjetivo(this,'hipertrofia')">
+          <div class="obj-icon">🏋️</div>
+          <div class="obj-title">Hipertrofia</div>
+          <div class="obj-sub">Ganhar massa muscular</div>
+        </div>
+        <div class="objetivo-card" data-objetivo="saude" onclick="VITALE_CORE.selectObjetivo(this,'saude')">
+          <div class="obj-icon">❤️</div>
+          <div class="obj-title">Saúde Geral</div>
+          <div class="obj-sub">PA, glicemia, colesterol</div>
+        </div>
+        <div class="objetivo-card" data-objetivo="manutencao" onclick="VITALE_CORE.selectObjetivo(this,'manutencao')">
+          <div class="obj-icon">🧘</div>
+          <div class="obj-title">Manutenção</div>
+          <div class="obj-sub">Manter peso atual</div>
+        </div>
+        <div class="objetivo-card" data-objetivo="outro" onclick="VITALE_CORE.selectObjetivo(this,'outro')">
+          <div class="obj-icon">🎯</div>
+          <div class="obj-title">Outro / Misto</div>
+          <div class="obj-sub">Descrever depois</div>
+        </div>
+      </div>
+
+      <!-- Sub-pergunta: urgência (só pra emagrecimento) -->
+      <div id="onbUrgenciaWrap" style="display:none;background:rgba(212,168,67,0.04);border:1px solid rgba(212,168,67,0.15);border-radius:10px;padding:16px;margin-bottom:14px">
+        <label style="font-size:12px;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Qual sua urgência?</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div class="urgencia-card" data-urgencia="sem_pressa" onclick="VITALE_CORE.selectUrgencia(this,'sem_pressa')">
+            <strong>🐢 Sem pressa</strong>
+            <small>~ 0,3-0,5 kg/sem (mais sustentável)</small>
+          </div>
+          <div class="urgencia-card" data-urgencia="moderada" onclick="VITALE_CORE.selectUrgencia(this,'moderada')">
+            <strong>🚶 Moderada</strong>
+            <small>~ 0,5-0,7 kg/sem (recomendado)</small>
+          </div>
+          <div class="urgencia-card" data-urgencia="acelerada" onclick="VITALE_CORE.selectUrgencia(this,'acelerada')">
+            <strong>🏃 Acelerada ⚠️</strong>
+            <small>~ 0,7-1,0 kg/sem · requer acompanhamento médico</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outro: campo texto livre -->
+      <div id="onbObjetivoOutroWrap" style="display:none">
+        <label>Descreva seu objetivo:</label>
+        <textarea id="onbObjetivoOutro" placeholder="Ex: voltar a correr 10km confortavelmente..." style="min-height:60px"></textarea>
+      </div>
+
+      <p style="font-size:11px;color:var(--textm);margin-top:14px;line-height:1.6">
+        💡 Se escolher <strong>Emagrecimento</strong> e seu IMC for ≥ 25, vou perguntar se quer <strong>gerar submetas automáticas em cascata</strong> (sair de Obesidade III → II → I → Sobrepeso → Normal).
+      </p>
+    </div>
+
+    <!-- BOTÕES DE NAVEGAÇÃO DO WIZARD -->
     <div style="display:flex;gap:10px;margin-top:24px;justify-content:space-between;align-items:center">
       <button id="onbVoltar" class="btn btn-secondary" onclick="VITALE_CORE.onbVoltar()" style="display:none">← Voltar</button>
       <span id="onbPular" style="color:var(--textm);font-size:12px;cursor:pointer" onclick="VITALE_CORE.onbPular()">Pular esta etapa →</span>
