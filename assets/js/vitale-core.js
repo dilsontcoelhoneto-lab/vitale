@@ -1,21 +1,27 @@
 // =====================================================
-// VITALE — Core (lógica principal) — v4.1 BLOCO A
-// Inclui: persistência Supabase + health_profile +
-//         onboarding wizard 5 telas + auth headers em /api
+// VITALE — Core (lógica principal) — v4.2 BLOCO A.1
+// Inclui: Bloco A (health_profile + onboarding 5 telas)
+//       + Bloco A.1: tela 6 Objetivos, urgência, metas auto
+//       + Fix: múltiplos pesos/dia (média diária via view)
+//       + Fix: cache 5min Coach IA
+//       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
 const VITALE_CORE = {
   state: {
     profile: null,
     healthProfile: null,
-    weights: [],
+    weights: [],          // média diária (1 ponto/dia) — vista
+    weightsRaw: [],       // todos os registros individuais (histórico)
     medicacoes: [],
     submetas: [],
     horarios: [],
     diaSemana: null,
     diasEsp: [],
     tempImportacao: null,
-    chartInstance: null
+    chartInstance: null,
+    coachCache: null,     // {message, when} — cache de 5min do Coach IA
+    objetivoEscolhido: null  // estado temporário do wizard
   },
 
   // =====================================================
@@ -27,9 +33,10 @@ const VITALE_CORE = {
       if (!user) return;
 
       // Carrega tudo em paralelo
-      const [profile, weights, meds, submetas, healthProfile] = await Promise.all([
+      const [profile, weights, weightsRaw, meds, submetas, healthProfile] = await Promise.all([
         window.VitaleAuth.getProfile(),
         this.loadWeights(),
+        this.loadWeightsRaw(),
         this.loadMedicacoes(),
         this.loadSubmetas(),
         this.loadHealthProfile()
@@ -37,6 +44,7 @@ const VITALE_CORE = {
 
       this.state.profile = profile;
       this.state.weights = weights;
+      this.state.weightsRaw = weightsRaw;
       this.state.medicacoes = meds;
       this.state.submetas = submetas;
       this.state.healthProfile = healthProfile;
@@ -79,13 +87,41 @@ const VITALE_CORE = {
   // =====================================================
   // DATABASE LOADERS
   // =====================================================
+  // weights = MÉDIA DIÁRIA por data (vinda da view weight_daily).
+  // O state guarda 1 ponto por dia (média), pra gráfico/IMC limpos.
+  // Cada ponto vem com .registros_dia indicando quantas pesagens
+  // existem naquele dia. Os registros individuais ficam em
+  // state.weightsRaw, carregados sob demanda no Histórico.
   async loadWeights() {
     const { data, error } = await window.sb
-      .from('weights')
-      .select('id, data, peso, origem')
+      .from('weight_daily')
+      .select('data, peso, registros_dia')
       .order('data', { ascending: true });
     if (error) throw error;
-    return (data || []).map(w => ({ id: w.id, date: w.data, peso: parseFloat(w.peso), origem: w.origem }));
+    return (data || []).map(w => ({
+      date: w.data,
+      peso: parseFloat(w.peso),
+      registros_dia: w.registros_dia
+    }));
+  },
+
+  // Carrega registros individuais (todas as pesagens, mesmo do mesmo dia)
+  async loadWeightsRaw() {
+    const { data, error } = await window.sb
+      .from('weights')
+      .select('id, data, hora, peso, origem, created_at')
+      .order('data', { ascending: false })
+      .order('hora', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(w => ({
+      id: w.id,
+      date: w.data,
+      hora: w.hora,
+      peso: parseFloat(w.peso),
+      origem: w.origem,
+      createdAt: w.created_at
+    }));
   },
 
   async loadMedicacoes() {
@@ -286,7 +322,12 @@ const VITALE_CORE = {
     }
   },
 
-  // Coach IA via API (Fase 3) — FIX: agora envia Authorization Bearer
+  // Invalida cache do Coach IA (chamar quando dados mudam)
+  _invalidateCoachCache() {
+    this.state.coachCache = null;
+  },
+
+  // Coach IA via API com cache de 5min e objetivo no contexto
   async generateCoachMessageAI() {
     const enabled = await window.VitaleFlags.isEnabled('coach_ia');
     if (!enabled) return this.generateCoachMessage();
@@ -297,13 +338,23 @@ const VITALE_CORE = {
     const el = document.getElementById('coachMessage');
     if (!el) return;
 
+    // CACHE 5min: economiza tokens em refresh/troca de aba
+    const CACHE_TTL = 5 * 60 * 1000;
+    if (this.state.coachCache && (Date.now() - this.state.coachCache.when) < CACHE_TTL) {
+      el.innerHTML = this.state.coachCache.message;
+      return;
+    }
+
+    const hp = this.state.healthProfile || {};
     const ctx = {
       altura: this.altura,
       meta_kg: this.metaKg.toFixed(1),
       nome: this.state.profile?.nome || null,
       historico: sorted.slice(-12),
       submetas: this.state.submetas.slice(0, 5),
-      health_profile: this.state.healthProfile || null
+      objetivo: hp.objetivo || null,
+      urgencia: hp.urgencia || null,
+      health_profile: hp
     };
 
     try {
@@ -318,8 +369,11 @@ const VITALE_CORE = {
       });
       if (!res.ok) throw new Error('API ' + res.status);
       const data = await res.json();
-      if (data.message) el.innerHTML = data.message;
-      else this.generateCoachMessage();
+      if (data.message) {
+        el.innerHTML = data.message;
+        // Salva no cache
+        this.state.coachCache = { message: data.message, when: Date.now() };
+      } else this.generateCoachMessage();
     } catch (e) {
       if (window.VitaleErr) window.VitaleErr.log('coach_ia', e);
       this.generateCoachMessage();
@@ -454,35 +508,66 @@ const VITALE_CORE = {
   // =====================================================
   // PESOS — CRUD
   // =====================================================
-  async addWeight(date, peso, origem = 'manual') {
+  // Adiciona um peso. Múltiplos registros por dia são permitidos.
+  // Não usa upsert: cada chamada é um INSERT.
+  async addWeight(date, peso, origem = 'manual', hora = null) {
     if (!date || isNaN(peso) || peso <= 0) throw new Error('Dados inválidos');
     if (peso > 500) throw new Error('Peso parece inválido');
 
     const hoje = new Date(); hoje.setHours(23, 59, 59, 999);
     if (new Date(date + 'T23:59:59') > hoje) throw new Error('Data não pode ser futura');
 
+    const userId = (await window.VitaleAuth.getUser()).id;
+    const payload = { user_id: userId, data: date, peso, origem };
+    if (hora) payload.hora = hora;
+
     const { data, error } = await window.sb
       .from('weights')
-      .upsert({ user_id: (await window.VitaleAuth.getUser()).id, data: date, peso, origem }, { onConflict: 'user_id,data' })
+      .insert(payload)
       .select()
       .single();
     if (error) throw error;
 
-    const existing = this.state.weights.findIndex(w => w.date === date);
-    if (existing >= 0) this.state.weights[existing] = { id: data.id, date, peso, origem };
-    else this.state.weights.push({ id: data.id, date, peso, origem });
-    this.state.weights.sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Adiciona em weightsRaw
+    this.state.weightsRaw.unshift({
+      id: data.id, date: data.data, hora: data.hora, peso: parseFloat(data.peso),
+      origem: data.origem, createdAt: data.created_at
+    });
+
+    // Recalcula média do dia em state.weights
+    this._recomputeDailyAverage(date);
 
     if (window.VitaleAnalytics) window.VitaleAnalytics.track('weight_add', { origem });
+    this._invalidateCoachCache();
     this.updateDashboard();
     return data;
   },
 
+  // Recalcula média diária para um dia específico (sincroniza state.weights com weightsRaw)
+  _recomputeDailyAverage(date) {
+    const doDia = this.state.weightsRaw.filter(w => w.date === date);
+    const idx = this.state.weights.findIndex(w => w.date === date);
+    if (!doDia.length) {
+      if (idx >= 0) this.state.weights.splice(idx, 1);
+      return;
+    }
+    const media = doDia.reduce((s, w) => s + w.peso, 0) / doDia.length;
+    const entry = { date, peso: parseFloat(media.toFixed(2)), registros_dia: doDia.length };
+    if (idx >= 0) this.state.weights[idx] = entry;
+    else {
+      this.state.weights.push(entry);
+      this.state.weights.sort((a, b) => new Date(a.date) - new Date(b.date));
+    }
+  },
+
   async deletePeso(id) {
     if (!confirm('Remover este registro?')) return;
+    const reg = this.state.weightsRaw.find(w => w.id === id);
     const { error } = await window.sb.from('weights').delete().eq('id', id);
     if (error) return this.showAlert('error', 'Erro: ' + error.message);
-    this.state.weights = this.state.weights.filter(w => w.id !== id);
+    this.state.weightsRaw = this.state.weightsRaw.filter(w => w.id !== id);
+    if (reg) this._recomputeDailyAverage(reg.date);
+    this._invalidateCoachCache();
     this.updateDashboard();
     this.showAlert('success', '✅ Registro removido');
   },
@@ -497,13 +582,26 @@ const VITALE_CORE = {
     const hoje = new Date(); hoje.setHours(23, 59, 59, 999);
     if (new Date(date + 'T23:59:59') > hoje) return this.showAlert('error', 'Data não pode ser futura.');
 
-    const existing = this.state.weights.find(w => w.date === date);
-    if (existing) {
-      if (!confirm(`Já existe registro em ${this.fmtStr(date)}: ${existing.peso.toFixed(1)} kg.\n\nSubstituir por ${peso.toFixed(1)} kg?`)) return;
+    // NOVO COMPORTAMENTO: múltiplos pesos/dia são permitidos.
+    // Se já existe registro nessa data, apenas avisa e pergunta se quer adicionar OUTRO.
+    const doDia = this.state.weightsRaw.filter(w => w.date === date);
+    if (doDia.length > 0) {
+      const lista = doDia.map(w => `${w.peso.toFixed(1)} kg${w.hora ? ' às ' + w.hora.slice(0, 5) : ''}`).join(', ');
+      const confirma = confirm(
+        `Já existe(m) ${doDia.length} registro(s) em ${this.fmtStr(date)}: ${lista}.\n\n` +
+        `Adicionar ${peso.toFixed(1)} kg como NOVO registro? (a média diária será recalculada)\n\n` +
+        `Cancelar = não adicionar.`
+      );
+      if (!confirma) return;
     }
 
     try {
-      await this.addWeight(date, peso, 'manual');
+      // Pega hora atual no formato HH:MM:SS pra desambiguar registros do mesmo dia
+      const agora = new Date();
+      const hh = String(agora.getHours()).padStart(2, '0');
+      const mm = String(agora.getMinutes()).padStart(2, '0');
+      const hora = `${hh}:${mm}:00`;
+      await this.addWeight(date, peso, 'manual', hora);
       document.getElementById('manualDate').value = new Date().toISOString().slice(0, 10);
       document.getElementById('manualPeso').value = '';
       this.showAlert('success', `✅ ${peso.toFixed(1)} kg adicionado para ${this.fmt(date)}!`);
@@ -517,58 +615,83 @@ const VITALE_CORE = {
     const text = document.getElementById('textInput').value;
     if (!text.trim()) return this.showAlert('error', 'Cole os dados primeiro!');
 
-    const novos = [], duplicados = [];
+    // Aceita múltiplos por dia. Cada linha vira um registro independente.
+    const todos = [];
     text.split('\n').forEach(line => {
       const m = line.match(/(\d{4}-\d{2}-\d{2})[:\s]+(\d+[.,]?\d*)\s*kg?/i);
       if (m) {
         const date = m[1], peso = parseFloat(m[2].replace(',', '.'));
         if (!isNaN(peso) && peso > 0 && peso < 500) {
-          if (this.state.weights.find(w => w.date === date)) duplicados.push({ date, peso });
-          else novos.push({ date, peso });
+          todos.push({ date, peso });
         }
       }
     });
 
-    if (!novos.length && !duplicados.length) return this.showAlert('error', 'Nenhum dado válido (formato: 2026-03-16: 114.3kg)');
-
-    let msg = `${novos.length} novo(s) registro(s).`;
-    if (duplicados.length) msg += ` ${duplicados.length} data(s) já existem.`;
-    const todos = [...novos];
-    if (duplicados.length && confirm(`${msg}\n\nSubstituir os ${duplicados.length} registro(s) que já existem?`)) {
-      todos.push(...duplicados);
-    }
-    if (!todos.length) return this.showAlert('warning', 'Nada para importar.');
+    if (!todos.length) return this.showAlert('error', 'Nenhum dado válido (formato: 2026-03-16: 114.3kg)');
 
     this.state.tempImportacao = todos;
     this.showConfirmModal(todos, 'Dados do Texto');
   },
 
   showConfirmModal(dados, title) {
-    const rows = dados.map(d =>
-      `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
-        <span>${this.fmt(d.date)}</span>
-        <span style="color:var(--gold);font-weight:700">${d.peso.toFixed(1)} kg</span>
-      </div>`
-    ).join('');
+    // Agrupa por data para visualização
+    const porData = {};
+    dados.forEach(d => {
+      if (!porData[d.date]) porData[d.date] = [];
+      porData[d.date].push(d.peso);
+    });
+
+    const datasOrdenadas = Object.keys(porData).sort();
+    const rows = datasOrdenadas.map(date => {
+      const pesos = porData[date];
+      if (pesos.length === 1) {
+        return `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
+          <span>${this.fmt(date)}</span>
+          <span style="color:var(--gold);font-weight:700">${pesos[0].toFixed(1)} kg</span>
+        </div>`;
+      }
+      const media = (pesos.reduce((s, p) => s + p, 0) / pesos.length).toFixed(1);
+      return `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
+        <div style="display:flex;justify-content:space-between">
+          <span>${this.fmt(date)} <span style="color:var(--cyan);font-size:11px">(${pesos.length} pesagens)</span></span>
+          <span style="color:var(--gold);font-weight:700">média ${media} kg</span>
+        </div>
+        <div style="font-size:11px;color:var(--textm);margin-top:4px">${pesos.map(p => p.toFixed(1)).join(', ')} kg</div>
+      </div>`;
+    }).join('');
+
+    const aviso = dados.length > Object.keys(porData).length
+      ? `<div style="background:rgba(74,157,232,0.08);border-left:3px solid var(--cyan);padding:10px 12px;border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--cyan)">ℹ️ Múltiplas pesagens no mesmo dia serão salvas separadamente. O dashboard mostrará a <strong>média do dia</strong>.</div>`
+      : '';
+
     document.getElementById('resumoImportacao').innerHTML =
-      `<h4 style="margin:0 0 12px;color:var(--gold)">${title} — ${dados.length} registros</h4>${rows}`;
+      `<h4 style="margin:0 0 12px;color:var(--gold)">${title} — ${dados.length} registro(s) em ${Object.keys(porData).length} dia(s)</h4>${aviso}${rows}`;
     document.getElementById('modalConfirmacao').classList.add('active');
   },
 
+  // INSERT em lote (não upsert). Múltiplos pesos/dia OK.
   async confirmarImportacao() {
     if (!this.state.tempImportacao) return;
     const items = this.state.tempImportacao;
     const userId = (await window.VitaleAuth.getUser()).id;
-    let count = 0;
     try {
-      const rows = items.map(i => ({ user_id: userId, data: i.date, peso: i.peso, origem: i.origem || 'texto' }));
-      const { error } = await window.sb.from('weights').upsert(rows, { onConflict: 'user_id,data' });
+      const rows = items.map(i => ({
+        user_id: userId,
+        data: i.date,
+        peso: i.peso,
+        origem: i.origem || 'texto',
+        hora: i.hora || null
+      }));
+      const { error } = await window.sb.from('weights').insert(rows);
       if (error) throw error;
       this.state.tempImportacao = null;
+      // Recarrega tudo do banco
       this.state.weights = await this.loadWeights();
+      this.state.weightsRaw = await this.loadWeightsRaw();
       this.closeModal('modalConfirmacao');
+      this._invalidateCoachCache();
       this.updateDashboard();
-      count = items.length;
+      const count = items.length;
       this.showAlert('success', `✅ ${count} registro(s) importado(s)!`);
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('import_batch', { count });
 
@@ -585,7 +708,7 @@ const VITALE_CORE = {
   },
 
   // =====================================================
-  // OCR — FIX: agora envia Authorization Bearer
+  // OCR — FIX: Authorization Bearer + compressão de imagem
   // =====================================================
   handleImageUpload(e) {
     const file = e.target.files[0];
@@ -604,19 +727,52 @@ const VITALE_CORE = {
     reader.readAsDataURL(file);
   },
 
+  // Comprime imagem antes de mandar pro OCR.
+  // Redimensiona pra máx 1280px (lado maior) e converte pra JPEG q=0.85.
+  // Reduz token cost da Anthropic significativamente (até 80%).
+  async _compressImageForOCR(srcDataUrl) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1280;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          const scale = MAX / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff'; // fundo branco caso PNG transparente
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        resolve(dataUrl);
+      };
+      img.onerror = reject;
+      img.src = srcDataUrl;
+    });
+  },
+
   async processarImagemOCR() {
     const btn = document.getElementById('btnProcessarImagem');
     const ocrDiv = document.getElementById('ocrResult');
     btn.disabled = true;
-    btn.textContent = '⏳ Processando com IA...';
+    btn.textContent = '⏳ Comprimindo imagem...';
     ocrDiv.innerHTML = '';
 
     const imgEl = document.querySelector('#imagePreview img');
     if (!imgEl) { btn.disabled = false; btn.textContent = '🔍 PROCESSAR COM IA'; return; }
 
     try {
-      const base64 = imgEl.src.split(',')[1];
-      const mimeType = imgEl.src.split(';')[0].replace('data:', '') || 'image/jpeg';
+      // FIX 4: comprime antes de enviar
+      const compressed = await this._compressImageForOCR(imgEl.src);
+      const base64 = compressed.split(',')[1];
+      const mimeType = 'image/jpeg';
+
+      btn.textContent = '⏳ Processando com IA...';
 
       const { data: { session } } = await window.sb.auth.getSession();
       const res = await fetch('/api/ocr', {
@@ -862,22 +1018,44 @@ const VITALE_CORE = {
   renderHistorico() {
     const el = document.getElementById('pesoTable');
     if (!el) return;
-    if (!this.state.weights.length) {
+    if (!this.state.weightsRaw.length) {
       el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--textm);padding:24px">Nenhum registro ainda</td></tr>';
       return;
     }
-    const sorted = this.getSorted();
-    const first = sorted[0];
-    const reversed = [...sorted].reverse();
-    el.innerHTML = reversed.map((w, i, arr) => {
-      const prev = arr[i + 1];
+
+    // Usa state.weights (média diária) para calcular variação dia-a-dia e %
+    const sortedDaily = this.getSorted();
+    const first = sortedDaily[0];
+    // Mapa: data → média diária (pra calcular var em relação ao dia anterior)
+    const dailyByDate = {};
+    sortedDaily.forEach((w, i) => {
+      dailyByDate[w.date] = { peso: w.peso, idx: i };
+    });
+
+    // Lista todos os registros individuais (mais recentes primeiro)
+    const raw = [...this.state.weightsRaw];
+
+    el.innerHTML = raw.map(w => {
       const imcW = this.calcIMC(w.peso, this.altura);
-      const varW = prev ? (w.peso - prev.peso).toFixed(1) + ' kg' : '—';
-      const pctW = ((first.peso - w.peso) / first.peso * 100).toFixed(1);
-      const varColor = prev && (w.peso - prev.peso) < 0 ? 'var(--em)' : prev && (w.peso - prev.peso) > 0 ? 'var(--red)' : 'var(--textm)';
+      const daily = dailyByDate[w.date];
+      // Variação: comparada com a MÉDIA do dia anterior
+      let varW = '—', varColor = 'var(--textm)';
+      if (daily && daily.idx > 0) {
+        const prevAvg = sortedDaily[daily.idx - 1].peso;
+        const delta = w.peso - prevAvg;
+        varW = (delta >= 0 ? '+' : '') + delta.toFixed(1) + ' kg';
+        varColor = delta < 0 ? 'var(--em)' : delta > 0 ? 'var(--red)' : 'var(--textm)';
+      }
+      const pctW = first ? ((first.peso - w.peso) / first.peso * 100).toFixed(1) : '0.0';
+      const horaTxt = w.hora ? ` <span style="color:var(--textm);font-size:11px">${w.hora.slice(0, 5)}</span>` : '';
+      const origemBadge = w.origem === 'ocr' ? ' 🤖' : w.origem === 'texto' ? ' 📝' : '';
+      // Se o dia tem múltiplos registros, mostra contador discreto
+      const multCount = raw.filter(r => r.date === w.date).length;
+      const multBadge = multCount > 1 ? ` <span style="color:var(--cyan);font-size:10px;background:rgba(74,157,232,0.1);padding:1px 6px;border-radius:8px">${multCount}×</span>` : '';
+
       return `<tr>
-        <td>${this.fmt(w.date)}</td>
-        <td><strong>${w.peso.toFixed(1)}</strong></td>
+        <td>${this.fmt(w.date)}${horaTxt}${multBadge}</td>
+        <td><strong>${w.peso.toFixed(1)}</strong>${origemBadge}</td>
         <td style="color:var(--textm)">${imcW}</td>
         <td style="color:${varColor}">${varW}</td>
         <td style="color:var(--gold)"><strong>${pctW}%</strong></td>
@@ -975,6 +1153,15 @@ const VITALE_CORE = {
     setVal('hFreqTreino', hp.freq_treino);
     setVal('hSono', hp.horas_sono);
     setVal('hStress', hp.nivel_stress);
+
+    // Bloco A.1: objetivo + urgência na aba Saúde
+    setVal('hObjetivo', hp.objetivo);
+    setVal('hUrgencia', hp.urgencia);
+    setVal('hObjetivoOutro', hp.objetivo_outro);
+    const urWrap = document.getElementById('hUrgenciaWrap');
+    if (urWrap) urWrap.style.display = hp.objetivo === 'emagrecimento' ? 'block' : 'none';
+    const outroWrap = document.getElementById('hObjetivoOutroWrap');
+    if (outroWrap) outroWrap.style.display = hp.objetivo === 'outro' ? 'block' : 'none';
   },
 
   async salvarHealthProfile() {
@@ -1015,6 +1202,9 @@ const VITALE_CORE = {
         freq_treino: getInt('hFreqTreino'),
         horas_sono: getNum('hSono'),
         nivel_stress: getInt('hStress'),
+        objetivo: getStr('hObjetivo'),
+        objetivo_outro: getStr('hObjetivoOutro'),
+        urgencia: getStr('hUrgencia'),
         updated_at: new Date().toISOString()
       };
 
@@ -1022,6 +1212,7 @@ const VITALE_CORE = {
       if (error) throw error;
 
       this.state.healthProfile = data;
+      this._invalidateCoachCache();
       this.showAlert('success', '✅ Perfil de saúde salvo!');
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('health_profile_saved');
     } catch (e) {
@@ -1031,14 +1222,84 @@ const VITALE_CORE = {
   },
 
   // =====================================================
-  // ONBOARDING WIZARD — 5 telas
+  // ONBOARDING WIZARD — 6 telas (Bloco A.1: + Objetivos)
   // =====================================================
   onbCurrentStep: 1,
+  ONB_TOTAL_STEPS: 6,
 
-  showOnboarding() {
+  showOnboarding(prePreenchido = false) {
     this.onbCurrentStep = 1;
+    if (prePreenchido) this._prefillOnboardingFromState();
     this.onbRenderStep();
     document.getElementById('modalOnboarding')?.classList.add('active');
+  },
+
+  // Reabre o onboarding pré-preenchido com dados atuais (botão "Refazer")
+  reabrirOnboarding() {
+    if (!confirm('Reabrir o questionário inicial com seus dados atuais para revisar/editar?\n\nVocê pode pular etapas que não quiser alterar.')) return;
+    this.showOnboarding(true);
+  },
+
+  _prefillOnboardingFromState() {
+    const p = this.state.profile || {};
+    const hp = this.state.healthProfile || {};
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
+    const setCheck = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+
+    // Tela 1
+    setVal('onbNome', p.nome);
+    setVal('onbAltura', p.altura);
+    if (this.state.weights.length) setVal('onbPeso', this.state.weights[this.state.weights.length - 1].peso);
+    setVal('onbDataNasc', hp.data_nascimento);
+    setVal('onbSexo', hp.sexo);
+
+    // Tela 2
+    setVal('onbPaSist', hp.pa_sistolica);
+    setVal('onbPaDiast', hp.pa_diastolica);
+    setVal('onbGlicemia', hp.glicemia_jejum);
+    setVal('onbFc', hp.fc_repouso);
+
+    // Tela 3
+    setCheck('onbMedGlp1', hp.med_glp1);
+    setCheck('onbMedAntiHip', hp.med_anti_hipertensivo);
+    setCheck('onbMedEstatina', hp.med_estatina);
+    setCheck('onbMedMetformina', hp.med_metformina);
+    setCheck('onbMedInsulina', hp.med_insulina);
+    setCheck('onbMedTireoide', hp.med_tireoide);
+    setCheck('onbMedVitaminas', hp.med_vitaminas);
+    setVal('onbMedGlp1Nome', hp.med_glp1_nome);
+    if (hp.med_glp1) { const w = document.getElementById('onbMedGlp1Wrap'); if (w) w.style.display = 'block'; }
+
+    // Tela 4
+    setCheck('onbCondDt2', hp.cond_diabetes_t2);
+    setCheck('onbCondDt1', hp.cond_diabetes_t1);
+    setCheck('onbCondHip', hp.cond_hipertensao);
+    setCheck('onbCondHipoT', hp.cond_hipotireoidismo);
+    setCheck('onbCondDisli', hp.cond_dislipidemia);
+    setCheck('onbCondApneia', hp.cond_apneia_sono);
+    setCheck('onbCondSop', hp.cond_sop);
+    setCheck('onbCondEsteatose', hp.cond_esteatose);
+
+    // Tela 5
+    setVal('onbNivelAtividade', hp.nivel_atividade);
+    setVal('onbFreqTreino', hp.freq_treino);
+    setVal('onbSono', hp.horas_sono);
+    setVal('onbStress', hp.nivel_stress);
+
+    // Tela 6 (objetivo)
+    if (hp.objetivo) {
+      const card = document.querySelector(`.objetivo-card[data-objetivo="${hp.objetivo}"]`);
+      if (card) card.classList.add('selected');
+      this.state.objetivoEscolhido = hp.objetivo;
+      if (hp.objetivo === 'emagrecimento') {
+        const ur = document.getElementById('onbUrgenciaWrap');
+        if (ur) ur.style.display = 'block';
+        if (hp.urgencia) {
+          const u = document.querySelector(`.urgencia-card[data-urgencia="${hp.urgencia}"]`);
+          if (u) u.classList.add('selected');
+        }
+      }
+    }
   },
 
   onbRenderStep() {
@@ -1057,7 +1318,7 @@ const VITALE_CORE = {
     if (btnVoltar) btnVoltar.style.display = this.onbCurrentStep > 1 ? 'inline-block' : 'none';
 
     const avancar = document.getElementById('onbAvancar');
-    if (avancar) avancar.textContent = this.onbCurrentStep === 5 ? 'Finalizar 🎉' : 'Continuar →';
+    if (avancar) avancar.textContent = this.onbCurrentStep === this.ONB_TOTAL_STEPS ? 'Finalizar 🎉' : 'Continuar →';
 
     const pular = document.getElementById('onbPular');
     if (pular) pular.style.display = this.onbCurrentStep === 1 ? 'none' : 'inline';
@@ -1071,12 +1332,29 @@ const VITALE_CORE = {
   },
 
   onbPular() {
-    if (this.onbCurrentStep < 5) {
+    if (this.onbCurrentStep < this.ONB_TOTAL_STEPS) {
       this.onbCurrentStep++;
       this.onbRenderStep();
     } else {
       this.onbFinalizar();
     }
+  },
+
+  // Selecionar objetivo na tela 6
+  selectObjetivo(el, objetivo) {
+    document.querySelectorAll('.objetivo-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    this.state.objetivoEscolhido = objetivo;
+
+    const urWrap = document.getElementById('onbUrgenciaWrap');
+    const outroWrap = document.getElementById('onbObjetivoOutroWrap');
+    if (urWrap) urWrap.style.display = objetivo === 'emagrecimento' ? 'block' : 'none';
+    if (outroWrap) outroWrap.style.display = objetivo === 'outro' ? 'block' : 'none';
+  },
+
+  selectUrgencia(el, urgencia) {
+    document.querySelectorAll('.urgencia-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
   },
 
   async onbAvancar() {
@@ -1089,7 +1367,7 @@ const VITALE_CORE = {
       if (isNaN(peso) || peso < 30 || peso > 500) return this.showAlert('error', 'Peso inválido');
     }
 
-    if (this.onbCurrentStep < 5) {
+    if (this.onbCurrentStep < this.ONB_TOTAL_STEPS) {
       this.onbCurrentStep++;
       this.onbRenderStep();
     } else {
@@ -1110,6 +1388,12 @@ const VITALE_CORE = {
       const altura = parseFloat((document.getElementById('onbAltura').value || '').replace(',', '.'));
       const peso = parseFloat((document.getElementById('onbPeso').value || '').replace(',', '.'));
       await window.sb.from('profiles').update({ nome, altura, updated_at: new Date().toISOString() }).eq('id', user.id);
+
+      // 6) Objetivo (tela nova)
+      const objetivo = this.state.objetivoEscolhido || null;
+      const urgenciaEl = document.querySelector('.urgencia-card.selected');
+      const urgencia = (objetivo === 'emagrecimento' && urgenciaEl) ? urgenciaEl.dataset.urgencia : null;
+      const objetivoOutro = (objetivo === 'outro') ? getStr('onbObjetivoOutro') : null;
 
       // 2) health_profile
       const hpData = {
@@ -1140,28 +1424,143 @@ const VITALE_CORE = {
         freq_treino: getInt('onbFreqTreino'),
         horas_sono: getNum('onbSono'),
         nivel_stress: getInt('onbStress'),
+        objetivo,
+        objetivo_outro: objetivoOutro,
+        urgencia,
         updated_at: new Date().toISOString()
       };
       await window.sb.from('health_profile').upsert(hpData);
 
-      // 3) primeiro peso
+      // 3) Primeiro peso (INSERT, não upsert — múltiplos/dia OK)
       const today = new Date().toISOString().slice(0, 10);
-      await window.sb.from('weights').upsert({ user_id: user.id, data: today, peso, origem: 'manual' }, { onConflict: 'user_id,data' });
+      // Só insere peso se não houver registro recente do dia
+      const jaTemHoje = this.state.weightsRaw.some(w => w.date === today);
+      if (!jaTemHoje) {
+        await window.sb.from('weights').insert({ user_id: user.id, data: today, peso, origem: 'manual' });
+      }
 
-      // 4) update state local
+      // 4) Se objetivo = emagrecimento E IMC >= 30, oferecer gerar metas auto
+      const imcAtual = peso / (altura * altura);
+      let geraMetasNoFinal = false;
+      if (objetivo === 'emagrecimento' && imcAtual >= 25) {
+        geraMetasNoFinal = confirm(
+          `Seu IMC atual é ${imcAtual.toFixed(1)} (${this.getObesidadeInfo(imcAtual).grau}).\n\n` +
+          `Quer que eu crie automaticamente submetas em cascata pra te guiar até o peso ideal?\n\n` +
+          `Cada marco vira uma submeta com data estimada (baseada em ${urgencia || 'ritmo moderado'}).`
+        );
+      }
+
+      // 5) Reload completo do state
       this.state.profile = { ...this.state.profile, nome, altura };
       this.state.healthProfile = hpData;
       this.state.weights = await this.loadWeights();
+      this.state.weightsRaw = await this.loadWeightsRaw();
 
       this.closeModal('modalOnboarding');
-      this.showAlert('success', `Bem-vindo(a), ${nome}! Seu perfil está pronto 🎉`);
       this.renderHeader();
+      this._invalidateCoachCache();
+
+      if (geraMetasNoFinal) {
+        await this.gerarMetasAutomaticas(/* silencioso */ true);
+      }
+
       this.updateDashboard();
       this.fillHealthProfileForm();
-      if (window.VitaleAnalytics) window.VitaleAnalytics.track('onboarding_complete');
+      this.showAlert('success', `Bem-vindo(a), ${nome}! 🎉`);
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('onboarding_complete', { objetivo });
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
       if (window.VitaleErr) window.VitaleErr.log('onboarding_final', e);
+    }
+  },
+
+  // =====================================================
+  // BLOCO A.1: GERAR METAS AUTOMÁTICAS EM CASCATA
+  // =====================================================
+  // Cria submetas de IMC: Obesidade III → II → I → Sobrepeso → Normal
+  // Pula marcos já atingidos. Calcula data estimada conforme urgência.
+  async gerarMetasAutomaticas(silencioso = false) {
+    if (!this.state.weights.length) {
+      if (!silencioso) this.showAlert('warning', 'Adicione pelo menos um peso primeiro.');
+      return;
+    }
+    const altura = this.altura;
+    const pesoAtual = this.state.weights[this.state.weights.length - 1].peso;
+    const imcAtual = pesoAtual / (altura * altura);
+    const hp = this.state.healthProfile || {};
+    const urgencia = hp.urgencia || 'moderada';
+
+    // kg/semana esperada conforme urgência (estimativa conservadora)
+    const ritmoKgSem = urgencia === 'sem_pressa' ? 0.4 :
+                      urgencia === 'acelerada' ? 0.85 : 0.6;
+
+    // Marcos em cascata (do mais distante ao mais próximo)
+    const todosMarcos = [
+      { imc: 40, label: 'Sair de Obesidade Grau III', icone: '🎯' },
+      { imc: 35, label: 'Sair de Obesidade Grau II', icone: '🎯' },
+      { imc: 30, label: 'Sair de Obesidade Grau I', icone: '🎯' },
+      { imc: 25, label: 'Atingir Peso Normal (IMC < 25)', icone: '🩺' },
+      { imc: 22, label: 'Peso Normal Ideal (IMC 22)', icone: '⭐' }
+    ];
+
+    // Filtra apenas marcos AINDA NÃO atingidos
+    const marcosFalta = todosMarcos.filter(m => imcAtual > m.imc);
+    if (!marcosFalta.length) {
+      if (!silencioso) this.showAlert('info', 'Você já está abaixo de todos os marcos! 🎉');
+      return;
+    }
+
+    // Para cada marco, calcula peso alvo e data estimada
+    const userId = (await window.VitaleAuth.getUser()).id;
+    const hoje = new Date();
+    const novasSubmetas = [];
+
+    // Set de submetas existentes (evitar duplicar)
+    const nomesExistentes = new Set(this.state.submetas.map(s => s.nome));
+
+    let pesoPartida = pesoAtual;
+    for (const m of marcosFalta) {
+      if (nomesExistentes.has(m.label)) continue;
+      const pesoAlvo = parseFloat((m.imc * altura * altura).toFixed(1));
+      const kgFaltam = pesoPartida - pesoAlvo;
+      const semanasEstimadas = Math.ceil(kgFaltam / ritmoKgSem);
+      const diasEstimados = semanasEstimadas * 7;
+      const dataAlvo = new Date(hoje);
+      dataAlvo.setDate(dataAlvo.getDate() + diasEstimados);
+      const dataStr = dataAlvo.toISOString().slice(0, 10);
+
+      novasSubmetas.push({
+        user_id: userId,
+        nome: m.label,
+        peso_alvo: pesoAlvo,
+        data_alvo: dataStr,
+        icone: m.icone
+      });
+      pesoPartida = pesoAlvo;
+    }
+
+    if (!novasSubmetas.length) {
+      if (!silencioso) this.showAlert('info', 'Todas as metas em cascata já existem nas suas submetas.');
+      return;
+    }
+
+    try {
+      const { data, error } = await window.sb.from('submetas').insert(novasSubmetas).select();
+      if (error) throw error;
+      // Atualiza state
+      const novas = (data || []).map(s => ({
+        id: s.id, nome: s.nome, pesoAlvo: parseFloat(s.peso_alvo),
+        dataAlvo: s.data_alvo, icone: s.icone, atingida: s.atingida
+      }));
+      this.state.submetas = [...novas, ...this.state.submetas];
+      this.updateSubmetasUI();
+      if (!silencioso) {
+        this.showAlert('success', `✅ ${novas.length} submeta(s) criada(s) em cascata!`);
+      }
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('metas_auto', { count: novas.length, urgencia });
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('metas_auto', e);
     }
   },
 
@@ -1241,6 +1640,15 @@ const VITALE_CORE = {
   async signOut() {
     if (!confirm('Sair da sua conta?')) return;
     await window.VitaleAuth.signOut();
+  },
+
+  // Handler para mudança do select de objetivo na aba Saúde
+  onSaudeObjetivoChange() {
+    const val = document.getElementById('hObjetivo')?.value;
+    const urWrap = document.getElementById('hUrgenciaWrap');
+    const outroWrap = document.getElementById('hObjetivoOutroWrap');
+    if (urWrap) urWrap.style.display = val === 'emagrecimento' ? 'block' : 'none';
+    if (outroWrap) outroWrap.style.display = val === 'outro' ? 'block' : 'none';
   }
 };
 
