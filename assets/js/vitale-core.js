@@ -1791,4 +1791,3 @@ const VITALE_CORE = {
 };
  
 window.VITALE_CORE = VITALE_CORE;
- 
