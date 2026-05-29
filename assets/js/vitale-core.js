@@ -1,5 +1,5 @@
 // =====================================================
-// VITALE — Core (lógica principal) — v4.2 BLOCO A.3
+// VITALE — Core (lógica principal) — v4.2 BLOCO A.4
 // Inclui: Bloco A (health_profile + onboarding 5 telas)
 //       + Bloco A.1: tela 6 Objetivos, urgência, metas auto
 //       + Bloco A.2: filtro de data (dashboard + histórico),
@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco A.3 · 2026-05-29';
+const VITALE_VERSION = 'v4.2 · Bloco A.4 · 2026-05-29';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -433,10 +433,11 @@ const VITALE_CORE = {
     if (sorted.length < 2) return;
  
     // Aplica filtro de data SOMENTE à série exibida no gráfico
-    const { de, ate } = this.dashFiltro;
+    const de = this._normData ? this._normData(this.dashFiltro.de) : this.dashFiltro.de;
+    const ate = this._normData ? this._normData(this.dashFiltro.ate) : this.dashFiltro.ate;
     const projecaoAtiva = !de && !ate; // só projeta quando vê a série inteira
-    if (de) sorted = sorted.filter(w => w.date >= de);
-    if (ate) sorted = sorted.filter(w => w.date <= ate);
+    if (de) sorted = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) >= de);
+    if (ate) sorted = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) <= ate);
     if (sorted.length < 2) {
       // Faixa estreita demais: mostra aviso no lugar do gráfico
       if (this.state.chartInstance) { this.state.chartInstance.destroy(); this.state.chartInstance = null; }
@@ -1092,12 +1093,20 @@ const VITALE_CORE = {
     this.renderHistorico();
   },
  
+  // Normaliza qualquer formato de data para 'YYYY-MM-DD' (robusto contra
+  // datas que venham como ISO completo, com timezone, etc.)
+  _normData(d) {
+    if (!d) return '';
+    return String(d).slice(0, 10);
+  },
+ 
   // Retorna os registros raw já filtrados pela faixa de datas
   _histRawFiltrado() {
     let raw = [...this.state.weightsRaw];
-    const { de, ate } = this.histFiltro;
-    if (de) raw = raw.filter(w => w.date >= de);
-    if (ate) raw = raw.filter(w => w.date <= ate);
+    const de = this._normData(this.histFiltro.de);
+    const ate = this._normData(this.histFiltro.ate);
+    if (de) raw = raw.filter(w => this._normData(w.date) >= de);
+    if (ate) raw = raw.filter(w => this._normData(w.date) <= ate);
     return raw;
   },
  
@@ -1192,7 +1201,7 @@ const VITALE_CORE = {
       const checked = this.histSelecionados.has(w.id) ? 'checked' : '';
  
       return `<tr>
-        <td style="text-align:center"><input type="checkbox" class="hist-check" ${checked} onchange="VITALE_CORE.toggleHistSelecionado(${w.id}, this.checked)"></td>
+        <td style="text-align:center"><input type="checkbox" class="hist-check" ${checked} style="width:18px;height:18px;cursor:pointer;accent-color:var(--gold)" onchange="VITALE_CORE.toggleHistSelecionado(${w.id}, this.checked)"></td>
         <td>${this.fmt(w.date)}${horaTxt}${multBadge}</td>
         <td><strong>${w.peso.toFixed(1)}</strong>${origemBadge}</td>
         <td style="color:var(--textm)">${imcW}</td>
@@ -1201,6 +1210,21 @@ const VITALE_CORE = {
         <td><button class="btn btn-danger btn-small" onclick="VITALE_CORE.deletePeso(${w.id})">🗑️</button></td>
       </tr>`;
     }).join('');
+ 
+    // Feedback visual do filtro: mostra quantos de quantos
+    const info = document.getElementById('histFiltroInfo');
+    if (info) {
+      const total = this.state.weightsRaw.length;
+      const filtroAtivo = this.histFiltro.de || this.histFiltro.ate;
+      if (filtroAtivo) {
+        info.style.display = 'block';
+        info.innerHTML = `Mostrando <strong style="color:var(--gold)">${raw.length}</strong> de ${total} registros` +
+          (this.histFiltro.de ? ` · de ${this.fmt(this.histFiltro.de)}` : '') +
+          (this.histFiltro.ate ? ` até ${this.fmt(this.histFiltro.ate)}` : '');
+      } else {
+        info.style.display = 'none';
+      }
+    }
  
     // Sincroniza o "selecionar todos" e a barra de ações
     const selAll = document.getElementById('histSelAll');
@@ -1824,4 +1848,3 @@ const VITALE_CORE = {
 };
  
 window.VITALE_CORE = VITALE_CORE;
- 
