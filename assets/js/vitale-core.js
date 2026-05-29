@@ -1,13 +1,19 @@
 // =====================================================
-// VITALE — Core (lógica principal) — v4.2 BLOCO A.1
+// VITALE — Core (lógica principal) — v4.2 BLOCO A.3
 // Inclui: Bloco A (health_profile + onboarding 5 telas)
 //       + Bloco A.1: tela 6 Objetivos, urgência, metas auto
+//       + Bloco A.2: filtro de data (dashboard + histórico),
+//                    seleção múltipla + exclusão em lote,
+//                    fix onboarding (reabrir), selo de versão
 //       + Fix: múltiplos pesos/dia (média diária via view)
 //       + Fix: cache 5min Coach IA
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
+const VITALE_VERSION = 'v4.2 · Bloco A.3 · 2026-05-29';
+ 
 const VITALE_CORE = {
+  VERSION: VITALE_VERSION,
   state: {
     profile: null,
     healthProfile: null,
@@ -32,8 +38,11 @@ const VITALE_CORE = {
       const user = await window.VitaleAuth.requireAuth();
       if (!user) return;
  
-      // Carrega tudo em paralelo
-      const [profile, weights, weightsRaw, meds, submetas, healthProfile] = await Promise.all([
+      // Carrega tudo em paralelo MAS de forma resiliente: cada loader que
+      // falhar cai no seu próprio fallback em vez de derrubar o app inteiro.
+      // allSettled nunca rejeita — então um erro de RLS/view num recurso
+      // não impede os demais de carregar.
+      const results = await Promise.allSettled([
         window.VitaleAuth.getProfile(),
         this.loadWeights(),
         this.loadWeightsRaw(),
@@ -42,33 +51,46 @@ const VITALE_CORE = {
         this.loadHealthProfile()
       ]);
  
-      this.state.profile = profile;
-      this.state.weights = weights;
-      this.state.weightsRaw = weightsRaw;
-      this.state.medicacoes = meds;
-      this.state.submetas = submetas;
-      this.state.healthProfile = healthProfile;
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile'];
+      const fallbacks = [null, [], [], [], [], null];
+      const falhas = [];
+      const val = results.map((r, i) => {
+        if (r.status === 'fulfilled') return r.value;
+        falhas.push(`${nomes[i]}: ${r.reason?.message || r.reason}`);
+        console.error(`[VITALE] loader "${nomes[i]}" falhou:`, r.reason);
+        if (window.VitaleErr) window.VitaleErr.log('loader_' + nomes[i], r.reason);
+        return fallbacks[i];
+      });
  
-      // Aplica feature flags
-      await window.VitaleFlags.applyToUI();
+      this.state.profile = val[0];
+      this.state.weights = val[1] || [];
+      this.state.weightsRaw = val[2] || [];
+      this.state.medicacoes = val[3] || [];
+      this.state.submetas = val[4] || [];
+      this.state.healthProfile = val[5];
  
-      // Render UI
-      this.renderHeader();
-      this.updateDashboard();
-      this.updateAgendamentos();
-      this.fillHealthProfileForm();
+      // Feature flags — também isolado
+      try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
  
-      window.VitaleAnalytics.track('app_open');
+      // Render UI (cada um protegido para não cascatear)
+      try { this.renderHeader(); } catch (e) { console.warn('renderHeader', e); }
+      try { this.updateDashboard(); } catch (e) { console.warn('updateDashboard', e); }
+      try { this.updateAgendamentos(); } catch (e) { console.warn('updateAgendamentos', e); }
+      try { this.fillHealthProfileForm(); } catch (e) { console.warn('fillHealthProfileForm', e); }
+ 
+      try { window.VitaleAnalytics.track('app_open'); } catch (e) {}
  
       // Esconde loader
       const loader = document.getElementById('initLoader');
-      if (loader) {
-        loader.classList.add('hidden');
-        setTimeout(() => loader.remove(), 500);
+      if (loader) { loader.classList.add('hidden'); setTimeout(() => loader.remove(), 500); }
+ 
+      // Se houve falhas parciais, mostra QUAIS na tela (no celular não há console)
+      if (falhas.length) {
+        this.showAlert('error', '⚠️ Alguns dados não carregaram (' + falhas.length + '). Detalhe: ' + falhas[0]);
       }
  
-      // Se for primeiro acesso, abre onboarding wizard
-      if ((!profile?.altura || profile.altura === 1.70) && weights.length === 0) {
+      // Primeiro acesso → onboarding
+      if ((!val[0]?.altura || val[0].altura === 1.70) && this.state.weights.length === 0) {
         this.showOnboarding();
       }
  
@@ -77,8 +99,8 @@ const VITALE_CORE = {
     } catch (e) {
       console.error('[VITALE] init error:', e);
       if (window.VitaleErr) window.VitaleErr.log('app_init', e);
-      this.showAlert('error', 'Erro ao carregar. Recarregue a página.');
-      // Esconde loader mesmo em erro pra usuário não ficar travado
+      // Mostra a mensagem REAL do erro (no celular é a única forma de diagnosticar)
+      this.showAlert('error', 'Erro ao carregar: ' + (e?.message || e) + ' — recarregue a página.');
       const loader = document.getElementById('initLoader');
       if (loader) loader.remove();
     }
@@ -1777,7 +1799,18 @@ const VITALE_CORE = {
  
   async signOut() {
     if (!confirm('Sair da sua conta?')) return;
-    await window.VitaleAuth.signOut();
+    try {
+      if (window.VitaleAuth && window.VitaleAuth.signOut) {
+        await window.VitaleAuth.signOut();
+      } else if (window.sb && window.sb.auth) {
+        await window.sb.auth.signOut();
+      }
+    } catch (e) {
+      console.error('[VITALE] signOut error:', e);
+    } finally {
+      // Garante saída mesmo se a chamada de auth falhar
+      window.location.href = '/';
+    }
   },
  
   // Handler para mudança do select de objetivo na aba Saúde
@@ -1791,3 +1824,4 @@ const VITALE_CORE = {
 };
  
 window.VITALE_CORE = VITALE_CORE;
+ 
