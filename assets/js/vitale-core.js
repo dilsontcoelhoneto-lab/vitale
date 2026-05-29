@@ -1,5 +1,5 @@
 // =====================================================
-// VITALE — Core (lógica principal) — v4.2 BLOCO C (streak)
+// VITALE — Core (lógica principal) — v4.2 BLOCO B (diario)
 // Inclui: Bloco A (health_profile + onboarding 5 telas)
 //       + Bloco A.1: tela 6 Objetivos, urgência, metas auto
 //       + Bloco A.2: filtro de data (dashboard + histórico),
@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco C · 2026-05-29';
+const VITALE_VERSION = 'v4.2 · Bloco B · 2026-05-29';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -27,7 +27,9 @@ const VITALE_CORE = {
     tempImportacao: null,
     chartInstance: null,
     coachCache: null,     // {message, when} — cache de 5min do Coach IA
-    objetivoEscolhido: null  // estado temporário do wizard
+    objetivoEscolhido: null,  // estado temporário do wizard
+    moodHoje: null,       // registro de hoje (Bloco B)
+    moodDraft: { humor: 0, energia: 0, sono: 0, nota: '' } // seleção em edição
   },
  
   // =====================================================
@@ -48,11 +50,12 @@ const VITALE_CORE = {
         this.loadWeightsRaw(),
         this.loadMedicacoes(),
         this.loadSubmetas(),
-        this.loadHealthProfile()
+        this.loadHealthProfile(),
+        this.loadMoodHoje()
       ]);
  
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile'];
-      const fallbacks = [null, [], [], [], [], null];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje'];
+      const fallbacks = [null, [], [], [], [], null, null];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -68,6 +71,7 @@ const VITALE_CORE = {
       this.state.medicacoes = val[3] || [];
       this.state.submetas = val[4] || [];
       this.state.healthProfile = val[5];
+      this.state.moodHoje = val[6];
  
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -77,6 +81,7 @@ const VITALE_CORE = {
       try { this.updateDashboard(); } catch (e) { console.warn('updateDashboard', e); }
       try { this.updateAgendamentos(); } catch (e) { console.warn('updateAgendamentos', e); }
       try { this.fillHealthProfileForm(); } catch (e) { console.warn('fillHealthProfileForm', e); }
+      try { this.renderMoodCard(); } catch (e) { console.warn('renderMoodCard', e); }
  
       try { window.VitaleAnalytics.track('app_open'); } catch (e) {}
  
@@ -304,7 +309,161 @@ const VITALE_CORE = {
   },
  
   // =====================================================
+  // BLOCO B — DIÁRIO RÁPIDO (humor / energia / sono / nota)
+  // =====================================================
+  // Hoje no fuso de São Paulo (evita salvar no dia errado perto da meia-noite)
+  _hojeSP() {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+      .toISOString().slice(0, 10);
+  },
+ 
+  async loadMoodHoje() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return null;
+    const hoje = this._hojeSP();
+    const { data, error } = await window.sb
+      .from('mood_logs')
+      .select('id, data, humor, energia, sono, nota')
+      .eq('user_id', user.id)
+      .eq('data', hoje)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
+  },
+ 
+  // Escalas de emoji para cada dimensão (índice 1-5)
+  _moodEmojis: {
+    humor:   ['', '😞', '😕', '😐', '🙂', '😄'],
+    energia: ['', '🪫', '😴', '😌', '⚡', '🚀'],
+    sono:    ['', '😩', '😪', '😐', '😊', '😴']
+  },
+  _moodLabels: { humor: 'Humor', energia: 'Energia', sono: 'Sono' },
+ 
+  // Usuário toca num emoji → atualiza o rascunho e re-renderiza
+  setMood(dim, valor) {
+    if (!['humor', 'energia', 'sono'].includes(dim)) return;
+    // Toggle: tocar no mesmo valor desmarca
+    this.state.moodDraft[dim] = this.state.moodDraft[dim] === valor ? 0 : valor;
+    this.renderMoodCard();
+  },
+ 
+  setMoodNota(texto) {
+    this.state.moodDraft.nota = texto;
+  },
+ 
+  async salvarMood() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
+    const d = this.state.moodDraft;
+    if (!d.humor && !d.energia && !d.sono && !d.nota?.trim()) {
+      return this.showAlert('error', 'Marque ao menos um item antes de salvar.');
+    }
+    try {
+      const registro = {
+        user_id: user.id,
+        data: this._hojeSP(),
+        humor: d.humor || null,
+        energia: d.energia || null,
+        sono: d.sono || null,
+        nota: d.nota?.trim() || null
+      };
+      // Upsert por (user_id, data): edita o de hoje se já existir
+      const { data, error } = await window.sb
+        .from('mood_logs')
+        .upsert(registro, { onConflict: 'user_id,data' })
+        .select()
+        .single();
+      if (error) throw error;
+      this.state.moodHoje = data;
+      this.renderMoodCard();
+      this.showAlert('success', '✅ Diário de hoje salvo!');
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('mood_salvo');
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('salvar_mood', e);
+    }
+  },
+ 
+  renderMoodCard() {
+    const el = document.getElementById('moodCard');
+    if (!el) return;
+ 
+    // Se já registrou hoje, mostra resumo + botão editar
+    const hoje = this.state.moodHoje;
+    const draft = this.state.moodDraft;
+    const editando = el.dataset.editando === '1';
+ 
+    if (hoje && !editando) {
+      const linha = (dim) => {
+        const v = hoje[dim];
+        if (!v) return '';
+        return `<span style="margin-right:14px">${this._moodEmojis[dim][v]} <span style="color:var(--textm);font-size:12px">${this._moodLabels[dim]}</span></span>`;
+      };
+      const notaTxt = hoje.nota ? `<div style="margin-top:10px;color:var(--textm);font-size:13px;font-style:italic">"${this._escapeHtml(hoje.nota)}"</div>` : '';
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <strong style="color:var(--text)">📔 Diário de Hoje</strong>
+          <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.editarMood()" style="padding:6px 14px">✏️ Editar</button>
+        </div>
+        <div style="font-size:20px">${linha('humor')}${linha('energia')}${linha('sono')}</div>
+        ${notaTxt}`;
+      return;
+    }
+ 
+    // Modo edição/registro: carrega rascunho do registro existente se editando
+    if (editando && hoje && draft.humor === 0 && draft.energia === 0 && draft.sono === 0 && !draft.nota) {
+      this.state.moodDraft = { humor: hoje.humor || 0, energia: hoje.energia || 0, sono: hoje.sono || 0, nota: hoje.nota || '' };
+    }
+    const dr = this.state.moodDraft;
+ 
+    const escala = (dim) => {
+      const emojis = this._moodEmojis[dim];
+      const botoes = [1, 2, 3, 4, 5].map(n => {
+        const sel = dr[dim] === n;
+        return `<button onclick="VITALE_CORE.setMood('${dim}',${n})" title="${n}/5"
+          style="font-size:26px;background:${sel ? 'rgba(212,168,67,0.18)' : 'transparent'};border:1px solid ${sel ? 'var(--gold)' : 'transparent'};border-radius:10px;padding:4px 8px;cursor:pointer;transition:all .15s;${sel ? '' : 'opacity:0.5'}">${emojis[n]}</button>`;
+      }).join('');
+      return `<div style="margin-bottom:14px">
+        <div style="font-size:12px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">${this._moodLabels[dim]}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${botoes}</div>
+      </div>`;
+    };
+ 
+    el.innerHTML = `
+      <div style="margin-bottom:14px"><strong style="color:var(--text)">📔 Como você está hoje?</strong>
+        <span style="color:var(--textm);font-size:12px;margin-left:8px">toque nos emojis</span></div>
+      ${escala('humor')}
+      ${escala('energia')}
+      ${escala('sono')}
+      <textarea id="moodNota" oninput="VITALE_CORE.setMoodNota(this.value)" placeholder="Nota livre (opcional): algo que queira lembrar sobre hoje…"
+        style="width:100%;min-height:60px;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:14px;resize:vertical;margin-bottom:12px">${this._escapeHtml(dr.nota || '')}</textarea>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-primary btn-small" onclick="VITALE_CORE.salvarMood()" style="padding:9px 20px">💾 Salvar</button>
+        ${hoje ? `<button class="btn btn-secondary btn-small" onclick="VITALE_CORE.cancelarEdicaoMood()" style="padding:9px 16px">Cancelar</button>` : ''}
+      </div>`;
+  },
+ 
+  editarMood() {
+    const el = document.getElementById('moodCard');
+    if (el) el.dataset.editando = '1';
+    this.state.moodDraft = { humor: 0, energia: 0, sono: 0, nota: '' };
+    this.renderMoodCard();
+  },
+ 
+  cancelarEdicaoMood() {
+    const el = document.getElementById('moodCard');
+    if (el) el.dataset.editando = '0';
+    this.state.moodDraft = { humor: 0, energia: 0, sono: 0, nota: '' };
+    this.renderMoodCard();
+  },
+ 
+  _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+ 
+  // =====================================================
   // DASHBOARD
+ 
   // =====================================================
   updateDashboard() {
     if (!this.state.weights.length) {
