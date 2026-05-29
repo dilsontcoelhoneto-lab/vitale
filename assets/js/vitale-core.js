@@ -1,5 +1,5 @@
 // =====================================================
-// VITALE — Core (lógica principal) — v4.2 BLOCO A.4
+// VITALE — Core (lógica principal) — v4.2 BLOCO C (streak)
 // Inclui: Bloco A (health_profile + onboarding 5 telas)
 //       + Bloco A.1: tela 6 Objetivos, urgência, metas auto
 //       + Bloco A.2: filtro de data (dashboard + histórico),
@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco A.4 · 2026-05-29';
+const VITALE_VERSION = 'v4.2 · Bloco C · 2026-05-29';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -228,6 +228,79 @@ const VITALE_CORE = {
       const initial = (profile.nome || profile.email || 'U').charAt(0).toUpperCase();
       avatarEl.textContent = initial;
     }
+    this.renderStreak();
+  },
+ 
+  // =====================================================
+  // BLOCO C — STREAK DE PESAGEM
+  // =====================================================
+  // Calcula a sequência de dias consecutivos com pesagem, a partir do
+  // weightsRaw (fonte única da verdade). Não toca banco nem API — puro
+  // cálculo local, custo zero de request/token.
+  //
+  // Regra: conta dias consecutivos terminando HOJE ou ONTEM (tolera não
+  // ter pesado ainda hoje, sem zerar o streak injustamente). Se o último
+  // registro é anterior a ontem, o streak está quebrado (= 0).
+  calcStreak() {
+    const raw = this.state.weightsRaw;
+    if (!raw || !raw.length) return { atual: 0, recorde: 0, pesouHoje: false };
+ 
+    // Conjunto de dias únicos com pesagem (normalizado YYYY-MM-DD)
+    const dias = [...new Set(raw.map(w => this._normData(w.date)))].sort(); // asc
+ 
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const fmtDia = d => d.toISOString().slice(0, 10);
+    const hojeStr = fmtDia(hoje);
+    const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1);
+    const ontemStr = fmtDia(ontem);
+ 
+    const pesouHoje = dias.includes(hojeStr);
+ 
+    // Streak atual: caminha pra trás a partir de hoje (ou ontem)
+    let atual = 0;
+    const diaSet = new Set(dias);
+    let cursor = new Date(hoje);
+    if (!pesouHoje) {
+      // Se não pesou hoje, o streak só continua válido se pesou ontem
+      if (!diaSet.has(ontemStr)) return { atual: 0, recorde: this._calcRecordeStreak(dias), pesouHoje: false };
+      cursor = new Date(ontem);
+    }
+    while (diaSet.has(fmtDia(cursor))) {
+      atual++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+ 
+    return { atual, recorde: Math.max(atual, this._calcRecordeStreak(dias)), pesouHoje };
+  },
+ 
+  // Maior sequência consecutiva já registrada (histórico completo)
+  _calcRecordeStreak(diasOrdenados) {
+    if (!diasOrdenados.length) return 0;
+    let recorde = 1, atual = 1;
+    for (let i = 1; i < diasOrdenados.length; i++) {
+      const prev = new Date(diasOrdenados[i - 1]);
+      const cur = new Date(diasOrdenados[i]);
+      const diffDias = Math.round((cur - prev) / 86400000);
+      if (diffDias === 1) { atual++; recorde = Math.max(recorde, atual); }
+      else if (diffDias > 1) { atual = 1; }
+    }
+    return recorde;
+  },
+ 
+  renderStreak() {
+    const el = document.getElementById('streakBadge');
+    if (!el) return;
+    const { atual, recorde, pesouHoje } = this.calcStreak();
+    if (atual === 0) {
+      el.innerHTML = `<span style="opacity:0.7">🔥 Comece sua sequência hoje!</span>`;
+      el.title = recorde > 0 ? `Seu recorde: ${recorde} dias` : '';
+      return;
+    }
+    const plural = atual === 1 ? 'dia' : 'dias';
+    const recordeTxt = (atual >= recorde && atual > 1) ? ' 🏆' : '';
+    const aviso = pesouHoje ? '' : ' <span style="font-size:10px;opacity:0.7">(pese hoje p/ manter)</span>';
+    el.innerHTML = `<strong style="color:var(--gold)">🔥 ${atual} ${plural}${recordeTxt}</strong>${aviso}`;
+    el.title = `Sequência atual: ${atual} dias · Recorde: ${recorde} dias`;
   },
  
   // =====================================================
@@ -281,6 +354,7 @@ const VITALE_CORE = {
     }
  
     this.renderHistorico();
+    this.renderStreak();
   },
  
   renderEmptyDashboard() {
@@ -1848,3 +1922,4 @@ const VITALE_CORE = {
 };
  
 window.VITALE_CORE = VITALE_CORE;
+ 
