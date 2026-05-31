@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco D-IMC · 2026-05-31';
+const VITALE_VERSION = 'v4.2 · Bloco D-IMC.2 · 2026-05-31';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -765,6 +765,7 @@ const VITALE_CORE = {
     // Aplica o MESMO filtro de data do dashboard (consistência visual)
     const de = this._normData ? this._normData(this.dashFiltro.de) : this.dashFiltro.de;
     const ate = this._normData ? this._normData(this.dashFiltro.ate) : this.dashFiltro.ate;
+    const projecaoAtiva = !de && !ate; // só projeta quando vê a série inteira
     if (de) sorted = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) >= de);
     if (ate) sorted = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) <= ate);
     if (sorted.length < 2) {
@@ -772,11 +773,36 @@ const VITALE_CORE = {
       return;
     }
  
+    const h2 = this.altura * this.altura;
+    const first = sorted[0], last = sorted[sorted.length - 1];
     const labels = sorted.map(w => this.fmt(w.date));
     const imcData = sorted.map(w => parseFloat(this.calcIMC(w.peso, this.altura)));
  
+    // Projeção de IMC: mesma matemática da projeção de peso (peso/altura²)
+    const imcMeta = this.metaKg / h2; // IMC alvo (= 30 na config do app)
+    const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
+    const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
+    const projData = new Array(imcData.length - 1).fill(null);
+    projData.push(imcData[imcData.length - 1]); // ancora no último ponto real
+ 
+    if (velDiaria > 0 && projecaoAtiva) {
+      const diasParaMeta = Math.ceil((last.peso - this.metaKg) / velDiaria);
+      const projSteps = 4;
+      for (let i = 1; i <= projSteps; i++) {
+        const diasOffset = Math.round(diasParaMeta / projSteps * i);
+        const futDate = new Date(last.date + 'T12:00:00');
+        futDate.setDate(futDate.getDate() + diasOffset);
+        labels.push(this.fmt(futDate.toISOString().slice(0, 10)));
+        imcData.push(null);
+        const pesoProj = Math.max(last.peso - velDiaria * diasOffset, this.metaKg);
+        projData.push(parseFloat((pesoProj / h2).toFixed(1)));
+      }
+    }
+ 
     const primeiro = imcData[0];
-    const atual = imcData[imcData.length - 1];
+    // "atual" = último valor REAL (ignora os nulls da projeção)
+    const reais = imcData.filter(v => v != null);
+    const atual = reais[reais.length - 1];
     const delta = atual - primeiro;
     const info = this.getObesidadeInfo(atual);
  
@@ -801,8 +827,10 @@ const VITALE_CORE = {
     }
  
     // Faixas de classificação como anotações de fundo (via plugin inline)
-    const yMin = Math.max(Math.floor(Math.min(...imcData) - 1), 15);
-    const yMax = Math.ceil(Math.max(...imcData) + 1);
+    // Considera tanto valores reais quanto projetados para o range do eixo
+    const todosValores = [...imcData, ...projData].filter(v => v != null);
+    const yMin = Math.max(Math.floor(Math.min(...todosValores) - 1), 15);
+    const yMax = Math.ceil(Math.max(...todosValores) + 1);
  
     // Plugin que pinta as faixas de IMC no fundo
     const faixasPlugin = {
@@ -853,7 +881,12 @@ const VITALE_CORE = {
           borderColor: info.color,
           backgroundColor: 'rgba(255,255,255,0.02)',
           borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: info.color,
-          pointBorderColor: '#0d1223', pointBorderWidth: 1.5, tension: 0.4, fill: false
+          pointBorderColor: '#0d1223', pointBorderWidth: 1.5, tension: 0.4, fill: false, spanGaps: false
+        }, {
+          label: 'Projeção', data: projData,
+          borderColor: '#d4a843', backgroundColor: 'rgba(212,168,67,0.04)',
+          borderWidth: 2, borderDash: [6, 4], pointRadius: 3, pointBackgroundColor: '#d4a843',
+          pointBorderColor: '#0d1223', pointBorderWidth: 1.5, tension: 0.3, fill: false, spanGaps: true
         }]
       },
       options: {
@@ -864,7 +897,7 @@ const VITALE_CORE = {
           tooltip: {
             backgroundColor: '#0d1223', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
             titleColor: '#d4a843', bodyColor: '#ede8e0', padding: 10,
-            callbacks: { label: (c) => ` IMC ${c.raw.toFixed(1)} — ${this.getObesidadeInfo(c.raw).grau}` }
+            callbacks: { label: (c) => c.raw == null ? null : ` IMC ${c.raw.toFixed(1)}${c.datasetIndex === 1 ? ' (projeção)' : ' — ' + this.getObesidadeInfo(c.raw).grau}` }
           }
         },
         scales: {
