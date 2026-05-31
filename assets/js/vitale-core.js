@@ -1,5 +1,5 @@
 // =====================================================
-// VITALE — Core (lógica principal) — v4.2 BLOCO B (diario)
+// VITALE — Core (lógica principal) — v4.2 BLOCO D (grafico IMC)
 // Inclui: Bloco A (health_profile + onboarding 5 telas)
 //       + Bloco A.1: tela 6 Objetivos, urgência, metas auto
 //       + Bloco A.2: filtro de data (dashboard + histórico),
@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco B · 2026-05-29';
+const VITALE_VERSION = 'v4.2 · Bloco D-IMC · 2026-05-31';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -26,6 +26,7 @@ const VITALE_CORE = {
     diasEsp: [],
     tempImportacao: null,
     chartInstance: null,
+    imcChartInstance: null,
     coachCache: null,     // {message, when} — cache de 5min do Coach IA
     objetivoEscolhido: null,  // estado temporário do wizard
     moodHoje: null,       // registro de hoje (Bloco B)
@@ -508,6 +509,7 @@ const VITALE_CORE = {
       if (mTxt) mTxt.textContent = `Faltam ${Math.max(last.peso - this.metaKg, 0).toFixed(1)} kg para IMC < 30 — ${progress.toFixed(0)}% concluído`;
  
       this.buildWeightChart();
+      this.buildIMCChart();
       this.generateCoachMessage();
       this.updateProjecoes();
     }
@@ -648,6 +650,7 @@ const VITALE_CORE = {
       ate: document.getElementById('dashFiltroAte')?.value || null
     };
     this.buildWeightChart();
+    this.buildIMCChart();
   },
  
   limparFiltroDashboard() {
@@ -657,6 +660,7 @@ const VITALE_CORE = {
     if (de) de.value = '';
     if (ate) ate.value = '';
     this.buildWeightChart();
+    this.buildIMCChart();
   },
  
   buildWeightChart() {
@@ -740,8 +744,137 @@ const VITALE_CORE = {
   },
  
   // =====================================================
-  // PROJEÇÕES
+  // BLOCO IMC — Mini-gráfico de evolução do IMC
   // =====================================================
+  // Reaproveita a mesma série de pesos (média diária). IMC = peso/altura².
+  // Faixas de classificação desenhadas como bandas de fundo (contexto clínico).
+  buildIMCChart() {
+    const canvas = document.getElementById('imcChart');
+    if (!canvas) return;
+    let sorted = this.getSorted();
+    if (sorted.length < 2) {
+      // Sem dados suficientes: limpa e some o card pra não mostrar gráfico vazio
+      if (this.state.imcChartInstance) { this.state.imcChartInstance.destroy(); this.state.imcChartInstance = null; }
+      const card = document.getElementById('imcChartCard');
+      if (card) card.style.display = 'none';
+      return;
+    }
+    const card = document.getElementById('imcChartCard');
+    if (card) card.style.display = '';
+ 
+    // Aplica o MESMO filtro de data do dashboard (consistência visual)
+    const de = this._normData ? this._normData(this.dashFiltro.de) : this.dashFiltro.de;
+    const ate = this._normData ? this._normData(this.dashFiltro.ate) : this.dashFiltro.ate;
+    if (de) sorted = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) >= de);
+    if (ate) sorted = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) <= ate);
+    if (sorted.length < 2) {
+      if (this.state.imcChartInstance) { this.state.imcChartInstance.destroy(); this.state.imcChartInstance = null; }
+      return;
+    }
+ 
+    const labels = sorted.map(w => this.fmt(w.date));
+    const imcData = sorted.map(w => parseFloat(this.calcIMC(w.peso, this.altura)));
+ 
+    const primeiro = imcData[0];
+    const atual = imcData[imcData.length - 1];
+    const delta = atual - primeiro;
+    const info = this.getObesidadeInfo(atual);
+ 
+    // Atualiza o cabeçalho do card (IMC atual + variação + classificação)
+    const hdr = document.getElementById('imcChartHeader');
+    if (hdr) {
+      const sinal = delta < 0 ? '↓' : delta > 0 ? '↑' : '→';
+      const corDelta = delta < 0 ? 'var(--em)' : delta > 0 ? 'var(--red)' : 'var(--textm)';
+      hdr.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px">Evolução do IMC</div>
+            <div style="font-size:28px;font-weight:600;color:${info.color};line-height:1.1">${atual.toFixed(1)}
+              <span style="font-size:13px;color:${info.color};font-weight:400">${info.grau}</span>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:18px;font-weight:600;color:${corDelta}">${sinal} ${Math.abs(delta).toFixed(1)}</div>
+            <div style="font-size:11px;color:var(--textm)">no período</div>
+          </div>
+        </div>`;
+    }
+ 
+    // Faixas de classificação como anotações de fundo (via plugin inline)
+    const yMin = Math.max(Math.floor(Math.min(...imcData) - 1), 15);
+    const yMax = Math.ceil(Math.max(...imcData) + 1);
+ 
+    // Plugin que pinta as faixas de IMC no fundo
+    const faixasPlugin = {
+      id: 'faixasIMC',
+      beforeDraw: (chart) => {
+        const { ctx, chartArea, scales } = chart;
+        if (!chartArea) return;
+        const faixas = [
+          { de: 0, ate: 18.5, cor: 'rgba(74,157,232,0.06)' },
+          { de: 18.5, ate: 25, cor: 'rgba(39,196,125,0.06)' },
+          { de: 25, ate: 30, cor: 'rgba(212,168,67,0.06)' },
+          { de: 30, ate: 35, cor: 'rgba(232,146,74,0.06)' },
+          { de: 35, ate: 40, cor: 'rgba(232,80,74,0.06)' },
+          { de: 40, ate: 100, cor: 'rgba(192,64,192,0.06)' }
+        ];
+        ctx.save();
+        faixas.forEach(f => {
+          const y1 = scales.y.getPixelForValue(Math.min(f.ate, yMax));
+          const y2 = scales.y.getPixelForValue(Math.max(f.de, yMin));
+          if (y1 < chartArea.bottom && y2 > chartArea.top) {
+            ctx.fillStyle = f.cor;
+            const top = Math.max(y1, chartArea.top);
+            const bot = Math.min(y2, chartArea.bottom);
+            ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, bot - top);
+          }
+        });
+        // Linhas de referência em 25 e 30 (limites clínicos)
+        [25, 30].forEach(lim => {
+          if (lim >= yMin && lim <= yMax) {
+            const y = scales.y.getPixelForValue(lim);
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(chartArea.left, y); ctx.lineTo(chartArea.right, y); ctx.stroke();
+          }
+        });
+        ctx.restore();
+      }
+    };
+ 
+    const ctx = canvas.getContext('2d');
+    if (this.state.imcChartInstance) this.state.imcChartInstance.destroy();
+    this.state.imcChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'IMC', data: imcData,
+          borderColor: info.color,
+          backgroundColor: 'rgba(255,255,255,0.02)',
+          borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: info.color,
+          pointBorderColor: '#0d1223', pointBorderWidth: 1.5, tension: 0.4, fill: false
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#0d1223', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
+            titleColor: '#d4a843', bodyColor: '#ede8e0', padding: 10,
+            callbacks: { label: (c) => ` IMC ${c.raw.toFixed(1)} — ${this.getObesidadeInfo(c.raw).grau}` }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 6 } },
+          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, callback: v => v.toFixed(0) }, min: yMin, max: yMax }
+        }
+      },
+      plugins: [faixasPlugin]
+    });
+  },
   updateProjecoes() {
     if (this.state.weights.length < 2) return;
     const sorted = this.getSorted();
@@ -2081,4 +2214,3 @@ const VITALE_CORE = {
 };
  
 window.VITALE_CORE = VITALE_CORE;
- 
