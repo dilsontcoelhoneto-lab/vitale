@@ -9,9 +9,9 @@
 //       + Fix: cache 5min Coach IA
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
- 
-const VITALE_VERSION = 'v4.2 · Bloco Medidas · 2026-06-01';
- 
+
+const VITALE_VERSION = 'v4.2 · Bloco Composicao · 2026-06-01';
+
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
   state: {
@@ -29,15 +29,17 @@ const VITALE_CORE = {
     imcChartInstance: null,
     moodChartInstance: null,
     medidasChartInstance: null,
+    composicaoChartInstance: null,
     coachCache: null,     // {message, when} — cache de 5min do Coach IA
     objetivoEscolhido: null,  // estado temporário do wizard
     moodHoje: null,       // registro de hoje (Bloco B)
     moodDraft: { humor: 0, energia: 0, sono: 0, nota: '' }, // seleção em edição
     conquistas: [],       // badges desbloqueados (Bloco Gamificação)
     exercicios: [],       // atividades físicas registradas (Bloco Exercícios)
-    medidas: []           // medidas corporais (Bloco Medidas)
+    medidas: [],          // medidas corporais de fita (Bloco Medidas)
+    composicao: []        // composição corporal / bioimpedância (Bloco Composição)
   },
- 
+
   // =====================================================
   // INIT
   // =====================================================
@@ -45,7 +47,7 @@ const VITALE_CORE = {
     try {
       const user = await window.VitaleAuth.requireAuth();
       if (!user) return;
- 
+
       // Carrega tudo em paralelo MAS de forma resiliente: cada loader que
       // falhar cai no seu próprio fallback em vez de derrubar o app inteiro.
       // allSettled nunca rejeita — então um erro de RLS/view num recurso
@@ -60,11 +62,12 @@ const VITALE_CORE = {
         this.loadMoodHoje(),
         this.loadConquistas(),
         this.loadExercicios(),
-        this.loadMedidas()
+        this.loadMedidas(),
+        this.loadComposicao()
       ]);
- 
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas'];
-      const fallbacks = [null, [], [], [], [], null, null, [], [], []];
+
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -73,7 +76,7 @@ const VITALE_CORE = {
         if (window.VitaleErr) window.VitaleErr.log('loader_' + nomes[i], r.reason);
         return fallbacks[i];
       });
- 
+
       this.state.profile = val[0];
       this.state.weights = val[1] || [];
       this.state.weightsRaw = val[2] || [];
@@ -84,10 +87,11 @@ const VITALE_CORE = {
       this.state.conquistas = val[7] || [];
       this.state.exercicios = val[8] || [];
       this.state.medidas = val[9] || [];
- 
+      this.state.composicao = val[10] || [];
+
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
- 
+
       // Render UI (cada um protegido para não cascatear)
       try { this.renderHeader(); } catch (e) { console.warn('renderHeader', e); }
       try { this.updateDashboard(); } catch (e) { console.warn('updateDashboard', e); }
@@ -101,24 +105,26 @@ const VITALE_CORE = {
       try { this.renderExercicios(); } catch (e) { console.warn('renderExercicios', e); }
       try { this.renderMedidas(); } catch (e) { console.warn('renderMedidas', e); }
       try { this.buildMedidasChart(); } catch (e) { console.warn('buildMedidasChart', e); }
+      try { this.renderComposicao(); } catch (e) { console.warn('renderComposicao', e); }
+      try { this.buildComposicaoChart(); } catch (e) { console.warn('buildComposicaoChart', e); }
       try { this.renderBadgeResumo(); } catch (e) { console.warn('renderBadgeResumo', e); }
- 
+
       try { window.VitaleAnalytics.track('app_open'); } catch (e) {}
- 
+
       // Esconde loader
       const loader = document.getElementById('initLoader');
       if (loader) { loader.classList.add('hidden'); setTimeout(() => loader.remove(), 500); }
- 
+
       // Se houve falhas parciais, mostra QUAIS na tela (no celular não há console)
       if (falhas.length) {
         this.showAlert('error', '⚠️ Alguns dados não carregaram (' + falhas.length + '). Detalhe: ' + falhas[0]);
       }
- 
+
       // Primeiro acesso → onboarding
       if ((!val[0]?.altura || val[0].altura === 1.70) && this.state.weights.length === 0) {
         this.showOnboarding();
       }
- 
+
       // Coach IA via API (com fallback determinístico)
       setTimeout(() => this.generateCoachMessageAI(), 1000);
     } catch (e) {
@@ -130,7 +136,7 @@ const VITALE_CORE = {
       if (loader) loader.remove();
     }
   },
- 
+
   // =====================================================
   // DATABASE LOADERS
   // =====================================================
@@ -151,7 +157,7 @@ const VITALE_CORE = {
       registros_dia: w.registros_dia
     }));
   },
- 
+
   // Carrega registros individuais (todas as pesagens, mesmo do mesmo dia)
   async loadWeightsRaw() {
     const { data, error } = await window.sb
@@ -170,7 +176,7 @@ const VITALE_CORE = {
       createdAt: w.created_at
     }));
   },
- 
+
   async loadMedicacoes() {
     const { data, error } = await window.sb
       .from('medicacoes')
@@ -180,7 +186,7 @@ const VITALE_CORE = {
     if (error) throw error;
     return data || [];
   },
- 
+
   async loadSubmetas() {
     const { data, error } = await window.sb
       .from('submetas')
@@ -196,7 +202,7 @@ const VITALE_CORE = {
       atingida: s.atingida
     }));
   },
- 
+
   async loadHealthProfile() {
     try {
       const user = await window.VitaleAuth.getUser();
@@ -216,12 +222,12 @@ const VITALE_CORE = {
       return null;
     }
   },
- 
+
   // =====================================================
   // UTILS
   // =====================================================
   calcIMC(kg, h) { return (kg / (h * h)).toFixed(1); },
- 
+
   getObesidadeInfo(imc) {
     const v = parseFloat(imc);
     if (v < 18.5) return { grau: 'Baixo Peso', color: '#4a9de8' };
@@ -231,15 +237,15 @@ const VITALE_CORE = {
     if (v < 40) return { grau: 'Obesidade Grau II', color: '#e8504a' };
     return { grau: 'Obesidade Grau III', color: '#c040c0' };
   },
- 
+
   fmt(s) { return new Date(s + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }); },
   fmtLong(d) { return d instanceof Date ? d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'; },
   fmtStr(s) { return s ? this.fmtLong(new Date(s + 'T12:00:00')) : '—'; },
   getSorted() { return [...this.state.weights].sort((a, b) => new Date(a.date) - new Date(b.date)); },
- 
+
   get altura() { return this.state.profile?.altura || 1.70; },
   get metaKg() { return 30 * this.altura * this.altura; },
- 
+
   // =====================================================
   // HEADER
   // =====================================================
@@ -255,7 +261,7 @@ const VITALE_CORE = {
     }
     this.renderStreak();
   },
- 
+
   // =====================================================
   // BLOCO C — STREAK DE PESAGEM
   // =====================================================
@@ -269,18 +275,18 @@ const VITALE_CORE = {
   calcStreak() {
     const raw = this.state.weightsRaw;
     if (!raw || !raw.length) return { atual: 0, recorde: 0, pesouHoje: false };
- 
+
     // Conjunto de dias únicos com pesagem (normalizado YYYY-MM-DD)
     const dias = [...new Set(raw.map(w => this._normData(w.date)))].sort(); // asc
- 
+
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const fmtDia = d => d.toISOString().slice(0, 10);
     const hojeStr = fmtDia(hoje);
     const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1);
     const ontemStr = fmtDia(ontem);
- 
+
     const pesouHoje = dias.includes(hojeStr);
- 
+
     // Streak atual: caminha pra trás a partir de hoje (ou ontem)
     let atual = 0;
     const diaSet = new Set(dias);
@@ -294,10 +300,10 @@ const VITALE_CORE = {
       atual++;
       cursor.setDate(cursor.getDate() - 1);
     }
- 
+
     return { atual, recorde: Math.max(atual, this._calcRecordeStreak(dias)), pesouHoje };
   },
- 
+
   // Maior sequência consecutiva já registrada (histórico completo)
   _calcRecordeStreak(diasOrdenados) {
     if (!diasOrdenados.length) return 0;
@@ -311,7 +317,7 @@ const VITALE_CORE = {
     }
     return recorde;
   },
- 
+
   renderStreak() {
     const el = document.getElementById('streakBadge');
     if (!el) return;
@@ -327,7 +333,7 @@ const VITALE_CORE = {
     el.innerHTML = `<strong style="color:var(--gold)">🔥 ${atual} ${plural}${recordeTxt}</strong>${aviso}`;
     el.title = `Sequência atual: ${atual} dias · Recorde: ${recorde} dias`;
   },
- 
+
   // =====================================================
   // BLOCO GAMIFICAÇÃO — Conquistas (badges) + Celebração
   // =====================================================
@@ -341,7 +347,7 @@ const VITALE_CORE = {
     if (error) throw error;
     return data || [];
   },
- 
+
   // Catálogo de badges. cond(ctx) → retorna true se merece o badge.
   // ctx traz dados já calculados pra não repetir contas.
   _badges: [
@@ -363,7 +369,7 @@ const VITALE_CORE = {
     { id: 'exerc_semana', icone: '🔥', nome: 'Semana Ativa', desc: '5 treinos numa semana', cond: c => c.treinosSemana >= 5 },
     { id: 'medidas_1', icone: '📏', nome: 'Conhece o Corpo', desc: 'Primeira medida corporal registrada', cond: c => c.temMedida }
   ],
- 
+
   // Monta o contexto e desbloqueia badges novos. silencioso=true não celebra
   // (usado no load inicial pra não disparar fogos das conquistas antigas).
   async checkConquistas(silencioso = false) {
@@ -382,11 +388,11 @@ const VITALE_CORE = {
       treinosSemana: (() => { const d = new Date(); d.setDate(d.getDate() - 7); return this.state.exercicios.filter(e => new Date(e.data) >= d).length; })(),
       temMedida: this.state.medidas.length > 0
     };
- 
+
     const jaTem = new Set(this.state.conquistas.map(c => c.badge_id));
     const novos = this._badges.filter(b => !jaTem.has(b.id) && b.cond(ctx));
     if (!novos.length) return;
- 
+
     // Persiste no banco (insert em lote, ignora duplicatas via unique index)
     try {
       const user = await window.VitaleAuth.getUser();
@@ -405,7 +411,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('check_conquistas', e);
     }
   },
- 
+
   // Animação de celebração: confete CSS puro + modal (zero dependência externa)
   celebrarConquista(badge) {
     // Confete
@@ -423,7 +429,7 @@ const VITALE_CORE = {
     }
     document.body.appendChild(layer);
     setTimeout(() => layer.remove(), 4500);
- 
+
     // Modal de parabéns
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:10000;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);animation:vitaleFadeIn .3s';
@@ -439,17 +445,17 @@ const VITALE_CORE = {
     document.body.appendChild(modal);
     if (window.VitaleAnalytics) window.VitaleAnalytics.track('conquista', { badge: badge.id });
   },
- 
+
   renderConquistas() {
     const el = document.getElementById('conquistasGrid');
     if (!el) return;
     const desbloqueados = new Set(this.state.conquistas.map(c => c.badge_id));
     const total = this._badges.length;
     const ganhos = this._badges.filter(b => desbloqueados.has(b.id)).length;
- 
+
     const hdr = document.getElementById('conquistasHeader');
     if (hdr) hdr.innerHTML = `<strong style="color:var(--gold)">🏆 Conquistas</strong> <span style="color:var(--textm);font-size:13px">${ganhos}/${total}</span>`;
- 
+
     el.innerHTML = this._badges.map(b => {
       const got = desbloqueados.has(b.id);
       return `<div title="${b.desc}" style="text-align:center;padding:12px 8px;border-radius:12px;background:${got ? 'rgba(212,168,67,0.1)' : 'rgba(255,255,255,0.02)'};border:1px solid ${got ? 'rgba(212,168,67,0.3)' : 'var(--border)'};${got ? '' : 'opacity:0.4;filter:grayscale(1)'}">
@@ -459,7 +465,7 @@ const VITALE_CORE = {
     }).join('');
     this.renderBadgeResumo();
   },
- 
+
   // Resumo compacto de conquistas no topo do Dashboard
   renderBadgeResumo() {
     const el = document.getElementById('badgeResumo');
@@ -480,7 +486,7 @@ const VITALE_CORE = {
         ${recentes ? `<span style="font-size:18px">${recentes}</span>` : ''}
       </div>`;
   },
- 
+
   // =====================================================
   // BLOCO EXERCÍCIOS — Registro de atividade física
   // =====================================================
@@ -497,20 +503,20 @@ const VITALE_CORE = {
     { id: 'esporte', nome: 'Esporte', icone: '⚽', met: { leve: 4.5, moderada: 7.0, intensa: 10.0 } },
     { id: 'outro', nome: 'Outro', icone: '💪', met: { leve: 3.0, moderada: 5.0, intensa: 7.0 } }
   ],
- 
+
   // Estado do formulário
   exercDraft: { tipo: 'caminhada', intensidade: 'moderada' },
- 
+
   selectExercTipo(tipo) {
     this.exercDraft.tipo = tipo;
     this._renderExercForm();
   },
- 
+
   selectExercIntensidade(nivel) {
     this.exercDraft.intensidade = nivel;
     this._renderExercForm();
   },
- 
+
   // Estima calorias a partir de MET × peso atual × horas
   _estimaCalorias(tipoId, intensidade, duracaoMin) {
     const ex = this._exercicios.find(e => e.id === tipoId);
@@ -520,7 +526,7 @@ const VITALE_CORE = {
     const peso = sorted.length ? sorted[sorted.length - 1].peso : 80; // fallback 80kg
     return Math.round(met * peso * (duracaoMin / 60));
   },
- 
+
   async loadExercicios() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return [];
@@ -535,19 +541,19 @@ const VITALE_CORE = {
     if (error) throw error;
     return data || [];
   },
- 
+
   async salvarExercicio() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
     const dur = parseInt(document.getElementById('exercDuracao')?.value);
     if (!dur || dur <= 0) return this.showAlert('error', 'Informe a duração em minutos!');
     if (dur > 600) return this.showAlert('error', 'Duração máxima é 600 min (10h).');
- 
+
     const tipo = this.exercDraft.tipo;
     const intensidade = this.exercDraft.intensidade;
     const nota = document.getElementById('exercNota')?.value.trim() || null;
     const calorias = this._estimaCalorias(tipo, intensidade, dur);
- 
+
     try {
       const { data, error } = await window.sb.from('exercicios').insert({
         user_id: user.id, tipo, duracao_min: dur, intensidade, calorias, nota
@@ -567,7 +573,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('salvar_exercicio', e);
     }
   },
- 
+
   async removerExercicio(id) {
     if (!confirm('Remover este exercício?')) return;
     const { error } = await window.sb.from('exercicios').delete().eq('id', id);
@@ -575,7 +581,7 @@ const VITALE_CORE = {
     this.state.exercicios = this.state.exercicios.filter(e => e.id !== id);
     this.renderExercicios();
   },
- 
+
   _renderExercForm() {
     const grid = document.getElementById('exercTipoGrid');
     if (grid) {
@@ -608,12 +614,12 @@ const VITALE_CORE = {
       prev.style.display = 'none';
     }
   },
- 
+
   renderExercicios() {
     this._renderExercForm();
     const el = document.getElementById('exercLista');
     if (!el) return;
- 
+
     const exs = this.state.exercicios;
     if (!exs.length) {
       el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:16px 0">Nenhum exercício registrado ainda 💪</p>';
@@ -621,7 +627,7 @@ const VITALE_CORE = {
       if (resumo) resumo.style.display = 'none';
       return;
     }
- 
+
     // Resumo da semana (últimos 7 dias)
     const seteDias = new Date(); seteDias.setDate(seteDias.getDate() - 7);
     const semana = exs.filter(e => new Date(e.data) >= seteDias);
@@ -637,7 +643,7 @@ const VITALE_CORE = {
           <div><div style="font-size:22px;font-weight:700;color:var(--em)">${totalCal}</div><div style="font-size:11px;color:var(--textm)">kcal queimadas</div></div>
         </div>`;
     }
- 
+
     el.innerHTML = exs.map(e => {
       const ex = this._exercicios.find(t => t.id === e.tipo) || { icone: '💪', nome: e.tipo };
       const intLabel = { leve: 'Leve', moderada: 'Moderada', intensa: 'Intensa' }[e.intensidade] || '';
@@ -652,7 +658,7 @@ const VITALE_CORE = {
       </div>`;
     }).join('');
   },
- 
+
   // =====================================================
   // BLOCO MEDIDAS CORPORAIS (body_measurements)
   // =====================================================
@@ -663,10 +669,9 @@ const VITALE_CORE = {
     { id: 'peito', nome: 'Peito', icone: '💚' },
     { id: 'braco', nome: 'Braço', icone: '💪' },
     { id: 'coxa', nome: 'Coxa', icone: '🦵' },
-    { id: 'pescoco', nome: 'Pescoço', icone: '🔵' },
-    { id: 'gordura_pct', nome: '% Gordura', icone: '📊' }
+    { id: 'pescoco', nome: 'Pescoço', icone: '🔵' }
   ],
- 
+
   async loadMedidas() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return [];
@@ -678,7 +683,7 @@ const VITALE_CORE = {
     if (error) throw error;
     return data || [];
   },
- 
+
   // Relação Cintura/Quadril — indicador de risco cardiovascular
   _calcRCQ(cintura, quadril) {
     if (!cintura || !quadril) return null;
@@ -692,11 +697,12 @@ const VITALE_CORE = {
     if (v < 1.0) return { txt: 'Risco moderado', cor: 'var(--gold)' };
     return { txt: 'Risco alto', cor: 'var(--red)' };
   },
- 
+
   async salvarMedidas() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
-    const reg = { user_id: user.id, data: this._hojeSP() };
+    const dataInput = document.getElementById('med_data')?.value;
+    const reg = { user_id: user.id, data: dataInput || this._hojeSP() };
     let algum = false;
     this._medidasCampos.forEach(c => {
       const v = parseFloat(document.getElementById('med_' + c.id)?.value);
@@ -705,17 +711,20 @@ const VITALE_CORE = {
     const nota = document.getElementById('med_nota')?.value.trim();
     if (nota) reg.nota = nota;
     if (!algum) return this.showAlert('error', 'Preencha ao menos uma medida!');
- 
+
     try {
       const { data, error } = await window.sb.from('body_measurements').insert(reg).select().single();
       if (error) throw error;
-      this.state.medidas.unshift(data);
+      // Mantém ordenado por data desc após inserir (pode ser data passada)
+      this.state.medidas.push(data);
+      this.state.medidas.sort((a, b) => (b.data > a.data ? 1 : -1));
       this.renderMedidas();
       this.buildMedidasChart();
       this._invalidateCoachCache();
       // limpa form
       this._medidasCampos.forEach(c => { const el = document.getElementById('med_' + c.id); if (el) el.value = ''; });
       const notaEl = document.getElementById('med_nota'); if (notaEl) notaEl.value = '';
+      const dEl = document.getElementById('med_data'); if (dEl) dEl.value = '';
       this.showAlert('success', '✅ Medidas registradas!');
       this.checkConquistas();
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('medidas_salvas');
@@ -724,7 +733,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('salvar_medidas', e);
     }
   },
- 
+
   async removerMedida(id) {
     if (!confirm('Remover este registro de medidas?')) return;
     const { error } = await window.sb.from('body_measurements').delete().eq('id', id);
@@ -733,7 +742,7 @@ const VITALE_CORE = {
     this.renderMedidas();
     this.buildMedidasChart();
   },
- 
+
   renderMedidas() {
     const el = document.getElementById('medidasLista');
     if (!el) return;
@@ -742,7 +751,7 @@ const VITALE_CORE = {
       el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:16px 0">Nenhuma medida registrada ainda 📏</p>';
       return;
     }
- 
+
     // Card de destaque: medida mais recente + RCQ
     const ultima = ms[0];
     const rcq = this._calcRCQ(ultima.cintura, ultima.quadril);
@@ -761,7 +770,7 @@ const VITALE_CORE = {
         destaque.style.display = 'none';
       }
     }
- 
+
     el.innerHTML = ms.map(m => {
       const vals = this._medidasCampos
         .filter(c => m[c.id] != null)
@@ -778,7 +787,7 @@ const VITALE_CORE = {
       </div>`;
     }).join('');
   },
- 
+
   buildMedidasChart() {
     const canvas = document.getElementById('medidasChart');
     if (!canvas) return;
@@ -787,17 +796,17 @@ const VITALE_CORE = {
     const ms = [...this.state.medidas].reverse().filter(m => m.cintura || m.abdomen);
     if (ms.length < 2) { if (card) card.style.display = 'none'; return; }
     if (card) card.style.display = '';
- 
+
     const labels = ms.map(m => this.fmt(m.data));
     const ctx = canvas.getContext('2d');
     if (this.state.medidasChartInstance) this.state.medidasChartInstance.destroy();
- 
+
     const series = [
       { key: 'cintura', label: 'Cintura', cor: '#d4a843' },
       { key: 'abdomen', label: 'Abdômen', cor: '#e8924a' },
       { key: 'quadril', label: 'Quadril', cor: '#4a9de8' }
     ].filter(s => ms.some(m => m[s.key] != null));
- 
+
     this.state.medidasChartInstance = new Chart(ctx, {
       type: 'line',
       data: {
@@ -823,13 +832,163 @@ const VITALE_CORE = {
       }
     });
   },
- 
+
+  // =====================================================
+  // BLOCO COMPOSIÇÃO CORPORAL (bioimpedância / InBody / balança)
+  // =====================================================
+  _composicaoCampos: [
+    { id: 'peso', nome: 'Peso', un: 'kg', icone: '⚖️' },
+    { id: 'gordura_pct', nome: '% Gordura', un: '%', icone: '📊' },
+    { id: 'massa_gordura', nome: 'Massa de Gordura', un: 'kg', icone: '🔻' },
+    { id: 'massa_muscular', nome: 'Massa Muscular', un: 'kg', icone: '💪' },
+    { id: 'agua_corporal', nome: 'Água Corporal', un: 'L', icone: '💧' },
+    { id: 'gordura_visceral', nome: 'Gordura Visceral', un: 'nível', icone: '🎯' },
+    { id: 'tmb', nome: 'TMB (metabolismo)', un: 'kcal', icone: '🔥' },
+    { id: 'imc', nome: 'IMC', un: '', icone: '📈' }
+  ],
+
+  async loadComposicao() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('composicao_corporal')
+      .select('id, data, peso, gordura_pct, massa_gordura, massa_muscular, agua_corporal, gordura_visceral, tmb, imc, nota')
+      .eq('user_id', user.id)
+      .order('data', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async salvarComposicao() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
+    const dataInput = document.getElementById('comp_data')?.value;
+    const reg = { user_id: user.id, data: dataInput || this._hojeSP() };
+    let algum = false;
+    this._composicaoCampos.forEach(c => {
+      const v = parseFloat(document.getElementById('comp_' + c.id)?.value);
+      if (!isNaN(v) && v > 0) { reg[c.id] = c.id === 'tmb' ? Math.round(v) : v; algum = true; }
+    });
+    const nota = document.getElementById('comp_nota')?.value.trim();
+    if (nota) reg.nota = nota;
+    if (!algum) return this.showAlert('error', 'Preencha ao menos um campo!');
+
+    try {
+      const { data, error } = await window.sb.from('composicao_corporal').insert(reg).select().single();
+      if (error) throw error;
+      this.state.composicao.push(data);
+      this.state.composicao.sort((a, b) => (b.data > a.data ? 1 : -1));
+      this.renderComposicao();
+      this.buildComposicaoChart();
+      this._invalidateCoachCache();
+      this._composicaoCampos.forEach(c => { const el = document.getElementById('comp_' + c.id); if (el) el.value = ''; });
+      const n = document.getElementById('comp_nota'); if (n) n.value = '';
+      const d = document.getElementById('comp_data'); if (d) d.value = '';
+      this.showAlert('success', '✅ Composição corporal registrada!');
+      this.checkConquistas();
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('composicao_salva');
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('salvar_composicao', e);
+    }
+  },
+
+  async removerComposicao(id) {
+    if (!confirm('Remover este registro de composição?')) return;
+    const { error } = await window.sb.from('composicao_corporal').delete().eq('id', id);
+    if (error) return this.showAlert('error', 'Erro: ' + error.message);
+    this.state.composicao = this.state.composicao.filter(c => c.id !== id);
+    this.renderComposicao();
+    this.buildComposicaoChart();
+  },
+
+  renderComposicao() {
+    const el = document.getElementById('composicaoLista');
+    if (!el) return;
+    const cs = this.state.composicao;
+    if (!cs.length) {
+      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:16px 0">Nenhuma composição registrada ainda 📊</p>';
+      const dest = document.getElementById('composicaoDestaque');
+      if (dest) dest.style.display = 'none';
+      return;
+    }
+
+    // Destaque: massa muscular vs gordura (a métrica-rainha pro GLP-1)
+    const u = cs[0];
+    const dest = document.getElementById('composicaoDestaque');
+    if (dest && (u.massa_muscular || u.massa_gordura)) {
+      dest.style.display = '';
+      dest.innerHTML = `
+        <div style="display:flex;gap:16px;justify-content:center;text-align:center">
+          ${u.massa_muscular ? `<div><div style="font-size:24px;font-weight:700;color:var(--em)">${u.massa_muscular}</div><div style="font-size:10px;color:var(--textm)">💪 Músculo (kg)</div></div>` : ''}
+          ${u.massa_gordura ? `<div><div style="font-size:24px;font-weight:700;color:var(--orange)">${u.massa_gordura}</div><div style="font-size:10px;color:var(--textm)">🔻 Gordura (kg)</div></div>` : ''}
+          ${u.gordura_pct ? `<div><div style="font-size:24px;font-weight:700;color:var(--gold)">${u.gordura_pct}%</div><div style="font-size:10px;color:var(--textm)">📊 % Gordura</div></div>` : ''}
+        </div>`;
+    } else if (dest) {
+      dest.style.display = 'none';
+    }
+
+    el.innerHTML = cs.map(c => {
+      const vals = this._composicaoCampos
+        .filter(f => c[f.id] != null)
+        .map(f => `<span style="margin-right:12px;font-size:13px">${f.icone} ${f.nome}: <strong>${c[f.id]}${f.un ? ' ' + f.un : ''}</strong></span>`)
+        .join('');
+      const notaTxt = c.nota ? `<div style="font-size:12px;color:var(--textm);font-style:italic;margin-top:4px">"${this._escapeHtml(c.nota)}"</div>` : '';
+      return `<div class="med-item">
+        <div class="med-info">
+          <h4 style="font-size:13px;color:var(--textm)">${this.fmt(c.data)}</h4>
+          <div style="margin-top:6px;line-height:1.8">${vals}</div>
+          ${notaTxt}
+        </div>
+        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerComposicao(${c.id})">🗑️</button>
+      </div>`;
+    }).join('');
+  },
+
+  buildComposicaoChart() {
+    const canvas = document.getElementById('composicaoChart');
+    if (!canvas) return;
+    const card = document.getElementById('composicaoChartCard');
+    // Gráfico de músculo vs gordura ao longo do tempo (a história que importa)
+    const cs = [...this.state.composicao].reverse().filter(c => c.massa_muscular || c.massa_gordura);
+    if (cs.length < 2) { if (card) card.style.display = 'none'; return; }
+    if (card) card.style.display = '';
+
+    const labels = cs.map(c => this.fmt(c.data));
+    const ctx = canvas.getContext('2d');
+    if (this.state.composicaoChartInstance) this.state.composicaoChartInstance.destroy();
+
+    this.state.composicaoChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: '💪 Músculo (kg)', data: cs.map(c => c.massa_muscular), borderColor: '#27c47d', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: '#27c47d', tension: 0.4, spanGaps: true },
+          { label: '🔻 Gordura (kg)', data: cs.map(c => c.massa_gordura), borderColor: '#e8924a', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: '#e8924a', tension: 0.4, spanGaps: true }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: true, labels: { color: '#a8accc', font: { size: 11 }, boxWidth: 12, padding: 12 } },
+          tooltip: { backgroundColor: '#0d1223', titleColor: '#d4a843', bodyColor: '#ede8e0', padding: 10,
+            callbacks: { label: (c) => c.raw == null ? null : ` ${c.dataset.label}: ${c.raw} kg` } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 7 } },
+          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, callback: v => v + ' kg' } }
+        }
+      }
+    });
+  },
+
   // Hoje no fuso de São Paulo (evita salvar no dia errado perto da meia-noite)
   _hojeSP() {
     return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
       .toISOString().slice(0, 10);
   },
- 
+
   async loadMoodHoje() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return null;
@@ -843,7 +1002,7 @@ const VITALE_CORE = {
     if (error) throw error;
     return data;
   },
- 
+
   // BLOCO F — Histórico do Diário (últimos 30 dias)
   async loadMoodHistorico() {
     const user = await window.VitaleAuth.getUser();
@@ -858,29 +1017,29 @@ const VITALE_CORE = {
     if (error) throw error;
     return data || [];
   },
- 
+
   async renderMoodHistorico() {
     const card = document.getElementById('moodHistCard');
     if (!card) return;
     let dados;
     try { dados = await this.loadMoodHistorico(); }
     catch (e) { card.style.display = 'none'; return; }
- 
+
     if (!dados || dados.length < 2) { card.style.display = 'none'; return; }
     card.style.display = '';
- 
+
     const labels = dados.map(d => this.fmt(d.data));
     const canvas = document.getElementById('moodHistChart');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (this.state.moodChartInstance) this.state.moodChartInstance.destroy();
- 
+
     const mk = (label, key, cor) => ({
       label, data: dados.map(d => d[key]), borderColor: cor,
       backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2,
       pointBackgroundColor: cor, tension: 0.4, spanGaps: true
     });
- 
+
     this.state.moodChartInstance = new Chart(ctx, {
       type: 'line',
       data: { labels, datasets: [
@@ -905,7 +1064,7 @@ const VITALE_CORE = {
       }
     });
   },
- 
+
   // Escalas de emoji para cada dimensão (índice 1-5)
   _moodEmojis: {
     humor:   ['', '😞', '😕', '😐', '🙂', '😄'],
@@ -913,7 +1072,7 @@ const VITALE_CORE = {
     sono:    ['', '😩', '😪', '😐', '😊', '😴']
   },
   _moodLabels: { humor: 'Humor', energia: 'Energia', sono: 'Sono' },
- 
+
   // Usuário toca num emoji → atualiza o rascunho e re-renderiza
   setMood(dim, valor) {
     if (!['humor', 'energia', 'sono'].includes(dim)) return;
@@ -921,11 +1080,11 @@ const VITALE_CORE = {
     this.state.moodDraft[dim] = this.state.moodDraft[dim] === valor ? 0 : valor;
     this.renderMoodCard();
   },
- 
+
   setMoodNota(texto) {
     this.state.moodDraft.nota = texto;
   },
- 
+
   async salvarMood() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
@@ -961,16 +1120,16 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('salvar_mood', e);
     }
   },
- 
+
   renderMoodCard() {
     const el = document.getElementById('moodCard');
     if (!el) return;
- 
+
     // Se já registrou hoje, mostra resumo + botão editar
     const hoje = this.state.moodHoje;
     const draft = this.state.moodDraft;
     const editando = el.dataset.editando === '1';
- 
+
     if (hoje && !editando) {
       const linha = (dim) => {
         const v = hoje[dim];
@@ -987,13 +1146,13 @@ const VITALE_CORE = {
         ${notaTxt}`;
       return;
     }
- 
+
     // Modo edição/registro: carrega rascunho do registro existente se editando
     if (editando && hoje && draft.humor === 0 && draft.energia === 0 && draft.sono === 0 && !draft.nota) {
       this.state.moodDraft = { humor: hoje.humor || 0, energia: hoje.energia || 0, sono: hoje.sono || 0, nota: hoje.nota || '' };
     }
     const dr = this.state.moodDraft;
- 
+
     const escala = (dim) => {
       const emojis = this._moodEmojis[dim];
       const botoes = [1, 2, 3, 4, 5].map(n => {
@@ -1006,7 +1165,7 @@ const VITALE_CORE = {
         <div style="display:flex;gap:6px;flex-wrap:wrap">${botoes}</div>
       </div>`;
     };
- 
+
     el.innerHTML = `
       <div style="margin-bottom:14px"><strong style="color:var(--text)">📔 Como você está hoje?</strong>
         <span style="color:var(--textm);font-size:12px;margin-left:8px">toque nos emojis</span></div>
@@ -1020,28 +1179,28 @@ const VITALE_CORE = {
         ${hoje ? `<button class="btn btn-secondary btn-small" onclick="VITALE_CORE.cancelarEdicaoMood()" style="padding:9px 16px">Cancelar</button>` : ''}
       </div>`;
   },
- 
+
   editarMood() {
     const el = document.getElementById('moodCard');
     if (el) el.dataset.editando = '1';
     this.state.moodDraft = { humor: 0, energia: 0, sono: 0, nota: '' };
     this.renderMoodCard();
   },
- 
+
   cancelarEdicaoMood() {
     const el = document.getElementById('moodCard');
     if (el) el.dataset.editando = '0';
     this.state.moodDraft = { humor: 0, energia: 0, sono: 0, nota: '' };
     this.renderMoodCard();
   },
- 
+
   _escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   },
- 
+
   // =====================================================
   // DASHBOARD
- 
+
   // =====================================================
   updateDashboard() {
     if (!this.state.weights.length) {
@@ -1052,25 +1211,25 @@ const VITALE_CORE = {
     const first = sorted[0], last = sorted[sorted.length - 1];
     const imc = this.calcIMC(last.peso, this.altura);
     const info = this.getObesidadeInfo(imc);
- 
+
     document.getElementById('hdrPeso').textContent = last.peso.toFixed(1);
     document.getElementById('hdrIMC').textContent = imc;
     const imcVal = document.getElementById('imcValue');
     const imcStat = document.getElementById('imcStatus');
     if (imcVal) imcVal.textContent = imc;
     if (imcStat) { imcStat.textContent = info.grau; imcStat.style.color = info.color; }
- 
+
     const pesoAtual = document.getElementById('pesoAtual');
     const pesoInicial = document.getElementById('pesoInicial');
     if (pesoAtual) pesoAtual.textContent = last.peso.toFixed(1);
     if (pesoInicial) pesoInicial.textContent = first.peso.toFixed(1);
- 
+
     if (sorted.length >= 2) {
       const perda = (first.peso - last.peso).toFixed(1);
       const pct = ((first.peso - last.peso) / first.peso * 100).toFixed(1);
       const dias = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
       const progress = Math.min(Math.max(((first.peso - last.peso) / (first.peso - this.metaKg)) * 100, 0), 100);
- 
+
       document.getElementById('hdrPerda').textContent = perda + ' kg';
       const pTotal = document.getElementById('perdaTotal');
       const dRastro = document.getElementById('diasRastro');
@@ -1084,22 +1243,22 @@ const VITALE_CORE = {
       if (mLabel) mLabel.textContent = this.metaKg.toFixed(1);
       if (mProg) mProg.style.width = progress.toFixed(1) + '%';
       if (mTxt) mTxt.textContent = `Faltam ${Math.max(last.peso - this.metaKg, 0).toFixed(1)} kg para IMC < 30 — ${progress.toFixed(0)}% concluído`;
- 
+
       this.buildWeightChart();
       this.buildIMCChart();
       this.generateCoachMessage();
       this.updateProjecoes();
     }
- 
+
     this.renderHistorico();
     this.renderStreak();
   },
- 
+
   renderEmptyDashboard() {
     const hdr = ['hdrPeso', 'hdrIMC', 'hdrPerda'];
     hdr.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
   },
- 
+
   // =====================================================
   // COACH IA — fallback determinístico
   // =====================================================
@@ -1122,7 +1281,7 @@ const VITALE_CORE = {
     const kgFalta = Math.max(last.peso - this.metaKg, 0).toFixed(1);
     const diasParaMeta = velDiaria > 0 ? Math.ceil((last.peso - this.metaKg) / velDiaria) : null;
     const dataMeta = diasParaMeta ? (() => { const d = new Date(); d.setDate(d.getDate() + diasParaMeta); return d; })() : null;
- 
+
     let tendencia4w = '';
     const last4wDate = new Date(); last4wDate.setDate(last4wDate.getDate() - 28);
     const recent4w = sorted.filter(w => new Date(w.date) >= last4wDate);
@@ -1137,7 +1296,7 @@ const VITALE_CORE = {
         tendencia4w = `<br><br>Últimas 4 semanas: <strong>${velRecente.toFixed(2)} kg/sem</strong> ${sinal}.`;
       }
     }
- 
+
     const nome = this.state.profile?.nome;
     let msg = '';
     if (velDiaria > 0 && diasParaMeta) {
@@ -1146,7 +1305,7 @@ const VITALE_CORE = {
       msg = `Progresso: <strong>${totalPerdido.toFixed(1)} kg eliminados</strong> desde ${this.fmt(first.date)} 🔥<br>Peso atual: <strong>${last.peso.toFixed(1)} kg</strong> → Meta: <strong>${this.metaKg.toFixed(1)} kg</strong>. Faltam <strong>${kgFalta} kg</strong>.${tendencia4w}<br>Adicione mais registros recentes para calcular velocidade e projeção.`;
     }
     el.innerHTML = msg;
- 
+
     if (ft) {
       ft.innerHTML = `
         <div class="coach-stat"><div class="coach-stat-val">${totalPerdido.toFixed(1)} kg</div><div class="coach-stat-lbl">Total Perdido</div></div>
@@ -1155,30 +1314,30 @@ const VITALE_CORE = {
       `;
     }
   },
- 
+
   // Invalida cache do Coach IA (chamar quando dados mudam)
   _invalidateCoachCache() {
     this.state.coachCache = null;
   },
- 
+
   // Coach IA via API com cache de 5min e objetivo no contexto
   async generateCoachMessageAI() {
     const enabled = await window.VitaleFlags.isEnabled('coach_ia');
     if (!enabled) return this.generateCoachMessage();
- 
+
     const sorted = this.getSorted();
     if (sorted.length < 2) return this.generateCoachMessage();
- 
+
     const el = document.getElementById('coachMessage');
     if (!el) return;
- 
+
     // CACHE 5min: economiza tokens em refresh/troca de aba
     const CACHE_TTL = 5 * 60 * 1000;
     if (this.state.coachCache && (Date.now() - this.state.coachCache.when) < CACHE_TTL) {
       el.innerHTML = this.state.coachCache.message;
       return;
     }
- 
+
     const hp = this.state.healthProfile || {};
     // Resumo de exercícios da última semana
     const seteDias = new Date(); seteDias.setDate(seteDias.getDate() - 7);
@@ -1196,7 +1355,7 @@ const VITALE_CORE = {
     const mood = this.state.moodHoje ? {
       humor: this.state.moodHoje.humor, energia: this.state.moodHoje.energia, sono: this.state.moodHoje.sono
     } : null;
- 
+
     const ctx = {
       altura: this.altura,
       meta_kg: this.metaKg.toFixed(1),
@@ -1212,7 +1371,7 @@ const VITALE_CORE = {
       gordura_pct: ultMedida?.gordura_pct || null,
       humor_hoje: mood
     };
- 
+
     try {
       const { data: { session } } = await window.sb.auth.getSession();
       const res = await fetch('/api/chat', {
@@ -1235,14 +1394,14 @@ const VITALE_CORE = {
       this.generateCoachMessage();
     }
   },
- 
+
   // =====================================================
   // CHART
   // =====================================================
   // Filtro de data do dashboard (afeta SÓ a visualização do gráfico,
   // nunca os cálculos de projeção/coach, que sempre usam a série completa)
   dashFiltro: { de: null, ate: null },
- 
+
   aplicarFiltroDashboard() {
     this.dashFiltro = {
       de: document.getElementById('dashFiltroDe')?.value || null,
@@ -1251,7 +1410,7 @@ const VITALE_CORE = {
     this.buildWeightChart();
     this.buildIMCChart();
   },
- 
+
   limparFiltroDashboard() {
     this.dashFiltro = { de: null, ate: null };
     const de = document.getElementById('dashFiltroDe');
@@ -1261,13 +1420,13 @@ const VITALE_CORE = {
     this.buildWeightChart();
     this.buildIMCChart();
   },
- 
+
   buildWeightChart() {
     const canvas = document.getElementById('weightChart');
     if (!canvas) return;
     let sorted = this.getSorted();
     if (sorted.length < 2) return;
- 
+
     // Aplica filtro de data SOMENTE à série exibida no gráfico
     const de = this._normData ? this._normData(this.dashFiltro.de) : this.dashFiltro.de;
     const ate = this._normData ? this._normData(this.dashFiltro.ate) : this.dashFiltro.ate;
@@ -1281,21 +1440,21 @@ const VITALE_CORE = {
       ctxEmpty.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
- 
+
     const first = sorted[0], last = sorted[sorted.length - 1];
     const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
     const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
- 
+
     const allPesos = sorted.map(w => w.peso);
     const pesoMax = Math.max(...allPesos);
     const yMax = Math.ceil(pesoMax + 3);
     const yMin = Math.floor(this.metaKg - 3);
- 
+
     const labels = sorted.map(w => this.fmt(w.date));
     const realData = sorted.map(w => w.peso);
     const projData = new Array(sorted.length - 1).fill(null);
     projData.push(last.peso);
- 
+
     if (velDiaria > 0 && projecaoAtiva) {
       const diasParaMeta = Math.ceil((last.peso - this.metaKg) / velDiaria);
       const projSteps = 4;
@@ -1308,11 +1467,11 @@ const VITALE_CORE = {
         projData.push(Math.max(last.peso - velDiaria * diasOffset, this.metaKg));
       }
     }
- 
+
     const metaLine = new Array(labels.length).fill(this.metaKg);
     const ctx = canvas.getContext('2d');
     if (this.state.chartInstance) this.state.chartInstance.destroy();
- 
+
     this.state.chartInstance = new Chart(ctx, {
       type: 'line',
       data: {
@@ -1341,7 +1500,7 @@ const VITALE_CORE = {
       }
     });
   },
- 
+
   // =====================================================
   // BLOCO IMC — Mini-gráfico de evolução do IMC
   // =====================================================
@@ -1360,7 +1519,7 @@ const VITALE_CORE = {
     }
     const card = document.getElementById('imcChartCard');
     if (card) card.style.display = '';
- 
+
     // Aplica o MESMO filtro de data do dashboard (consistência visual)
     const de = this._normData ? this._normData(this.dashFiltro.de) : this.dashFiltro.de;
     const ate = this._normData ? this._normData(this.dashFiltro.ate) : this.dashFiltro.ate;
@@ -1371,19 +1530,19 @@ const VITALE_CORE = {
       if (this.state.imcChartInstance) { this.state.imcChartInstance.destroy(); this.state.imcChartInstance = null; }
       return;
     }
- 
+
     const h2 = this.altura * this.altura;
     const first = sorted[0], last = sorted[sorted.length - 1];
     const labels = sorted.map(w => this.fmt(w.date));
     const imcData = sorted.map(w => parseFloat(this.calcIMC(w.peso, this.altura)));
- 
+
     // Projeção de IMC: mesma matemática da projeção de peso (peso/altura²)
     const imcMeta = this.metaKg / h2; // IMC alvo (= 30 na config do app)
     const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
     const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
     const projData = new Array(imcData.length - 1).fill(null);
     projData.push(imcData[imcData.length - 1]); // ancora no último ponto real
- 
+
     if (velDiaria > 0 && projecaoAtiva) {
       const diasParaMeta = Math.ceil((last.peso - this.metaKg) / velDiaria);
       const projSteps = 4;
@@ -1397,14 +1556,14 @@ const VITALE_CORE = {
         projData.push(parseFloat((pesoProj / h2).toFixed(1)));
       }
     }
- 
+
     const primeiro = imcData[0];
     // "atual" = último valor REAL (ignora os nulls da projeção)
     const reais = imcData.filter(v => v != null);
     const atual = reais[reais.length - 1];
     const delta = atual - primeiro;
     const info = this.getObesidadeInfo(atual);
- 
+
     // Atualiza o cabeçalho do card (IMC atual + variação + classificação)
     const hdr = document.getElementById('imcChartHeader');
     if (hdr) {
@@ -1424,13 +1583,13 @@ const VITALE_CORE = {
           </div>
         </div>`;
     }
- 
+
     // Faixas de classificação como anotações de fundo (via plugin inline)
     // Considera tanto valores reais quanto projetados para o range do eixo
     const todosValores = [...imcData, ...projData].filter(v => v != null);
     const yMin = Math.max(Math.floor(Math.min(...todosValores) - 1), 15);
     const yMax = Math.ceil(Math.max(...todosValores) + 1);
- 
+
     // Plugin que pinta as faixas de IMC no fundo
     const faixasPlugin = {
       id: 'faixasIMC',
@@ -1468,7 +1627,7 @@ const VITALE_CORE = {
         ctx.restore();
       }
     };
- 
+
     const ctx = canvas.getContext('2d');
     if (this.state.imcChartInstance) this.state.imcChartInstance.destroy();
     this.state.imcChartInstance = new Chart(ctx, {
@@ -1517,13 +1676,13 @@ const VITALE_CORE = {
     const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
     const velSemanal = (velDiaria * 7).toFixed(2);
     const kgFalta = Math.max(last.peso - this.metaKg, 0).toFixed(1);
- 
+
     const setText = (id, v, c) => { const el = document.getElementById(id); if (el) { el.textContent = v; if (c) el.style.color = c; } };
     setText('statusObesidade', info.grau, info.color);
     setText('velocidadePerda', `${velSemanal} kg/semana`);
     setText('imcAtualMetas', imc);
     setText('faltaMeta', `${kgFalta} kg`);
- 
+
     const pt = document.getElementById('projecaoTexto');
     if (pt) {
       if (velDiaria > 0) {
@@ -1534,7 +1693,7 @@ const VITALE_CORE = {
         pt.textContent = 'Adicione registros mais recentes para calcular a projeção.';
       }
     }
- 
+
     const mc = document.getElementById('marcosContainer');
     if (mc) {
       const marcos = [
@@ -1559,7 +1718,7 @@ const VITALE_CORE = {
     }
     this.updateSubmetasUI();
   },
- 
+
   // =====================================================
   // PESOS — CRUD
   // =====================================================
@@ -1568,37 +1727,37 @@ const VITALE_CORE = {
   async addWeight(date, peso, origem = 'manual', hora = null) {
     if (!date || isNaN(peso) || peso <= 0) throw new Error('Dados inválidos');
     if (peso > 500) throw new Error('Peso parece inválido');
- 
+
     const hoje = new Date(); hoje.setHours(23, 59, 59, 999);
     if (new Date(date + 'T23:59:59') > hoje) throw new Error('Data não pode ser futura');
- 
+
     const userId = (await window.VitaleAuth.getUser()).id;
     const payload = { user_id: userId, data: date, peso, origem };
     if (hora) payload.hora = hora;
- 
+
     const { data, error } = await window.sb
       .from('weights')
       .insert(payload)
       .select()
       .single();
     if (error) throw error;
- 
+
     // Adiciona em weightsRaw
     this.state.weightsRaw.unshift({
       id: data.id, date: data.data, hora: data.hora, peso: parseFloat(data.peso),
       origem: data.origem, createdAt: data.created_at
     });
- 
+
     // Recalcula média do dia em state.weights
     this._recomputeDailyAverage(date);
- 
+
     if (window.VitaleAnalytics) window.VitaleAnalytics.track('weight_add', { origem });
     this._invalidateCoachCache();
     this.updateDashboard();
     this.checkConquistas(); // gamificação: pode desbloquear badge de peso/IMC/streak
     return data;
   },
- 
+
   // Recalcula média diária para um dia específico (sincroniza state.weights com weightsRaw)
   _recomputeDailyAverage(date) {
     const doDia = this.state.weightsRaw.filter(w => w.date === date);
@@ -1615,7 +1774,7 @@ const VITALE_CORE = {
       this.state.weights.sort((a, b) => new Date(a.date) - new Date(b.date));
     }
   },
- 
+
   async deletePeso(id) {
     if (!confirm('Remover este registro?')) return;
     const reg = this.state.weightsRaw.find(w => w.id === id);
@@ -1627,17 +1786,17 @@ const VITALE_CORE = {
     this.updateDashboard();
     this.showAlert('success', '✅ Registro removido');
   },
- 
+
   async adicionarPesoManual() {
     const date = document.getElementById('manualDate').value;
     const pesoRaw = document.getElementById('manualPeso').value.replace(',', '.');
     const peso = parseFloat(pesoRaw);
     if (!date || isNaN(peso) || peso <= 0) return this.showAlert('error', 'Preencha data e peso válidos!');
     if (peso > 500) return this.showAlert('error', 'Peso parece inválido (> 500 kg).');
- 
+
     const hoje = new Date(); hoje.setHours(23, 59, 59, 999);
     if (new Date(date + 'T23:59:59') > hoje) return this.showAlert('error', 'Data não pode ser futura.');
- 
+
     // NOVO COMPORTAMENTO: múltiplos pesos/dia são permitidos.
     // Se já existe registro nessa data, apenas avisa e pergunta se quer adicionar OUTRO.
     const doDia = this.state.weightsRaw.filter(w => w.date === date);
@@ -1650,7 +1809,7 @@ const VITALE_CORE = {
       );
       if (!confirma) return;
     }
- 
+
     try {
       // Pega hora atual no formato HH:MM:SS pra desambiguar registros do mesmo dia
       const agora = new Date();
@@ -1666,11 +1825,11 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('add_weight_manual', e);
     }
   },
- 
+
   async importarTexto() {
     const text = document.getElementById('textInput').value;
     if (!text.trim()) return this.showAlert('error', 'Cole os dados primeiro!');
- 
+
     // Aceita múltiplos por dia. Cada linha vira um registro independente.
     const todos = [];
     text.split('\n').forEach(line => {
@@ -1682,13 +1841,13 @@ const VITALE_CORE = {
         }
       }
     });
- 
+
     if (!todos.length) return this.showAlert('error', 'Nenhum dado válido (formato: 2026-03-16: 114.3kg)');
- 
+
     this.state.tempImportacao = todos;
     this.showConfirmModal(todos, 'Dados do Texto');
   },
- 
+
   showConfirmModal(dados, title) {
     // Agrupa por data para visualização
     const porData = {};
@@ -1696,7 +1855,7 @@ const VITALE_CORE = {
       if (!porData[d.date]) porData[d.date] = [];
       porData[d.date].push(d.peso);
     });
- 
+
     const datasOrdenadas = Object.keys(porData).sort();
     const rows = datasOrdenadas.map(date => {
       const pesos = porData[date];
@@ -1715,16 +1874,16 @@ const VITALE_CORE = {
         <div style="font-size:11px;color:var(--textm);margin-top:4px">${pesos.map(p => p.toFixed(1)).join(', ')} kg</div>
       </div>`;
     }).join('');
- 
+
     const aviso = dados.length > Object.keys(porData).length
       ? `<div style="background:rgba(74,157,232,0.08);border-left:3px solid var(--cyan);padding:10px 12px;border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--cyan)">ℹ️ Múltiplas pesagens no mesmo dia serão salvas separadamente. O dashboard mostrará a <strong>média do dia</strong>.</div>`
       : '';
- 
+
     document.getElementById('resumoImportacao').innerHTML =
       `<h4 style="margin:0 0 12px;color:var(--gold)">${title} — ${dados.length} registro(s) em ${Object.keys(porData).length} dia(s)</h4>${aviso}${rows}`;
     document.getElementById('modalConfirmacao').classList.add('active');
   },
- 
+
   // INSERT em lote (não upsert). Múltiplos pesos/dia OK.
   async confirmarImportacao() {
     if (!this.state.tempImportacao) return;
@@ -1751,7 +1910,7 @@ const VITALE_CORE = {
       const count = items.length;
       this.showAlert('success', `✅ ${count} registro(s) importado(s)!`);
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('import_batch', { count });
- 
+
       const imgEl = document.querySelector('#imagePreview img');
       if (imgEl) {
         document.getElementById('imagePreview').innerHTML = '';
@@ -1763,7 +1922,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('import_batch', e);
     }
   },
- 
+
   // =====================================================
   // OCR — FIX: Authorization Bearer + compressão de imagem
   // =====================================================
@@ -1783,7 +1942,7 @@ const VITALE_CORE = {
     };
     reader.readAsDataURL(file);
   },
- 
+
   // Comprime imagem antes de mandar pro OCR.
   // Redimensiona pra máx 1280px (lado maior) e converte pra JPEG q=0.85.
   // Reduz token cost da Anthropic significativamente (até 80%).
@@ -1812,7 +1971,7 @@ const VITALE_CORE = {
       img.src = srcDataUrl;
     });
   },
- 
+
   // Modo do OCR: 'peso' (padrão) ou 'bioimpedancia'
   ocrModo: 'peso',
   setOcrModo(modo) {
@@ -1822,25 +1981,25 @@ const VITALE_CORE = {
     if (bp) bp.style.borderColor = modo === 'peso' ? 'var(--gold)' : 'var(--border)';
     if (bb) bb.style.borderColor = modo === 'bioimpedancia' ? 'var(--gold)' : 'var(--border)';
   },
- 
+
   async processarImagemOCR() {
     const btn = document.getElementById('btnProcessarImagem');
     const ocrDiv = document.getElementById('ocrResult');
     btn.disabled = true;
     btn.textContent = '⏳ Comprimindo imagem...';
     ocrDiv.innerHTML = '';
- 
+
     const imgEl = document.querySelector('#imagePreview img');
     if (!imgEl) { btn.disabled = false; btn.textContent = '🔍 PROCESSAR COM IA'; return; }
- 
+
     try {
       // FIX 4: comprime antes de enviar
       const compressed = await this._compressImageForOCR(imgEl.src);
       const base64 = compressed.split(',')[1];
       const mimeType = 'image/jpeg';
- 
+
       btn.textContent = '⏳ Processando com IA...';
- 
+
       const { data: { session } } = await window.sb.auth.getSession();
       const res = await fetch('/api/ocr', {
         method: 'POST',
@@ -1850,38 +2009,35 @@ const VITALE_CORE = {
         },
         body: JSON.stringify({ image: base64, mime: mimeType, modo: this.ocrModo })
       });
- 
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(`OCR ${res.status}: ${errData.error || res.statusText}`);
       }
- 
+
       const data = await res.json();
- 
+
       // Modo bioimpedância: resposta traz medidas, não peso
       if (this.ocrModo === 'bioimpedancia') {
         const m = data.medidas || data;
-        const campos = ['cintura', 'quadril', 'abdomen', 'peito', 'braco', 'coxa', 'pescoco', 'gordura_pct'];
-        let achou = false;
+        // Campos de COMPOSIÇÃO corporal (não circunferências!)
+        const campos = ['peso', 'gordura_pct', 'massa_gordura', 'massa_muscular', 'agua_corporal', 'gordura_visceral', 'tmb', 'imc'];
+        let achou = 0;
         campos.forEach(c => {
           if (m[c] != null && !isNaN(parseFloat(m[c]))) {
-            const el = document.getElementById('med_' + c);
-            if (el) { el.value = m[c]; achou = true; }
+            const el = document.getElementById('comp_' + c);
+            if (el) { el.value = m[c]; achou++; }
           }
         });
-        // Peso vem junto em muitas balanças de bioimpedância
-        if (m.peso && !isNaN(parseFloat(m.peso))) {
-          const pEl = document.getElementById('manualPeso'); if (pEl) pEl.value = m.peso;
-        }
-        if (achou) {
-          ocrDiv.innerHTML = `<div class="alert alert-success">✅ IA preencheu as medidas abaixo. Revise e clique em "Registrar Medidas".</div>`;
-          document.getElementById('med_cintura')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (achou > 0) {
+          ocrDiv.innerHTML = `<div class="alert alert-success">✅ IA preencheu ${achou} campo(s) abaixo. Revise e clique em "Registrar Composição".</div>`;
+          document.getElementById('comp_peso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else {
-          ocrDiv.innerHTML = `<div class="alert alert-warning">⚠️ Nenhuma medida identificada. Tente um print mais nítido ou preencha manualmente.</div>`;
+          ocrDiv.innerHTML = `<div class="alert alert-warning">⚠️ Nenhum dado identificado. Tente um print mais nítido ou preencha manualmente.</div>`;
         }
         return;
       }
- 
+
       // Modo peso (padrão)
       if (data.registros && data.registros.length > 0) {
         const items = data.registros.map(r => ({ ...r, origem: 'ocr' }));
@@ -1900,32 +2056,32 @@ const VITALE_CORE = {
       btn.textContent = '🔍 PROCESSAR COM IA';
     }
   },
- 
+
   // =====================================================
   // SUBMETAS — CRUD
   // =====================================================
   selectedSubIcon: '🎯',
- 
+
   selectSubIcon(el, icon) {
     this.selectedSubIcon = icon;
     document.querySelectorAll('[onclick*="selectSubIcon"]').forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
   },
- 
+
   async adicionarSubmeta() {
     const nome = document.getElementById('subNome').value.trim();
     const peso = parseFloat(document.getElementById('subPeso').value);
     const data = document.getElementById('subData').value;
     if (!nome) return this.showAlert('error', 'Dê um nome à submeta!');
     if (isNaN(peso) || peso <= 0) return this.showAlert('error', 'Informe o peso alvo!');
- 
+
     try {
       const userId = (await window.VitaleAuth.getUser()).id;
       const { data: row, error } = await window.sb.from('submetas').insert({
         user_id: userId, nome, peso_alvo: peso, data_alvo: data || null, icone: this.selectedSubIcon
       }).select().single();
       if (error) throw error;
- 
+
       this.state.submetas.unshift({
         id: row.id, nome, pesoAlvo: peso, dataAlvo: data || null, icone: this.selectedSubIcon, atingida: false
       });
@@ -1939,7 +2095,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('add_submeta', e);
     }
   },
- 
+
   async removerSubmeta(id) {
     if (!confirm('Remover esta submeta?')) return;
     const { error } = await window.sb.from('submetas').delete().eq('id', id);
@@ -1947,7 +2103,7 @@ const VITALE_CORE = {
     this.state.submetas = this.state.submetas.filter(s => s.id !== id);
     this.updateSubmetasUI();
   },
- 
+
   updateSubmetasUI() {
     const el = document.getElementById('submetasContainer');
     if (!el) return;
@@ -1956,13 +2112,13 @@ const VITALE_CORE = {
       return;
     }
     if (!this.state.weights.length) { el.innerHTML = ''; return; }
- 
+
     const sorted = this.getSorted();
     const first = sorted[0];
     const current = sorted[sorted.length - 1].peso;
     const diasDecorridos = sorted.length >= 2 ? Math.max(Math.floor((new Date(sorted[sorted.length - 1].date) - new Date(first.date)) / 86400000), 1) : 1;
     const velD = sorted.length >= 2 ? (first.peso - current) / diasDecorridos : 0;
- 
+
     el.innerHTML = this.state.submetas.map(s => {
       const reached = current <= s.pesoAlvo;
       const falta = Math.max(current - s.pesoAlvo, 0).toFixed(1);
@@ -1972,7 +2128,7 @@ const VITALE_CORE = {
       const dataEst = diasEst ? (() => { const d = new Date(); d.setDate(d.getDate() + diasEst); return d; })() : null;
       const barColor = reached ? '#27c47d' : '#4a9de8';
       const targetDisplay = s.dataAlvo ? this.fmtStr(s.dataAlvo) : (dataEst ? 'Est. ' + this.fmtLong(dataEst) : '—');
- 
+
       return `<div class="submeta-item ${reached ? 'reached' : ''}">
         <div class="submeta-header">
           <div>
@@ -1995,12 +2151,12 @@ const VITALE_CORE = {
       </div>`;
     }).join('');
   },
- 
+
   // =====================================================
   // MEDICAÇÕES — CRUD
   // =====================================================
   currentFreq: 'diario',
- 
+
   selectFreq(type) {
     this.currentFreq = type;
     ['diario', 'semanal', 'especifico'].forEach(t => {
@@ -2010,20 +2166,20 @@ const VITALE_CORE = {
       if (pnl) pnl.classList.toggle('open', t === type);
     });
   },
- 
+
   toggleChip(el, store, val) {
     el.classList.toggle('selected');
     const arr = this.state[store];
     const idx = arr.indexOf(val);
     if (idx >= 0) arr.splice(idx, 1); else arr.push(val);
   },
- 
+
   selectDiaSemana(el, dia) {
     document.querySelectorAll('#diasSemanaChips .checkbox-chip').forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
     this.state.diaSemana = dia;
   },
- 
+
   addCustomHorario() {
     const val = document.getElementById('outroHorario').value;
     if (!val || this.state.horarios.includes(val)) return;
@@ -2035,12 +2191,12 @@ const VITALE_CORE = {
     document.getElementById('horariosChips').appendChild(chip);
     document.getElementById('outroHorario').value = '';
   },
- 
+
   async salvarAgendamento() {
     const nome = document.getElementById('medNome').value.trim();
     const dose = document.getElementById('medDose').value.trim();
     if (!nome || !dose) return this.showAlert('error', 'Preencha nome e dose!');
- 
+
     let detalhes = {};
     if (this.currentFreq === 'diario') {
       if (!this.state.horarios.length) return this.showAlert('error', 'Selecione pelo menos um horário!');
@@ -2052,14 +2208,14 @@ const VITALE_CORE = {
       if (!this.state.diasEsp.length) return this.showAlert('error', 'Selecione pelo menos um dia!');
       detalhes = { dias: [...this.state.diasEsp], hora: document.getElementById('horarioEspecifico').value };
     }
- 
+
     try {
       const userId = (await window.VitaleAuth.getUser()).id;
       const { data, error } = await window.sb.from('medicacoes').insert({
         user_id: userId, nome, dose, frequencia: this.currentFreq, detalhes
       }).select().single();
       if (error) throw error;
- 
+
       this.state.medicacoes.unshift(data);
       this.updateAgendamentos();
       document.getElementById('medNome').value = '';
@@ -2072,7 +2228,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('add_medicacao', e);
     }
   },
- 
+
   updateAgendamentos() {
     const el = document.getElementById('agendadosContainer');
     if (!el) return;
@@ -2096,7 +2252,7 @@ const VITALE_CORE = {
       </div>`;
     }).join('');
   },
- 
+
   async removerAgendamento(id) {
     if (!confirm('Remover este agendamento?')) return;
     const { error } = await window.sb.from('medicacoes').delete().eq('id', id);
@@ -2104,14 +2260,14 @@ const VITALE_CORE = {
     this.state.medicacoes = this.state.medicacoes.filter(m => m.id !== id);
     this.updateAgendamentos();
   },
- 
+
   // =====================================================
   // HISTÓRICO
   // =====================================================
   // Estado de UI do histórico (filtro de data + seleção múltipla)
   histFiltro: { de: null, ate: null },
   histSelecionados: new Set(),
- 
+
   // Aplica o filtro de datas vindo dos inputs e re-renderiza
   aplicarFiltroHistorico() {
     const de = document.getElementById('histFiltroDe')?.value || null;
@@ -2119,7 +2275,7 @@ const VITALE_CORE = {
     this.histFiltro = { de, ate };
     this.renderHistorico();
   },
- 
+
   limparFiltroHistorico() {
     this.histFiltro = { de: null, ate: null };
     const de = document.getElementById('histFiltroDe');
@@ -2128,14 +2284,14 @@ const VITALE_CORE = {
     if (ate) ate.value = '';
     this.renderHistorico();
   },
- 
+
   // Normaliza qualquer formato de data para 'YYYY-MM-DD' (robusto contra
   // datas que venham como ISO completo, com timezone, etc.)
   _normData(d) {
     if (!d) return '';
     return String(d).slice(0, 10);
   },
- 
+
   // Retorna os registros raw já filtrados pela faixa de datas
   _histRawFiltrado() {
     let raw = [...this.state.weightsRaw];
@@ -2145,13 +2301,13 @@ const VITALE_CORE = {
     if (ate) raw = raw.filter(w => this._normData(w.date) <= ate);
     return raw;
   },
- 
+
   toggleHistSelecionado(id, checked) {
     if (checked) this.histSelecionados.add(id);
     else this.histSelecionados.delete(id);
     this._atualizarBarraSelecao();
   },
- 
+
   toggleHistSelecionarTodos(checked) {
     const raw = this._histRawFiltrado();
     if (checked) raw.forEach(w => this.histSelecionados.add(w.id));
@@ -2160,7 +2316,7 @@ const VITALE_CORE = {
     document.querySelectorAll('.hist-check').forEach(cb => { cb.checked = checked; });
     this._atualizarBarraSelecao();
   },
- 
+
   _atualizarBarraSelecao() {
     const bar = document.getElementById('histAcoesSelecao');
     const cnt = document.getElementById('histSelCount');
@@ -2168,7 +2324,7 @@ const VITALE_CORE = {
     if (bar) bar.style.display = n > 0 ? 'flex' : 'none';
     if (cnt) cnt.textContent = n;
   },
- 
+
   // Exclui em lote todos os pesos selecionados
   async excluirPesosSelecionados() {
     const ids = [...this.histSelecionados];
@@ -2192,7 +2348,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('delete_pesos_lote', e);
     }
   },
- 
+
   renderHistorico() {
     const el = document.getElementById('pesoTable');
     if (!el) return;
@@ -2201,13 +2357,13 @@ const VITALE_CORE = {
       this._atualizarBarraSelecao();
       return;
     }
- 
+
     // Usa state.weights (média diária) para calcular variação dia-a-dia e %
     const sortedDaily = this.getSorted();
     const first = sortedDaily[0];
     const dailyByDate = {};
     sortedDaily.forEach((w, i) => { dailyByDate[w.date] = { peso: w.peso, idx: i }; });
- 
+
     // Aplica filtro de datas
     const raw = this._histRawFiltrado();
     if (!raw.length) {
@@ -2215,10 +2371,10 @@ const VITALE_CORE = {
       this._atualizarBarraSelecao();
       return;
     }
- 
+
     // Remove da seleção ids que sumiram do filtro (evita excluir o que não está à vista)
     this.histSelecionados.forEach(id => { if (!raw.some(w => w.id === id)) this.histSelecionados.delete(id); });
- 
+
     el.innerHTML = raw.map(w => {
       const imcW = this.calcIMC(w.peso, this.altura);
       const daily = dailyByDate[w.date];
@@ -2235,7 +2391,7 @@ const VITALE_CORE = {
       const multCount = raw.filter(r => r.date === w.date).length;
       const multBadge = multCount > 1 ? ` <span style="color:var(--cyan);font-size:10px;background:rgba(74,157,232,0.1);padding:1px 6px;border-radius:8px">${multCount}×</span>` : '';
       const checked = this.histSelecionados.has(w.id) ? 'checked' : '';
- 
+
       return `<tr>
         <td style="text-align:center"><input type="checkbox" class="hist-check" ${checked} style="width:18px;height:18px;cursor:pointer;accent-color:var(--gold)" onchange="VITALE_CORE.toggleHistSelecionado(${w.id}, this.checked)"></td>
         <td>${this.fmt(w.date)}${horaTxt}${multBadge}</td>
@@ -2246,7 +2402,7 @@ const VITALE_CORE = {
         <td><button class="btn btn-danger btn-small" onclick="VITALE_CORE.deletePeso(${w.id})">🗑️</button></td>
       </tr>`;
     }).join('');
- 
+
     // Feedback visual do filtro: mostra quantos de quantos
     const info = document.getElementById('histFiltroInfo');
     if (info) {
@@ -2261,13 +2417,13 @@ const VITALE_CORE = {
         info.style.display = 'none';
       }
     }
- 
+
     // Sincroniza o "selecionar todos" e a barra de ações
     const selAll = document.getElementById('histSelAll');
     if (selAll) selAll.checked = raw.length > 0 && raw.every(w => this.histSelecionados.has(w.id));
     this._atualizarBarraSelecao();
   },
- 
+
   // =====================================================
   // RELATÓRIO PDF
   // =====================================================
@@ -2312,7 +2468,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('pdf_gen', err);
     }
   },
- 
+
   // =====================================================
   // HEALTH PROFILE — Aba Saúde
   // =====================================================
@@ -2321,12 +2477,12 @@ const VITALE_CORE = {
     if (!hp) return;
     const setVal = (id, v) => { const el = document.getElementById(id); if (el && v !== null && v !== undefined) el.value = v; };
     const setCheck = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
- 
+
     setVal('hPaSistolica', hp.pa_sistolica);
     setVal('hPaDiastolica', hp.pa_diastolica);
     setVal('hGlicemia', hp.glicemia_jejum);
     setVal('hFc', hp.fc_repouso);
- 
+
     setCheck('hMedGlp1', hp.med_glp1);
     setCheck('hMedAntiHip', hp.med_anti_hipertensivo);
     setCheck('hMedEstatina', hp.med_estatina);
@@ -2336,12 +2492,12 @@ const VITALE_CORE = {
     setCheck('hMedVitaminas', hp.med_vitaminas);
     setVal('hMedGlp1Nome', hp.med_glp1_nome);
     setVal('hMedOutros', hp.med_outros);
- 
+
     if (hp.med_glp1) {
       const wrap = document.getElementById('hMedGlp1NomeWrap');
       if (wrap) wrap.style.display = 'block';
     }
- 
+
     setCheck('hCondDt2', hp.cond_diabetes_t2);
     setCheck('hCondDt1', hp.cond_diabetes_t1);
     setCheck('hCondHip', hp.cond_hipertensao);
@@ -2352,12 +2508,12 @@ const VITALE_CORE = {
     setCheck('hCondSop', hp.cond_sop);
     setCheck('hCondEsteatose', hp.cond_esteatose);
     setVal('hCondOutros', hp.cond_outros);
- 
+
     setVal('hNivelAtividade', hp.nivel_atividade);
     setVal('hFreqTreino', hp.freq_treino);
     setVal('hSono', hp.horas_sono);
     setVal('hStress', hp.nivel_stress);
- 
+
     // Bloco A.1: objetivo + urgência na aba Saúde
     setVal('hObjetivo', hp.objetivo);
     setVal('hUrgencia', hp.urgencia);
@@ -2367,7 +2523,7 @@ const VITALE_CORE = {
     const outroWrap = document.getElementById('hObjetivoOutroWrap');
     if (outroWrap) outroWrap.style.display = hp.objetivo === 'outro' ? 'block' : 'none';
   },
- 
+
   async salvarHealthProfile() {
     try {
       const user = await window.VitaleAuth.getUser();
@@ -2376,7 +2532,7 @@ const VITALE_CORE = {
       const getInt = (id) => { const v = document.getElementById(id)?.value; return v ? parseInt(v) : null; };
       const getStr = (id) => { const v = document.getElementById(id)?.value?.trim(); return v || null; };
       const getCheck = (id) => !!document.getElementById(id)?.checked;
- 
+
       const data = {
         id: user.id,
         pa_sistolica: getInt('hPaSistolica'),
@@ -2411,10 +2567,10 @@ const VITALE_CORE = {
         urgencia: getStr('hUrgencia'),
         updated_at: new Date().toISOString()
       };
- 
+
       const { error } = await window.sb.from('health_profile').upsert(data);
       if (error) throw error;
- 
+
       this.state.healthProfile = data;
       this._invalidateCoachCache();
       this.showAlert('success', '✅ Perfil de saúde salvo!');
@@ -2424,13 +2580,13 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('save_health_profile', e);
     }
   },
- 
+
   // =====================================================
   // ONBOARDING WIZARD — 6 telas (Bloco A.1: + Objetivos)
   // =====================================================
   onbCurrentStep: 1,
   ONB_TOTAL_STEPS: 6,
- 
+
   showOnboarding(prePreenchido = false) {
     try {
       this.onbCurrentStep = 1;
@@ -2452,33 +2608,33 @@ const VITALE_CORE = {
       if (modal) modal.classList.add('active');
     }
   },
- 
+
   // Reabre o onboarding pré-preenchido com dados atuais (botão "Refazer")
   reabrirOnboarding() {
     if (!confirm('Reabrir o questionário inicial com seus dados atuais para revisar/editar?\n\nVocê pode pular etapas que não quiser alterar.')) return;
     this.showOnboarding(true);
   },
- 
+
   _prefillOnboardingFromState() {
     const p = this.state.profile || {};
     const hp = this.state.healthProfile || {};
     const weights = Array.isArray(this.state.weights) ? this.state.weights : [];
     const setVal = (id, v) => { const el = document.getElementById(id); if (el && v != null && v !== '') el.value = v; };
     const setCheck = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
- 
+
     // Tela 1
     setVal('onbNome', p.nome);
     setVal('onbAltura', p.altura);
     if (weights.length) setVal('onbPeso', weights[weights.length - 1].peso);
     setVal('onbDataNasc', hp.data_nascimento);
     setVal('onbSexo', hp.sexo);
- 
+
     // Tela 2
     setVal('onbPaSist', hp.pa_sistolica);
     setVal('onbPaDiast', hp.pa_diastolica);
     setVal('onbGlicemia', hp.glicemia_jejum);
     setVal('onbFc', hp.fc_repouso);
- 
+
     // Tela 3
     setCheck('onbMedGlp1', hp.med_glp1);
     setCheck('onbMedAntiHip', hp.med_anti_hipertensivo);
@@ -2489,7 +2645,7 @@ const VITALE_CORE = {
     setCheck('onbMedVitaminas', hp.med_vitaminas);
     setVal('onbMedGlp1Nome', hp.med_glp1_nome);
     if (hp.med_glp1) { const w = document.getElementById('onbMedGlp1Wrap'); if (w) w.style.display = 'block'; }
- 
+
     // Tela 4
     setCheck('onbCondDt2', hp.cond_diabetes_t2);
     setCheck('onbCondDt1', hp.cond_diabetes_t1);
@@ -2499,13 +2655,13 @@ const VITALE_CORE = {
     setCheck('onbCondApneia', hp.cond_apneia_sono);
     setCheck('onbCondSop', hp.cond_sop);
     setCheck('onbCondEsteatose', hp.cond_esteatose);
- 
+
     // Tela 5
     setVal('onbNivelAtividade', hp.nivel_atividade);
     setVal('onbFreqTreino', hp.freq_treino);
     setVal('onbSono', hp.horas_sono);
     setVal('onbStress', hp.nivel_stress);
- 
+
     // Tela 6 (objetivo)
     if (hp.objetivo) {
       const card = document.querySelector(`.objetivo-card[data-objetivo="${hp.objetivo}"]`);
@@ -2521,36 +2677,36 @@ const VITALE_CORE = {
       }
     }
   },
- 
+
   onbRenderStep() {
     document.querySelectorAll('.onb-tela').forEach(t => t.style.display = 'none');
     const tela = document.querySelector(`.onb-tela[data-tela="${this.onbCurrentStep}"]`);
     if (tela) tela.style.display = 'block';
- 
+
     document.querySelectorAll('.onb-step').forEach((s, i) => {
       s.classList.remove('current', 'done');
       const idx = i + 1;
       if (idx < this.onbCurrentStep) s.classList.add('done');
       else if (idx === this.onbCurrentStep) s.classList.add('current');
     });
- 
+
     const btnVoltar = document.getElementById('onbVoltar');
     if (btnVoltar) btnVoltar.style.display = this.onbCurrentStep > 1 ? 'inline-block' : 'none';
- 
+
     const avancar = document.getElementById('onbAvancar');
     if (avancar) avancar.textContent = this.onbCurrentStep === this.ONB_TOTAL_STEPS ? 'Finalizar 🎉' : 'Continuar →';
- 
+
     const pular = document.getElementById('onbPular');
     if (pular) pular.style.display = this.onbCurrentStep === 1 ? 'none' : 'inline';
   },
- 
+
   onbVoltar() {
     if (this.onbCurrentStep > 1) {
       this.onbCurrentStep--;
       this.onbRenderStep();
     }
   },
- 
+
   onbPular() {
     if (this.onbCurrentStep < this.ONB_TOTAL_STEPS) {
       this.onbCurrentStep++;
@@ -2559,24 +2715,24 @@ const VITALE_CORE = {
       this.onbFinalizar();
     }
   },
- 
+
   // Selecionar objetivo na tela 6
   selectObjetivo(el, objetivo) {
     document.querySelectorAll('.objetivo-card').forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
     this.state.objetivoEscolhido = objetivo;
- 
+
     const urWrap = document.getElementById('onbUrgenciaWrap');
     const outroWrap = document.getElementById('onbObjetivoOutroWrap');
     if (urWrap) urWrap.style.display = objetivo === 'emagrecimento' ? 'block' : 'none';
     if (outroWrap) outroWrap.style.display = objetivo === 'outro' ? 'block' : 'none';
   },
- 
+
   selectUrgencia(el, urgencia) {
     document.querySelectorAll('.urgencia-card').forEach(c => c.classList.remove('selected'));
     el.classList.add('selected');
   },
- 
+
   async onbAvancar() {
     if (this.onbCurrentStep === 1) {
       const nome = document.getElementById('onbNome').value.trim();
@@ -2586,7 +2742,7 @@ const VITALE_CORE = {
       if (isNaN(altura) || altura < 1.2 || altura > 2.5) return this.showAlert('error', 'Altura inválida (ex: 1.75)');
       if (isNaN(peso) || peso < 30 || peso > 500) return this.showAlert('error', 'Peso inválido');
     }
- 
+
     if (this.onbCurrentStep < this.ONB_TOTAL_STEPS) {
       this.onbCurrentStep++;
       this.onbRenderStep();
@@ -2594,7 +2750,7 @@ const VITALE_CORE = {
       await this.onbFinalizar();
     }
   },
- 
+
   async onbFinalizar() {
     try {
       const user = await window.VitaleAuth.getUser();
@@ -2602,19 +2758,19 @@ const VITALE_CORE = {
       const getInt = (id) => { const v = document.getElementById(id)?.value; return v ? parseInt(v) : null; };
       const getStr = (id) => { const v = document.getElementById(id)?.value?.trim(); return v || null; };
       const getCheck = (id) => !!document.getElementById(id)?.checked;
- 
+
       // 1) profile
       const nome = document.getElementById('onbNome').value.trim();
       const altura = parseFloat((document.getElementById('onbAltura').value || '').replace(',', '.'));
       const peso = parseFloat((document.getElementById('onbPeso').value || '').replace(',', '.'));
       await window.sb.from('profiles').update({ nome, altura, updated_at: new Date().toISOString() }).eq('id', user.id);
- 
+
       // 6) Objetivo (tela nova)
       const objetivo = this.state.objetivoEscolhido || null;
       const urgenciaEl = document.querySelector('.urgencia-card.selected');
       const urgencia = (objetivo === 'emagrecimento' && urgenciaEl) ? urgenciaEl.dataset.urgencia : null;
       const objetivoOutro = (objetivo === 'outro') ? getStr('onbObjetivoOutro') : null;
- 
+
       // 2) health_profile
       const hpData = {
         id: user.id,
@@ -2650,7 +2806,7 @@ const VITALE_CORE = {
         updated_at: new Date().toISOString()
       };
       await window.sb.from('health_profile').upsert(hpData);
- 
+
       // 3) Primeiro peso (INSERT, não upsert — múltiplos/dia OK)
       const today = new Date().toISOString().slice(0, 10);
       // Só insere peso se não houver registro recente do dia
@@ -2658,7 +2814,7 @@ const VITALE_CORE = {
       if (!jaTemHoje) {
         await window.sb.from('weights').insert({ user_id: user.id, data: today, peso, origem: 'manual' });
       }
- 
+
       // 4) Se objetivo = emagrecimento E IMC >= 30, oferecer gerar metas auto
       const imcAtual = peso / (altura * altura);
       let geraMetasNoFinal = false;
@@ -2669,21 +2825,21 @@ const VITALE_CORE = {
           `Cada marco vira uma submeta com data estimada (baseada em ${urgencia || 'ritmo moderado'}).`
         );
       }
- 
+
       // 5) Reload completo do state
       this.state.profile = { ...this.state.profile, nome, altura };
       this.state.healthProfile = hpData;
       this.state.weights = await this.loadWeights();
       this.state.weightsRaw = await this.loadWeightsRaw();
- 
+
       this.closeModal('modalOnboarding');
       this.renderHeader();
       this._invalidateCoachCache();
- 
+
       if (geraMetasNoFinal) {
         await this.gerarMetasAutomaticas(/* silencioso */ true);
       }
- 
+
       this.updateDashboard();
       this.fillHealthProfileForm();
       this.showAlert('success', `Bem-vindo(a), ${nome}! 🎉`);
@@ -2693,7 +2849,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('onboarding_final', e);
     }
   },
- 
+
   // =====================================================
   // BLOCO A.1: GERAR METAS AUTOMÁTICAS EM CASCATA
   // =====================================================
@@ -2709,11 +2865,11 @@ const VITALE_CORE = {
     const imcAtual = pesoAtual / (altura * altura);
     const hp = this.state.healthProfile || {};
     const urgencia = hp.urgencia || 'moderada';
- 
+
     // kg/semana esperada conforme urgência (estimativa conservadora)
     const ritmoKgSem = urgencia === 'sem_pressa' ? 0.4 :
                       urgencia === 'acelerada' ? 0.85 : 0.6;
- 
+
     // Marcos em cascata (do mais distante ao mais próximo)
     const todosMarcos = [
       { imc: 40, label: 'Sair de Obesidade Grau III', icone: '🎯' },
@@ -2722,22 +2878,22 @@ const VITALE_CORE = {
       { imc: 25, label: 'Atingir Peso Normal (IMC < 25)', icone: '🩺' },
       { imc: 22, label: 'Peso Normal Ideal (IMC 22)', icone: '⭐' }
     ];
- 
+
     // Filtra apenas marcos AINDA NÃO atingidos
     const marcosFalta = todosMarcos.filter(m => imcAtual > m.imc);
     if (!marcosFalta.length) {
       if (!silencioso) this.showAlert('info', 'Você já está abaixo de todos os marcos! 🎉');
       return;
     }
- 
+
     // Para cada marco, calcula peso alvo e data estimada
     const userId = (await window.VitaleAuth.getUser()).id;
     const hoje = new Date();
     const novasSubmetas = [];
- 
+
     // Set de submetas existentes (evitar duplicar)
     const nomesExistentes = new Set(this.state.submetas.map(s => s.nome));
- 
+
     let pesoPartida = pesoAtual;
     for (const m of marcosFalta) {
       if (nomesExistentes.has(m.label)) continue;
@@ -2748,7 +2904,7 @@ const VITALE_CORE = {
       const dataAlvo = new Date(hoje);
       dataAlvo.setDate(dataAlvo.getDate() + diasEstimados);
       const dataStr = dataAlvo.toISOString().slice(0, 10);
- 
+
       novasSubmetas.push({
         user_id: userId,
         nome: m.label,
@@ -2758,12 +2914,12 @@ const VITALE_CORE = {
       });
       pesoPartida = pesoAlvo;
     }
- 
+
     if (!novasSubmetas.length) {
       if (!silencioso) this.showAlert('info', 'Todas as metas em cascata já existem nas suas submetas.');
       return;
     }
- 
+
     try {
       const { data, error } = await window.sb.from('submetas').insert(novasSubmetas).select();
       if (error) throw error;
@@ -2783,7 +2939,7 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('metas_auto', e);
     }
   },
- 
+
   // =====================================================
   // SETTINGS
   // =====================================================
@@ -2792,7 +2948,7 @@ const VITALE_CORE = {
     document.getElementById('nomeInput').value = this.state.profile?.nome || '';
     document.getElementById('modalSettings').classList.add('active');
   },
- 
+
   async salvarPerfil() {
     const h = parseFloat(document.getElementById('alturaInput').value.replace(',', '.'));
     const n = document.getElementById('nomeInput').value.trim();
@@ -2808,7 +2964,7 @@ const VITALE_CORE = {
     this.renderHeader();
     this.showAlert('success', '✅ Perfil salvo!');
   },
- 
+
   // =====================================================
   // BACKUP JSON
   // =====================================================
@@ -2833,7 +2989,7 @@ const VITALE_CORE = {
     URL.revokeObjectURL(url);
     this.showAlert('success', '✅ Backup exportado!');
   },
- 
+
   // =====================================================
   // HELPERS UI
   // =====================================================
@@ -2843,9 +2999,9 @@ const VITALE_CORE = {
     document.getElementById(tabName).classList.add('active');
     e.currentTarget.classList.add('active');
   },
- 
+
   closeModal(id) { document.getElementById(id).classList.remove('active'); },
- 
+
   showAlert(type, msg) {
     const el = document.createElement('div');
     el.className = `alert alert-${type}`;
@@ -2856,7 +3012,7 @@ const VITALE_CORE = {
       setTimeout(() => el.remove(), 4500);
     }
   },
- 
+
   async signOut() {
     if (!confirm('Sair da sua conta?')) return;
     try {
@@ -2872,7 +3028,7 @@ const VITALE_CORE = {
       window.location.href = '/';
     }
   },
- 
+
   // Handler para mudança do select de objetivo na aba Saúde
   onSaudeObjetivoChange() {
     const val = document.getElementById('hObjetivo')?.value;
@@ -2882,5 +3038,5 @@ const VITALE_CORE = {
     if (outroWrap) outroWrap.style.display = val === 'outro' ? 'block' : 'none';
   }
 };
- 
+
 window.VITALE_CORE = VITALE_CORE;
