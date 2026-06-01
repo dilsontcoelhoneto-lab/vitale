@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco Exercicios · 2026-06-01';
+const VITALE_VERSION = 'v4.2 · Bloco Medidas · 2026-06-01';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -28,12 +28,14 @@ const VITALE_CORE = {
     chartInstance: null,
     imcChartInstance: null,
     moodChartInstance: null,
+    medidasChartInstance: null,
     coachCache: null,     // {message, when} — cache de 5min do Coach IA
     objetivoEscolhido: null,  // estado temporário do wizard
     moodHoje: null,       // registro de hoje (Bloco B)
     moodDraft: { humor: 0, energia: 0, sono: 0, nota: '' }, // seleção em edição
     conquistas: [],       // badges desbloqueados (Bloco Gamificação)
-    exercicios: []        // atividades físicas registradas (Bloco Exercícios)
+    exercicios: [],       // atividades físicas registradas (Bloco Exercícios)
+    medidas: []           // medidas corporais (Bloco Medidas)
   },
  
   // =====================================================
@@ -57,11 +59,12 @@ const VITALE_CORE = {
         this.loadHealthProfile(),
         this.loadMoodHoje(),
         this.loadConquistas(),
-        this.loadExercicios()
+        this.loadExercicios(),
+        this.loadMedidas()
       ]);
  
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios'];
-      const fallbacks = [null, [], [], [], [], null, null, [], []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -80,6 +83,7 @@ const VITALE_CORE = {
       this.state.moodHoje = val[6];
       this.state.conquistas = val[7] || [];
       this.state.exercicios = val[8] || [];
+      this.state.medidas = val[9] || [];
  
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -95,6 +99,9 @@ const VITALE_CORE = {
       // Checa conquistas no load (sem celebrar as antigas — só registra novas em silêncio na 1ª vez)
       try { this.checkConquistas(true); } catch (e) { console.warn('checkConquistas', e); }
       try { this.renderExercicios(); } catch (e) { console.warn('renderExercicios', e); }
+      try { this.renderMedidas(); } catch (e) { console.warn('renderMedidas', e); }
+      try { this.buildMedidasChart(); } catch (e) { console.warn('buildMedidasChart', e); }
+      try { this.renderBadgeResumo(); } catch (e) { console.warn('renderBadgeResumo', e); }
  
       try { window.VitaleAnalytics.track('app_open'); } catch (e) {}
  
@@ -353,7 +360,8 @@ const VITALE_CORE = {
     { id: 'diario_1', icone: '📔', nome: 'Querido Diário', desc: 'Primeiro registro de humor', cond: c => c.temMood },
     { id: 'submeta_1', icone: '🚩', nome: 'Primeira Submeta', desc: 'Atingiu uma submeta', cond: c => c.submetaAtingida },
     { id: 'exerc_1', icone: '💪', nome: 'Bora Treinar', desc: 'Primeiro exercício registrado', cond: c => c.temExercicio },
-    { id: 'exerc_semana', icone: '🔥', nome: 'Semana Ativa', desc: '5 treinos numa semana', cond: c => c.treinosSemana >= 5 }
+    { id: 'exerc_semana', icone: '🔥', nome: 'Semana Ativa', desc: '5 treinos numa semana', cond: c => c.treinosSemana >= 5 },
+    { id: 'medidas_1', icone: '📏', nome: 'Conhece o Corpo', desc: 'Primeira medida corporal registrada', cond: c => c.temMedida }
   ],
  
   // Monta o contexto e desbloqueia badges novos. silencioso=true não celebra
@@ -371,7 +379,8 @@ const VITALE_CORE = {
       temMood: !!this.state.moodHoje,
       submetaAtingida: this.state.submetas.some(s => sorted.length && sorted[sorted.length - 1].peso <= s.pesoAlvo),
       temExercicio: this.state.exercicios.length > 0,
-      treinosSemana: (() => { const d = new Date(); d.setDate(d.getDate() - 7); return this.state.exercicios.filter(e => new Date(e.data) >= d).length; })()
+      treinosSemana: (() => { const d = new Date(); d.setDate(d.getDate() - 7); return this.state.exercicios.filter(e => new Date(e.data) >= d).length; })(),
+      temMedida: this.state.medidas.length > 0
     };
  
     const jaTem = new Set(this.state.conquistas.map(c => c.badge_id));
@@ -448,6 +457,28 @@ const VITALE_CORE = {
         <div style="font-size:11px;color:${got ? 'var(--text)' : 'var(--textm)'};font-weight:${got ? '600' : '400'}">${b.nome}</div>
       </div>`;
     }).join('');
+    this.renderBadgeResumo();
+  },
+ 
+  // Resumo compacto de conquistas no topo do Dashboard
+  renderBadgeResumo() {
+    const el = document.getElementById('badgeResumo');
+    if (!el) return;
+    const ganhos = this.state.conquistas.length;
+    const total = this._badges.length;
+    const { atual } = this.calcStreak();
+    // Mostra os 3 badges mais recentes desbloqueados
+    const recentes = [...this.state.conquistas]
+      .sort((a, b) => new Date(b.desbloqueada_em) - new Date(a.desbloqueada_em))
+      .slice(0, 3)
+      .map(c => this._badges.find(b => b.id === c.badge_id)?.icone)
+      .filter(Boolean).join(' ');
+    el.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
+        ${atual > 0 ? `<span style="font-size:14px"><strong style="color:var(--gold)">🔥 ${atual}</strong> <span style="color:var(--textm);font-size:12px">dias</span></span>` : ''}
+        <span style="font-size:14px"><strong style="color:var(--gold)">🏆 ${ganhos}/${total}</strong> <span style="color:var(--textm);font-size:12px">conquistas</span></span>
+        ${recentes ? `<span style="font-size:18px">${recentes}</span>` : ''}
+      </div>`;
   },
  
   // =====================================================
@@ -524,6 +555,7 @@ const VITALE_CORE = {
       if (error) throw error;
       this.state.exercicios.unshift(data);
       this.renderExercicios();
+      this._invalidateCoachCache();
       document.getElementById('exercDuracao').value = '';
       if (document.getElementById('exercNota')) document.getElementById('exercNota').value = '';
       const ex = this._exercicios.find(e => e.id === tipo);
@@ -619,6 +651,177 @@ const VITALE_CORE = {
         <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
       </div>`;
     }).join('');
+  },
+ 
+  // =====================================================
+  // BLOCO MEDIDAS CORPORAIS (body_measurements)
+  // =====================================================
+  _medidasCampos: [
+    { id: 'cintura', nome: 'Cintura', icone: '📏' },
+    { id: 'quadril', nome: 'Quadril', icone: '📐' },
+    { id: 'abdomen', nome: 'Abdômen', icone: '🎯' },
+    { id: 'peito', nome: 'Peito', icone: '💚' },
+    { id: 'braco', nome: 'Braço', icone: '💪' },
+    { id: 'coxa', nome: 'Coxa', icone: '🦵' },
+    { id: 'pescoco', nome: 'Pescoço', icone: '🔵' },
+    { id: 'gordura_pct', nome: '% Gordura', icone: '📊' }
+  ],
+ 
+  async loadMedidas() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('body_measurements')
+      .select('id, data, cintura, quadril, abdomen, peito, braco, coxa, pescoco, gordura_pct, nota')
+      .eq('user_id', user.id)
+      .order('data', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+ 
+  // Relação Cintura/Quadril — indicador de risco cardiovascular
+  _calcRCQ(cintura, quadril) {
+    if (!cintura || !quadril) return null;
+    return (cintura / quadril).toFixed(2);
+  },
+  // Classificação de risco da RCQ (homens; ajustável)
+  _rcqRisco(rcq) {
+    if (rcq == null) return null;
+    const v = parseFloat(rcq);
+    if (v < 0.90) return { txt: 'Baixo risco', cor: 'var(--em)' };
+    if (v < 1.0) return { txt: 'Risco moderado', cor: 'var(--gold)' };
+    return { txt: 'Risco alto', cor: 'var(--red)' };
+  },
+ 
+  async salvarMedidas() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
+    const reg = { user_id: user.id, data: this._hojeSP() };
+    let algum = false;
+    this._medidasCampos.forEach(c => {
+      const v = parseFloat(document.getElementById('med_' + c.id)?.value);
+      if (!isNaN(v) && v > 0) { reg[c.id] = v; algum = true; }
+    });
+    const nota = document.getElementById('med_nota')?.value.trim();
+    if (nota) reg.nota = nota;
+    if (!algum) return this.showAlert('error', 'Preencha ao menos uma medida!');
+ 
+    try {
+      const { data, error } = await window.sb.from('body_measurements').insert(reg).select().single();
+      if (error) throw error;
+      this.state.medidas.unshift(data);
+      this.renderMedidas();
+      this.buildMedidasChart();
+      this._invalidateCoachCache();
+      // limpa form
+      this._medidasCampos.forEach(c => { const el = document.getElementById('med_' + c.id); if (el) el.value = ''; });
+      const notaEl = document.getElementById('med_nota'); if (notaEl) notaEl.value = '';
+      this.showAlert('success', '✅ Medidas registradas!');
+      this.checkConquistas();
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('medidas_salvas');
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('salvar_medidas', e);
+    }
+  },
+ 
+  async removerMedida(id) {
+    if (!confirm('Remover este registro de medidas?')) return;
+    const { error } = await window.sb.from('body_measurements').delete().eq('id', id);
+    if (error) return this.showAlert('error', 'Erro: ' + error.message);
+    this.state.medidas = this.state.medidas.filter(m => m.id !== id);
+    this.renderMedidas();
+    this.buildMedidasChart();
+  },
+ 
+  renderMedidas() {
+    const el = document.getElementById('medidasLista');
+    if (!el) return;
+    const ms = this.state.medidas;
+    if (!ms.length) {
+      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:16px 0">Nenhuma medida registrada ainda 📏</p>';
+      return;
+    }
+ 
+    // Card de destaque: medida mais recente + RCQ
+    const ultima = ms[0];
+    const rcq = this._calcRCQ(ultima.cintura, ultima.quadril);
+    const risco = this._rcqRisco(rcq);
+    const destaque = document.getElementById('medidasDestaque');
+    if (destaque) {
+      if (rcq) {
+        destaque.style.display = '';
+        destaque.innerHTML = `
+          <div style="text-align:center">
+            <div style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px">Relação Cintura/Quadril</div>
+            <div style="font-size:32px;font-weight:700;color:${risco.cor};line-height:1.2">${rcq}</div>
+            <div style="font-size:13px;color:${risco.cor}">${risco.txt}</div>
+          </div>`;
+      } else {
+        destaque.style.display = 'none';
+      }
+    }
+ 
+    el.innerHTML = ms.map(m => {
+      const vals = this._medidasCampos
+        .filter(c => m[c.id] != null)
+        .map(c => `<span style="margin-right:12px;font-size:13px">${c.icone} ${c.nome}: <strong>${m[c.id]}${c.id === 'gordura_pct' ? '%' : ' cm'}</strong></span>`)
+        .join('');
+      const notaTxt = m.nota ? `<div style="font-size:12px;color:var(--textm);font-style:italic;margin-top:4px">"${this._escapeHtml(m.nota)}"</div>` : '';
+      return `<div class="med-item">
+        <div class="med-info">
+          <h4 style="font-size:13px;color:var(--textm)">${this.fmt(m.data)}</h4>
+          <div style="margin-top:6px;line-height:1.8">${vals}</div>
+          ${notaTxt}
+        </div>
+        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerMedida(${m.id})">🗑️</button>
+      </div>`;
+    }).join('');
+  },
+ 
+  buildMedidasChart() {
+    const canvas = document.getElementById('medidasChart');
+    if (!canvas) return;
+    const card = document.getElementById('medidasChartCard');
+    // Ordena cronológico e pega registros com pelo menos cintura ou abdômen
+    const ms = [...this.state.medidas].reverse().filter(m => m.cintura || m.abdomen);
+    if (ms.length < 2) { if (card) card.style.display = 'none'; return; }
+    if (card) card.style.display = '';
+ 
+    const labels = ms.map(m => this.fmt(m.data));
+    const ctx = canvas.getContext('2d');
+    if (this.state.medidasChartInstance) this.state.medidasChartInstance.destroy();
+ 
+    const series = [
+      { key: 'cintura', label: 'Cintura', cor: '#d4a843' },
+      { key: 'abdomen', label: 'Abdômen', cor: '#e8924a' },
+      { key: 'quadril', label: 'Quadril', cor: '#4a9de8' }
+    ].filter(s => ms.some(m => m[s.key] != null));
+ 
+    this.state.medidasChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: series.map(s => ({
+          label: s.label, data: ms.map(m => m[s.key]), borderColor: s.cor,
+          backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2,
+          pointBackgroundColor: s.cor, tension: 0.4, spanGaps: true
+        }))
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: true, labels: { color: '#a8accc', font: { size: 11 }, boxWidth: 12, padding: 12 } },
+          tooltip: { backgroundColor: '#0d1223', titleColor: '#d4a843', bodyColor: '#ede8e0', padding: 10,
+            callbacks: { label: (c) => c.raw == null ? null : ` ${c.dataset.label}: ${c.raw} cm` } }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 7 } },
+          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, callback: v => v + ' cm' } }
+        }
+      }
+    });
   },
  
   // Hoje no fuso de São Paulo (evita salvar no dia errado perto da meia-noite)
@@ -977,6 +1180,23 @@ const VITALE_CORE = {
     }
  
     const hp = this.state.healthProfile || {};
+    // Resumo de exercícios da última semana
+    const seteDias = new Date(); seteDias.setDate(seteDias.getDate() - 7);
+    const exSemana = (this.state.exercicios || []).filter(e => new Date(e.data) >= seteDias);
+    const exResumo = exSemana.length ? {
+      treinos: exSemana.length,
+      minutos: exSemana.reduce((s, e) => s + e.duracao_min, 0),
+      kcal: exSemana.reduce((s, e) => s + (e.calorias || 0), 0),
+      tipos: [...new Set(exSemana.map(e => e.tipo))]
+    } : null;
+    // Última medida + RCQ
+    const ultMedida = (this.state.medidas || [])[0] || null;
+    const rcq = ultMedida ? this._calcRCQ(ultMedida.cintura, ultMedida.quadril) : null;
+    // Mood de hoje
+    const mood = this.state.moodHoje ? {
+      humor: this.state.moodHoje.humor, energia: this.state.moodHoje.energia, sono: this.state.moodHoje.sono
+    } : null;
+ 
     const ctx = {
       altura: this.altura,
       meta_kg: this.metaKg.toFixed(1),
@@ -985,7 +1205,12 @@ const VITALE_CORE = {
       submetas: this.state.submetas.slice(0, 5),
       objetivo: hp.objetivo || null,
       urgencia: hp.urgencia || null,
-      health_profile: hp
+      health_profile: hp,
+      exercicios_semana: exResumo,
+      cintura_cm: ultMedida?.cintura || null,
+      relacao_cintura_quadril: rcq,
+      gordura_pct: ultMedida?.gordura_pct || null,
+      humor_hoje: mood
     };
  
     try {
@@ -1588,6 +1813,16 @@ const VITALE_CORE = {
     });
   },
  
+  // Modo do OCR: 'peso' (padrão) ou 'bioimpedancia'
+  ocrModo: 'peso',
+  setOcrModo(modo) {
+    this.ocrModo = modo;
+    const bp = document.getElementById('ocrModoPeso');
+    const bb = document.getElementById('ocrModoBio');
+    if (bp) bp.style.borderColor = modo === 'peso' ? 'var(--gold)' : 'var(--border)';
+    if (bb) bb.style.borderColor = modo === 'bioimpedancia' ? 'var(--gold)' : 'var(--border)';
+  },
+ 
   async processarImagemOCR() {
     const btn = document.getElementById('btnProcessarImagem');
     const ocrDiv = document.getElementById('ocrResult');
@@ -1613,7 +1848,7 @@ const VITALE_CORE = {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token || ''}`
         },
-        body: JSON.stringify({ image: base64, mime: mimeType })
+        body: JSON.stringify({ image: base64, mime: mimeType, modo: this.ocrModo })
       });
  
       if (!res.ok) {
@@ -1622,6 +1857,32 @@ const VITALE_CORE = {
       }
  
       const data = await res.json();
+ 
+      // Modo bioimpedância: resposta traz medidas, não peso
+      if (this.ocrModo === 'bioimpedancia') {
+        const m = data.medidas || data;
+        const campos = ['cintura', 'quadril', 'abdomen', 'peito', 'braco', 'coxa', 'pescoco', 'gordura_pct'];
+        let achou = false;
+        campos.forEach(c => {
+          if (m[c] != null && !isNaN(parseFloat(m[c]))) {
+            const el = document.getElementById('med_' + c);
+            if (el) { el.value = m[c]; achou = true; }
+          }
+        });
+        // Peso vem junto em muitas balanças de bioimpedância
+        if (m.peso && !isNaN(parseFloat(m.peso))) {
+          const pEl = document.getElementById('manualPeso'); if (pEl) pEl.value = m.peso;
+        }
+        if (achou) {
+          ocrDiv.innerHTML = `<div class="alert alert-success">✅ IA preencheu as medidas abaixo. Revise e clique em "Registrar Medidas".</div>`;
+          document.getElementById('med_cintura')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          ocrDiv.innerHTML = `<div class="alert alert-warning">⚠️ Nenhuma medida identificada. Tente um print mais nítido ou preencha manualmente.</div>`;
+        }
+        return;
+      }
+ 
+      // Modo peso (padrão)
       if (data.registros && data.registros.length > 0) {
         const items = data.registros.map(r => ({ ...r, origem: 'ocr' }));
         this.state.tempImportacao = items;
