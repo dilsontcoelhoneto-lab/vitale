@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco D-IMC.2 · 2026-05-31';
+const VITALE_VERSION = 'v4.2 · Bloco F+Gamificacao · 2026-05-31';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -27,10 +27,12 @@ const VITALE_CORE = {
     tempImportacao: null,
     chartInstance: null,
     imcChartInstance: null,
+    moodChartInstance: null,
     coachCache: null,     // {message, when} — cache de 5min do Coach IA
     objetivoEscolhido: null,  // estado temporário do wizard
     moodHoje: null,       // registro de hoje (Bloco B)
-    moodDraft: { humor: 0, energia: 0, sono: 0, nota: '' } // seleção em edição
+    moodDraft: { humor: 0, energia: 0, sono: 0, nota: '' }, // seleção em edição
+    conquistas: []        // badges desbloqueados (Bloco Gamificação)
   },
  
   // =====================================================
@@ -52,11 +54,12 @@ const VITALE_CORE = {
         this.loadMedicacoes(),
         this.loadSubmetas(),
         this.loadHealthProfile(),
-        this.loadMoodHoje()
+        this.loadMoodHoje(),
+        this.loadConquistas()
       ]);
  
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje'];
-      const fallbacks = [null, [], [], [], [], null, null];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas'];
+      const fallbacks = [null, [], [], [], [], null, null, []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -73,6 +76,7 @@ const VITALE_CORE = {
       this.state.submetas = val[4] || [];
       this.state.healthProfile = val[5];
       this.state.moodHoje = val[6];
+      this.state.conquistas = val[7] || [];
  
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -83,6 +87,10 @@ const VITALE_CORE = {
       try { this.updateAgendamentos(); } catch (e) { console.warn('updateAgendamentos', e); }
       try { this.fillHealthProfileForm(); } catch (e) { console.warn('fillHealthProfileForm', e); }
       try { this.renderMoodCard(); } catch (e) { console.warn('renderMoodCard', e); }
+      try { this.renderMoodHistorico(); } catch (e) { console.warn('renderMoodHistorico', e); }
+      try { this.renderConquistas(); } catch (e) { console.warn('renderConquistas', e); }
+      // Checa conquistas no load (sem celebrar as antigas — só registra novas em silêncio na 1ª vez)
+      try { this.checkConquistas(true); } catch (e) { console.warn('checkConquistas', e); }
  
       try { window.VitaleAnalytics.track('app_open'); } catch (e) {}
  
@@ -310,6 +318,131 @@ const VITALE_CORE = {
   },
  
   // =====================================================
+  // BLOCO GAMIFICAÇÃO — Conquistas (badges) + Celebração
+  // =====================================================
+  async loadConquistas() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('conquistas')
+      .select('badge_id, desbloqueada_em, detalhes')
+      .eq('user_id', user.id);
+    if (error) throw error;
+    return data || [];
+  },
+ 
+  // Catálogo de badges. cond(ctx) → retorna true se merece o badge.
+  // ctx traz dados já calculados pra não repetir contas.
+  _badges: [
+    { id: 'primeira_pesagem', icone: '⚖️', nome: 'Primeiro Passo', desc: 'Primeira pesagem registrada', cond: c => c.totalPesagens >= 1 },
+    { id: 'streak_7', icone: '🔥', nome: 'Semana de Fogo', desc: '7 dias seguidos pesando', cond: c => c.streakRecorde >= 7 },
+    { id: 'streak_30', icone: '🌟', nome: 'Mês Imbatível', desc: '30 dias seguidos pesando', cond: c => c.streakRecorde >= 30 },
+    { id: 'streak_100', icone: '💎', nome: 'Centurião', desc: '100 dias seguidos', cond: c => c.streakRecorde >= 100 },
+    { id: 'peso_5kg', icone: '🎯', nome: '5 kg Eliminados', desc: 'Perdeu 5 kg desde o início', cond: c => c.perdaTotal >= 5 },
+    { id: 'peso_10kg', icone: '🏅', nome: '10 kg Eliminados', desc: 'Perdeu 10 kg desde o início', cond: c => c.perdaTotal >= 10 },
+    { id: 'peso_20kg', icone: '🏆', nome: '20 kg Eliminados', desc: 'Perdeu 20 kg — feito enorme!', cond: c => c.perdaTotal >= 20 },
+    { id: 'imc_saiu_ob3', icone: '📉', nome: 'Saiu da Obesidade III', desc: 'IMC abaixo de 40', cond: c => c.imcAtual && c.imcAtual < 40 && c.imcInicial >= 40 },
+    { id: 'imc_saiu_ob2', icone: '📊', nome: 'Saiu da Obesidade II', desc: 'IMC abaixo de 35', cond: c => c.imcAtual && c.imcAtual < 35 && c.imcInicial >= 35 },
+    { id: 'imc_saiu_ob1', icone: '📈', nome: 'Saiu da Obesidade I', desc: 'IMC abaixo de 30 — sobrepeso!', cond: c => c.imcAtual && c.imcAtual < 30 && c.imcInicial >= 30 },
+    { id: 'imc_normal', icone: '✅', nome: 'Peso Normal', desc: 'IMC abaixo de 25 — parabéns!', cond: c => c.imcAtual && c.imcAtual < 25 && c.imcInicial >= 25 },
+    { id: 'meta_batida', icone: '👑', nome: 'Meta Alcançada', desc: 'Atingiu seu peso-meta', cond: c => c.pesoAtual && c.pesoAtual <= c.metaKg },
+    { id: 'diario_1', icone: '📔', nome: 'Querido Diário', desc: 'Primeiro registro de humor', cond: c => c.temMood },
+    { id: 'submeta_1', icone: '🚩', nome: 'Primeira Submeta', desc: 'Atingiu uma submeta', cond: c => c.submetaAtingida }
+  ],
+ 
+  // Monta o contexto e desbloqueia badges novos. silencioso=true não celebra
+  // (usado no load inicial pra não disparar fogos das conquistas antigas).
+  async checkConquistas(silencioso = false) {
+    const sorted = this.getSorted();
+    const ctx = {
+      totalPesagens: this.state.weightsRaw.length,
+      streakRecorde: this.calcStreak().recorde,
+      perdaTotal: sorted.length >= 2 ? (sorted[0].peso - sorted[sorted.length - 1].peso) : 0,
+      pesoAtual: sorted.length ? sorted[sorted.length - 1].peso : null,
+      metaKg: this.metaKg,
+      imcInicial: sorted.length ? parseFloat(this.calcIMC(sorted[0].peso, this.altura)) : 0,
+      imcAtual: sorted.length ? parseFloat(this.calcIMC(sorted[sorted.length - 1].peso, this.altura)) : null,
+      temMood: !!this.state.moodHoje,
+      submetaAtingida: this.state.submetas.some(s => sorted.length && sorted[sorted.length - 1].peso <= s.pesoAlvo)
+    };
+ 
+    const jaTem = new Set(this.state.conquistas.map(c => c.badge_id));
+    const novos = this._badges.filter(b => !jaTem.has(b.id) && b.cond(ctx));
+    if (!novos.length) return;
+ 
+    // Persiste no banco (insert em lote, ignora duplicatas via unique index)
+    try {
+      const user = await window.VitaleAuth.getUser();
+      if (!user) return;
+      const rows = novos.map(b => ({ user_id: user.id, badge_id: b.id, detalhes: {} }));
+      const { error } = await window.sb.from('conquistas').upsert(rows, { onConflict: 'user_id,badge_id', ignoreDuplicates: true });
+      if (error) throw error;
+      novos.forEach(b => this.state.conquistas.push({ badge_id: b.id, desbloqueada_em: new Date().toISOString() }));
+      this.renderConquistas();
+      // Celebra (a menos que seja o load silencioso inicial)
+      if (!silencioso) {
+        // Celebra um por vez, com pequeno intervalo se vários
+        novos.forEach((b, i) => setTimeout(() => this.celebrarConquista(b), i * 1200));
+      }
+    } catch (e) {
+      if (window.VitaleErr) window.VitaleErr.log('check_conquistas', e);
+    }
+  },
+ 
+  // Animação de celebração: confete CSS puro + modal (zero dependência externa)
+  celebrarConquista(badge) {
+    // Confete
+    const layer = document.createElement('div');
+    layer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;overflow:hidden';
+    const cores = ['#d4a843', '#27c47d', '#4a9de8', '#e8924a', '#e8504a', '#c040c0'];
+    for (let i = 0; i < 60; i++) {
+      const c = document.createElement('div');
+      const size = 6 + Math.random() * 8;
+      const left = Math.random() * 100;
+      const dur = 2 + Math.random() * 2;
+      const delay = Math.random() * 0.5;
+      c.style.cssText = `position:absolute;top:-20px;left:${left}%;width:${size}px;height:${size}px;background:${cores[i % cores.length]};border-radius:${Math.random() > 0.5 ? '50%' : '2px'};opacity:0.9;animation:vitaleConfete ${dur}s ${delay}s ease-in forwards;transform:rotate(${Math.random() * 360}deg)`;
+      layer.appendChild(c);
+    }
+    document.body.appendChild(layer);
+    setTimeout(() => layer.remove(), 4500);
+ 
+    // Modal de parabéns
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:10000;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);animation:vitaleFadeIn .3s';
+    modal.onclick = () => modal.remove();
+    modal.innerHTML = `
+      <div style="background:linear-gradient(135deg,#1a1f3a,#0d1223);border:1px solid var(--gold);border-radius:20px;padding:36px 40px;text-align:center;max-width:340px;box-shadow:0 20px 60px rgba(212,168,67,0.3);animation:vitalePop .4s cubic-bezier(.2,1.4,.4,1)">
+        <div style="font-size:64px;line-height:1;margin-bottom:14px;animation:vitaleBounce 1s ease-in-out infinite">${badge.icone}</div>
+        <div style="font-size:13px;color:var(--gold);text-transform:uppercase;letter-spacing:2px;margin-bottom:8px">Conquista Desbloqueada!</div>
+        <div style="font-size:24px;font-weight:700;color:var(--text);margin-bottom:6px">${badge.nome}</div>
+        <div style="font-size:14px;color:var(--textm);margin-bottom:20px">${badge.desc}</div>
+        <button onclick="this.closest('div').parentElement.remove()" style="background:var(--gold);color:#0d1223;border:none;border-radius:10px;padding:10px 28px;font-weight:600;cursor:pointer;font-size:14px">Continuar 🎉</button>
+      </div>`;
+    document.body.appendChild(modal);
+    if (window.VitaleAnalytics) window.VitaleAnalytics.track('conquista', { badge: badge.id });
+  },
+ 
+  renderConquistas() {
+    const el = document.getElementById('conquistasGrid');
+    if (!el) return;
+    const desbloqueados = new Set(this.state.conquistas.map(c => c.badge_id));
+    const total = this._badges.length;
+    const ganhos = this._badges.filter(b => desbloqueados.has(b.id)).length;
+ 
+    const hdr = document.getElementById('conquistasHeader');
+    if (hdr) hdr.innerHTML = `<strong style="color:var(--gold)">🏆 Conquistas</strong> <span style="color:var(--textm);font-size:13px">${ganhos}/${total}</span>`;
+ 
+    el.innerHTML = this._badges.map(b => {
+      const got = desbloqueados.has(b.id);
+      return `<div title="${b.desc}" style="text-align:center;padding:12px 8px;border-radius:12px;background:${got ? 'rgba(212,168,67,0.1)' : 'rgba(255,255,255,0.02)'};border:1px solid ${got ? 'rgba(212,168,67,0.3)' : 'var(--border)'};${got ? '' : 'opacity:0.4;filter:grayscale(1)'}">
+        <div style="font-size:32px;line-height:1;margin-bottom:6px">${b.icone}</div>
+        <div style="font-size:11px;color:${got ? 'var(--text)' : 'var(--textm)'};font-weight:${got ? '600' : '400'}">${b.nome}</div>
+      </div>`;
+    }).join('');
+  },
+ 
+  // =====================================================
   // BLOCO B — DIÁRIO RÁPIDO (humor / energia / sono / nota)
   // =====================================================
   // Hoje no fuso de São Paulo (evita salvar no dia errado perto da meia-noite)
@@ -330,6 +463,68 @@ const VITALE_CORE = {
       .maybeSingle();
     if (error) throw error;
     return data;
+  },
+ 
+  // BLOCO F — Histórico do Diário (últimos 30 dias)
+  async loadMoodHistorico() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const ini = new Date(); ini.setDate(ini.getDate() - 30);
+    const { data, error } = await window.sb
+      .from('mood_logs')
+      .select('data, humor, energia, sono')
+      .eq('user_id', user.id)
+      .gte('data', ini.toISOString().slice(0, 10))
+      .order('data', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+ 
+  async renderMoodHistorico() {
+    const card = document.getElementById('moodHistCard');
+    if (!card) return;
+    let dados;
+    try { dados = await this.loadMoodHistorico(); }
+    catch (e) { card.style.display = 'none'; return; }
+ 
+    if (!dados || dados.length < 2) { card.style.display = 'none'; return; }
+    card.style.display = '';
+ 
+    const labels = dados.map(d => this.fmt(d.data));
+    const canvas = document.getElementById('moodHistChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (this.state.moodChartInstance) this.state.moodChartInstance.destroy();
+ 
+    const mk = (label, key, cor) => ({
+      label, data: dados.map(d => d[key]), borderColor: cor,
+      backgroundColor: 'transparent', borderWidth: 2, pointRadius: 2,
+      pointBackgroundColor: cor, tension: 0.4, spanGaps: true
+    });
+ 
+    this.state.moodChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets: [
+        mk('Humor', 'humor', '#d4a843'),
+        mk('Energia', 'energia', '#27c47d'),
+        mk('Sono', 'sono', '#4a9de8')
+      ] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          legend: { display: true, labels: { color: '#a8accc', font: { size: 11 }, boxWidth: 12, padding: 12 } },
+          tooltip: {
+            backgroundColor: '#0d1223', titleColor: '#d4a843', bodyColor: '#ede8e0', padding: 10,
+            callbacks: { label: (c) => c.raw == null ? null : ` ${c.dataset.label}: ${c.raw}/5` }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 7 } },
+          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, stepSize: 1 }, min: 0, max: 5 }
+        }
+      }
+    });
   },
  
   // Escalas de emoji para cada dimensão (índice 1-5)
@@ -377,7 +572,10 @@ const VITALE_CORE = {
       if (error) throw error;
       this.state.moodHoje = data;
       this.renderMoodCard();
+      this.renderMoodHistorico();
       this.showAlert('success', '✅ Diário de hoje salvo!');
+      // Gamificação: checa conquista de diário
+      this.checkConquistas();
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('mood_salvo');
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
@@ -996,6 +1194,7 @@ const VITALE_CORE = {
     if (window.VitaleAnalytics) window.VitaleAnalytics.track('weight_add', { origem });
     this._invalidateCoachCache();
     this.updateDashboard();
+    this.checkConquistas(); // gamificação: pode desbloquear badge de peso/IMC/streak
     return data;
   },
  
@@ -1147,6 +1346,7 @@ const VITALE_CORE = {
       this.closeModal('modalConfirmacao');
       this._invalidateCoachCache();
       this.updateDashboard();
+      this.checkConquistas(); // gamificação após importação
       const count = items.length;
       this.showAlert('success', `✅ ${count} registro(s) importado(s)!`);
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('import_batch', { count });
@@ -2247,3 +2447,4 @@ const VITALE_CORE = {
 };
  
 window.VITALE_CORE = VITALE_CORE;
+ 
