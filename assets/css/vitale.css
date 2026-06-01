@@ -658,3 +658,17 @@ table tr:hover td{background:rgba(255,255,255,0.02)}
   50% { transform: translateY(-10px); }
 }
  
+/* ===== Polimento visual (Bloco Medidas) ===== */
+.card { transition: border-color .2s ease, transform .2s ease; }
+.card:hover { border-color: var(--border2); }
+.tab-content { animation: tabFadeIn .35s ease; }
+@keyframes tabFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+/* Inputs com foco dourado consistente */
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--gold) !important;
+  box-shadow: 0 0 0 3px rgba(212,168,67,0.1);
+}
+/* Botões de stat do header com leve elevação */
+.med-item { transition: background .15s ease; }
+.med-item:hover { background: rgba(255,255,255,0.02); }
+ 
