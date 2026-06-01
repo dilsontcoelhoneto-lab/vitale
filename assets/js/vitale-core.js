@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
  
-const VITALE_VERSION = 'v4.2 · Bloco F+Gamificacao · 2026-05-31';
+const VITALE_VERSION = 'v4.2 · Bloco Exercicios · 2026-06-01';
  
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -32,7 +32,8 @@ const VITALE_CORE = {
     objetivoEscolhido: null,  // estado temporário do wizard
     moodHoje: null,       // registro de hoje (Bloco B)
     moodDraft: { humor: 0, energia: 0, sono: 0, nota: '' }, // seleção em edição
-    conquistas: []        // badges desbloqueados (Bloco Gamificação)
+    conquistas: [],       // badges desbloqueados (Bloco Gamificação)
+    exercicios: []        // atividades físicas registradas (Bloco Exercícios)
   },
  
   // =====================================================
@@ -55,11 +56,12 @@ const VITALE_CORE = {
         this.loadSubmetas(),
         this.loadHealthProfile(),
         this.loadMoodHoje(),
-        this.loadConquistas()
+        this.loadConquistas(),
+        this.loadExercicios()
       ]);
  
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas'];
-      const fallbacks = [null, [], [], [], [], null, null, []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios'];
+      const fallbacks = [null, [], [], [], [], null, null, [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -77,6 +79,7 @@ const VITALE_CORE = {
       this.state.healthProfile = val[5];
       this.state.moodHoje = val[6];
       this.state.conquistas = val[7] || [];
+      this.state.exercicios = val[8] || [];
  
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -91,6 +94,7 @@ const VITALE_CORE = {
       try { this.renderConquistas(); } catch (e) { console.warn('renderConquistas', e); }
       // Checa conquistas no load (sem celebrar as antigas — só registra novas em silêncio na 1ª vez)
       try { this.checkConquistas(true); } catch (e) { console.warn('checkConquistas', e); }
+      try { this.renderExercicios(); } catch (e) { console.warn('renderExercicios', e); }
  
       try { window.VitaleAnalytics.track('app_open'); } catch (e) {}
  
@@ -347,7 +351,9 @@ const VITALE_CORE = {
     { id: 'imc_normal', icone: '✅', nome: 'Peso Normal', desc: 'IMC abaixo de 25 — parabéns!', cond: c => c.imcAtual && c.imcAtual < 25 && c.imcInicial >= 25 },
     { id: 'meta_batida', icone: '👑', nome: 'Meta Alcançada', desc: 'Atingiu seu peso-meta', cond: c => c.pesoAtual && c.pesoAtual <= c.metaKg },
     { id: 'diario_1', icone: '📔', nome: 'Querido Diário', desc: 'Primeiro registro de humor', cond: c => c.temMood },
-    { id: 'submeta_1', icone: '🚩', nome: 'Primeira Submeta', desc: 'Atingiu uma submeta', cond: c => c.submetaAtingida }
+    { id: 'submeta_1', icone: '🚩', nome: 'Primeira Submeta', desc: 'Atingiu uma submeta', cond: c => c.submetaAtingida },
+    { id: 'exerc_1', icone: '💪', nome: 'Bora Treinar', desc: 'Primeiro exercício registrado', cond: c => c.temExercicio },
+    { id: 'exerc_semana', icone: '🔥', nome: 'Semana Ativa', desc: '5 treinos numa semana', cond: c => c.treinosSemana >= 5 }
   ],
  
   // Monta o contexto e desbloqueia badges novos. silencioso=true não celebra
@@ -363,7 +369,9 @@ const VITALE_CORE = {
       imcInicial: sorted.length ? parseFloat(this.calcIMC(sorted[0].peso, this.altura)) : 0,
       imcAtual: sorted.length ? parseFloat(this.calcIMC(sorted[sorted.length - 1].peso, this.altura)) : null,
       temMood: !!this.state.moodHoje,
-      submetaAtingida: this.state.submetas.some(s => sorted.length && sorted[sorted.length - 1].peso <= s.pesoAlvo)
+      submetaAtingida: this.state.submetas.some(s => sorted.length && sorted[sorted.length - 1].peso <= s.pesoAlvo),
+      temExercicio: this.state.exercicios.length > 0,
+      treinosSemana: (() => { const d = new Date(); d.setDate(d.getDate() - 7); return this.state.exercicios.filter(e => new Date(e.data) >= d).length; })()
     };
  
     const jaTem = new Set(this.state.conquistas.map(c => c.badge_id));
@@ -443,8 +451,176 @@ const VITALE_CORE = {
   },
  
   // =====================================================
-  // BLOCO B — DIÁRIO RÁPIDO (humor / energia / sono / nota)
+  // BLOCO EXERCÍCIOS — Registro de atividade física
   // =====================================================
+  // Catálogo de exercícios com valores MET (Metabolic Equivalent of Task).
+  // Caloria = MET × peso(kg) × duração(h). MET varia por intensidade.
+  _exercicios: [
+    { id: 'caminhada', nome: 'Caminhada', icone: '🚶', met: { leve: 2.8, moderada: 3.5, intensa: 4.3 } },
+    { id: 'corrida', nome: 'Corrida', icone: '🏃', met: { leve: 7.0, moderada: 9.8, intensa: 12.3 } },
+    { id: 'bicicleta', nome: 'Bicicleta', icone: '🚴', met: { leve: 4.0, moderada: 6.8, intensa: 10.0 } },
+    { id: 'musculacao', nome: 'Musculação', icone: '🏋️', met: { leve: 3.5, moderada: 5.0, intensa: 6.0 } },
+    { id: 'natacao', nome: 'Natação', icone: '🏊', met: { leve: 5.3, moderada: 7.0, intensa: 9.5 } },
+    { id: 'funcional', nome: 'Funcional', icone: '🤸', met: { leve: 4.0, moderada: 6.0, intensa: 8.0 } },
+    { id: 'yoga', nome: 'Yoga / Alongamento', icone: '🧘', met: { leve: 2.0, moderada: 3.0, intensa: 4.0 } },
+    { id: 'esporte', nome: 'Esporte', icone: '⚽', met: { leve: 4.5, moderada: 7.0, intensa: 10.0 } },
+    { id: 'outro', nome: 'Outro', icone: '💪', met: { leve: 3.0, moderada: 5.0, intensa: 7.0 } }
+  ],
+ 
+  // Estado do formulário
+  exercDraft: { tipo: 'caminhada', intensidade: 'moderada' },
+ 
+  selectExercTipo(tipo) {
+    this.exercDraft.tipo = tipo;
+    this._renderExercForm();
+  },
+ 
+  selectExercIntensidade(nivel) {
+    this.exercDraft.intensidade = nivel;
+    this._renderExercForm();
+  },
+ 
+  // Estima calorias a partir de MET × peso atual × horas
+  _estimaCalorias(tipoId, intensidade, duracaoMin) {
+    const ex = this._exercicios.find(e => e.id === tipoId);
+    if (!ex) return 0;
+    const met = ex.met[intensidade] || ex.met.moderada;
+    const sorted = this.getSorted();
+    const peso = sorted.length ? sorted[sorted.length - 1].peso : 80; // fallback 80kg
+    return Math.round(met * peso * (duracaoMin / 60));
+  },
+ 
+  async loadExercicios() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const ini = new Date(); ini.setDate(ini.getDate() - 30);
+    const { data, error } = await window.sb
+      .from('exercicios')
+      .select('id, data, tipo, duracao_min, intensidade, calorias, nota')
+      .eq('user_id', user.id)
+      .gte('data', ini.toISOString().slice(0, 10))
+      .order('data', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+ 
+  async salvarExercicio() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
+    const dur = parseInt(document.getElementById('exercDuracao')?.value);
+    if (!dur || dur <= 0) return this.showAlert('error', 'Informe a duração em minutos!');
+    if (dur > 600) return this.showAlert('error', 'Duração máxima é 600 min (10h).');
+ 
+    const tipo = this.exercDraft.tipo;
+    const intensidade = this.exercDraft.intensidade;
+    const nota = document.getElementById('exercNota')?.value.trim() || null;
+    const calorias = this._estimaCalorias(tipo, intensidade, dur);
+ 
+    try {
+      const { data, error } = await window.sb.from('exercicios').insert({
+        user_id: user.id, tipo, duracao_min: dur, intensidade, calorias, nota
+      }).select().single();
+      if (error) throw error;
+      this.state.exercicios.unshift(data);
+      this.renderExercicios();
+      document.getElementById('exercDuracao').value = '';
+      if (document.getElementById('exercNota')) document.getElementById('exercNota').value = '';
+      const ex = this._exercicios.find(e => e.id === tipo);
+      this.showAlert('success', `✅ ${ex.icone} ${ex.nome} registrado — ${calorias} kcal!`);
+      this.checkConquistas();
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('exercicio_salvo', { tipo });
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('salvar_exercicio', e);
+    }
+  },
+ 
+  async removerExercicio(id) {
+    if (!confirm('Remover este exercício?')) return;
+    const { error } = await window.sb.from('exercicios').delete().eq('id', id);
+    if (error) return this.showAlert('error', 'Erro: ' + error.message);
+    this.state.exercicios = this.state.exercicios.filter(e => e.id !== id);
+    this.renderExercicios();
+  },
+ 
+  _renderExercForm() {
+    const grid = document.getElementById('exercTipoGrid');
+    if (grid) {
+      grid.innerHTML = this._exercicios.map(e => {
+        const sel = this.exercDraft.tipo === e.id;
+        return `<button onclick="VITALE_CORE.selectExercTipo('${e.id}')"
+          style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;border-radius:12px;cursor:pointer;background:${sel ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.02)'};border:1px solid ${sel ? 'var(--gold)' : 'var(--border)'};transition:all .15s">
+          <span style="font-size:24px">${e.icone}</span>
+          <span style="font-size:10px;color:${sel ? 'var(--text)' : 'var(--textm)'}">${e.nome}</span>
+        </button>`;
+      }).join('');
+    }
+    const intEl = document.getElementById('exercIntensidade');
+    if (intEl) {
+      const niveis = [['leve', 'Leve'], ['moderada', 'Moderada'], ['intensa', 'Intensa']];
+      intEl.innerHTML = niveis.map(([k, label]) => {
+        const sel = this.exercDraft.intensidade === k;
+        return `<button onclick="VITALE_CORE.selectExercIntensidade('${k}')"
+          style="flex:1;padding:8px;border-radius:10px;cursor:pointer;background:${sel ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.02)'};border:1px solid ${sel ? 'var(--gold)' : 'var(--border)'};color:${sel ? 'var(--text)' : 'var(--textm)'};font-size:13px">${label}</button>`;
+      }).join('');
+    }
+    // Preview de calorias em tempo real
+    const dur = parseInt(document.getElementById('exercDuracao')?.value) || 0;
+    const prev = document.getElementById('exercCalPreview');
+    if (prev && dur > 0) {
+      const cal = this._estimaCalorias(this.exercDraft.tipo, this.exercDraft.intensidade, dur);
+      prev.innerHTML = `≈ <strong style="color:var(--gold)">${cal} kcal</strong> estimadas`;
+      prev.style.display = 'block';
+    } else if (prev) {
+      prev.style.display = 'none';
+    }
+  },
+ 
+  renderExercicios() {
+    this._renderExercForm();
+    const el = document.getElementById('exercLista');
+    if (!el) return;
+ 
+    const exs = this.state.exercicios;
+    if (!exs.length) {
+      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:16px 0">Nenhum exercício registrado ainda 💪</p>';
+      const resumo = document.getElementById('exercResumo');
+      if (resumo) resumo.style.display = 'none';
+      return;
+    }
+ 
+    // Resumo da semana (últimos 7 dias)
+    const seteDias = new Date(); seteDias.setDate(seteDias.getDate() - 7);
+    const semana = exs.filter(e => new Date(e.data) >= seteDias);
+    const totalMin = semana.reduce((s, e) => s + e.duracao_min, 0);
+    const totalCal = semana.reduce((s, e) => s + (e.calorias || 0), 0);
+    const resumo = document.getElementById('exercResumo');
+    if (resumo) {
+      resumo.style.display = '';
+      resumo.innerHTML = `
+        <div style="display:flex;gap:20px;justify-content:center;text-align:center">
+          <div><div style="font-size:22px;font-weight:700;color:var(--gold)">${semana.length}</div><div style="font-size:11px;color:var(--textm)">treinos/semana</div></div>
+          <div><div style="font-size:22px;font-weight:700;color:var(--cyan)">${totalMin}</div><div style="font-size:11px;color:var(--textm)">minutos</div></div>
+          <div><div style="font-size:22px;font-weight:700;color:var(--em)">${totalCal}</div><div style="font-size:11px;color:var(--textm)">kcal queimadas</div></div>
+        </div>`;
+    }
+ 
+    el.innerHTML = exs.map(e => {
+      const ex = this._exercicios.find(t => t.id === e.tipo) || { icone: '💪', nome: e.tipo };
+      const intLabel = { leve: 'Leve', moderada: 'Moderada', intensa: 'Intensa' }[e.intensidade] || '';
+      const notaTxt = e.nota ? ` · ${this._escapeHtml(e.nota)}` : '';
+      return `<div class="med-item">
+        <div class="med-info">
+          <h4>${ex.icone} ${ex.nome}</h4>
+          <p>⏱ ${e.duracao_min} min · ${intLabel}${e.calorias ? ` · 🔥 ${e.calorias} kcal` : ''}</p>
+          <p style="font-size:11px;color:var(--textm)">${this.fmt(e.data)}${notaTxt}</p>
+        </div>
+        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
+      </div>`;
+    }).join('');
+  },
+ 
   // Hoje no fuso de São Paulo (evita salvar no dia errado perto da meia-noite)
   _hojeSP() {
     return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
@@ -2447,4 +2623,3 @@ const VITALE_CORE = {
 };
  
 window.VITALE_CORE = VITALE_CORE;
- 
