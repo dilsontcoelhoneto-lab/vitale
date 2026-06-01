@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=I">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=J">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=I"></script>
+<script src="/config.js?v=J"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -145,6 +145,13 @@
     <div class="chart-card" id="medidasChartCard" style="margin-top:20px;display:none">
       <h3 style="margin-bottom:16px">📏 Medidas Corporais (cm)</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="medidasChart"></canvas></div>
+    </div>
+
+    <!-- BLOCO COMPOSIÇÃO — Músculo vs Gordura -->
+    <div class="chart-card" id="composicaoChartCard" style="margin-top:20px;display:none">
+      <h3 style="margin-bottom:16px">📊 Composição: Músculo vs Gordura</h3>
+      <div class="chart-wrapper" style="height:200px"><canvas id="composicaoChart"></canvas></div>
+      <p style="font-size:11px;color:var(--textm);margin-top:10px;text-align:center">💡 No tratamento GLP-1, o ideal é a linha de gordura cair enquanto a de músculo se mantém.</p>
     </div>
   </div>
 
@@ -361,11 +368,33 @@
       <button class="btn btn-primary" onclick="VITALE_CORE.processarImagemOCR()" style="width:100%;margin-top:12px;display:none" id="btnProcessarImagem">🔍 PROCESSAR COM IA</button>
     </div>
 
-    <!-- Medidas corporais manual -->
+    <!-- Composição corporal (bioimpedância) -->
     <div class="card">
-      <h3>📏 Medidas Corporais</h3>
-      <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Preencha o que medir hoje. Cintura e quadril calculam sua relação cintura/quadril (risco cardiovascular).</p>
+      <h3>📊 Composição Corporal</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Dados de bioimpedância (InBody, balança smart). Use o print acima no modo 📊 ou preencha o que tiver.</p>
+      <div id="composicaoDestaque" style="display:none;background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.2);border-radius:12px;padding:14px;margin-bottom:16px"></div>
+      <div class="field" style="margin-bottom:12px"><label>Data</label><input type="date" id="comp_data"></div>
+      <div class="form-group" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+        <div><label>Peso (kg)</label><input type="number" id="comp_peso" step="0.1" placeholder="ex: 125.2"></div>
+        <div><label>% Gordura</label><input type="number" id="comp_gordura_pct" step="0.1" placeholder="ex: 38.1"></div>
+        <div><label>Massa Gordura (kg)</label><input type="number" id="comp_massa_gordura" step="0.1" placeholder="ex: 47.6"></div>
+        <div><label>Massa Muscular (kg)</label><input type="number" id="comp_massa_muscular" step="0.1" placeholder="ex: 44.2"></div>
+        <div><label>Água Corporal (L)</label><input type="number" id="comp_agua_corporal" step="0.1" placeholder="ex: 56.8"></div>
+        <div><label>Gordura Visceral</label><input type="number" id="comp_gordura_visceral" step="0.1" placeholder="ex: 20"></div>
+        <div><label>TMB (kcal)</label><input type="number" id="comp_tmb" step="1" placeholder="ex: 2045"></div>
+        <div><label>IMC</label><input type="number" id="comp_imc" step="0.1" placeholder="ex: 37.4"></div>
+      </div>
+      <textarea id="comp_nota" placeholder="Nota (opcional)" style="width:100%;min-height:46px;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:14px;resize:vertical;margin:14px 0"></textarea>
+      <button class="btn btn-primary" onclick="VITALE_CORE.salvarComposicao()" style="width:100%">➕ Registrar Composição</button>
+      <div id="composicaoLista" style="margin-top:20px"></div>
+    </div>
+
+    <!-- Medidas corporais (fita métrica) manual -->
+    <div class="card">
+      <h3>📏 Medidas de Fita</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Circunferências medidas com fita. Cintura e quadril calculam sua relação cintura/quadril (risco cardiovascular).</p>
       <div id="medidasDestaque" style="display:none;background:rgba(212,168,67,0.06);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:14px;margin-bottom:16px"></div>
+      <div class="field" style="margin-bottom:12px"><label>Data</label><input type="date" id="med_data"></div>
       <div class="form-group" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px">
         <div><label>Cintura (cm)</label><input type="number" id="med_cintura" step="0.1" placeholder="ex: 95"></div>
         <div><label>Quadril (cm)</label><input type="number" id="med_quadril" step="0.1" placeholder="ex: 105"></div>
@@ -374,7 +403,6 @@
         <div><label>Braço (cm)</label><input type="number" id="med_braco" step="0.1" placeholder="ex: 35"></div>
         <div><label>Coxa (cm)</label><input type="number" id="med_coxa" step="0.1" placeholder="ex: 58"></div>
         <div><label>Pescoço (cm)</label><input type="number" id="med_pescoco" step="0.1" placeholder="ex: 40"></div>
-        <div><label>% Gordura</label><input type="number" id="med_gordura_pct" step="0.1" placeholder="ex: 28"></div>
       </div>
       <textarea id="med_nota" placeholder="Nota (opcional)" style="width:100%;min-height:46px;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:14px;resize:vertical;margin:14px 0"></textarea>
       <button class="btn btn-primary" onclick="VITALE_CORE.salvarMedidas()" style="width:100%">➕ Registrar Medidas</button>
@@ -774,12 +802,12 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Bloco Medidas</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Bloco Composicao</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=I"></script>
-<script src="/assets/js/feature-flags.js?v=I"></script>
-<script src="/assets/js/vitale-core.js?v=I"></script>
+<script src="/assets/js/supabase-client.js?v=J"></script>
+<script src="/assets/js/feature-flags.js?v=J"></script>
+<script src="/assets/js/vitale-core.js?v=J"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -797,7 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('Bloco Medidas') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('Bloco Composicao') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();
