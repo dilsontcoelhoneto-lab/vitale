@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Bloco Composicao · 2026-06-01';
+const VITALE_VERSION = 'v4.2 · Bloco Historico+ · 2026-06-01';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -580,6 +580,7 @@ const VITALE_CORE = {
     if (error) return this.showAlert('error', 'Erro: ' + error.message);
     this.state.exercicios = this.state.exercicios.filter(e => e.id !== id);
     this.renderExercicios();
+    this.renderHistoricoCompleto();
   },
 
   _renderExercForm() {
@@ -741,6 +742,7 @@ const VITALE_CORE = {
     this.state.medidas = this.state.medidas.filter(m => m.id !== id);
     this.renderMedidas();
     this.buildMedidasChart();
+    this.renderHistoricoCompleto();
   },
 
   renderMedidas() {
@@ -900,6 +902,7 @@ const VITALE_CORE = {
     this.state.composicao = this.state.composicao.filter(c => c.id !== id);
     this.renderComposicao();
     this.buildComposicaoChart();
+    this.renderHistoricoCompleto();
   },
 
   renderComposicao() {
@@ -2422,6 +2425,120 @@ const VITALE_CORE = {
     const selAll = document.getElementById('histSelAll');
     if (selAll) selAll.checked = raw.length > 0 && raw.every(w => this.histSelecionados.has(w.id));
     this._atualizarBarraSelecao();
+
+    // Renderiza também os demais tipos de dados no histórico
+    this.renderHistoricoCompleto();
+  },
+
+  // Badge de origem do dado (manual, bioimpedância, OCR, integração)
+  _origemBadge(origem) {
+    const map = {
+      manual: { txt: 'Manual', cor: 'var(--textm)', bg: 'rgba(255,255,255,0.05)' },
+      ocr: { txt: '🤖 OCR', cor: 'var(--cyan)', bg: 'rgba(74,157,232,0.1)' },
+      bio: { txt: '📊 Bioimpedância', cor: 'var(--em)', bg: 'rgba(39,196,125,0.1)' },
+      texto: { txt: '📝 Texto', cor: 'var(--textm)', bg: 'rgba(255,255,255,0.05)' },
+      app: { txt: '📱 App', cor: 'var(--purple)', bg: 'rgba(155,89,232,0.1)' }
+    };
+    const o = map[origem] || map.manual;
+    return `<span style="font-size:9px;padding:2px 7px;border-radius:8px;background:${o.bg};color:${o.cor};letter-spacing:0.5px">${o.txt}</span>`;
+  },
+
+  // Renderiza TODOS os tipos de dados no Histórico, editável/removível.
+  // Cada item identifica a origem (manual / análise de bio / OCR / app).
+  renderHistoricoCompleto() {
+    // Composição corporal
+    const elC = document.getElementById('histComposicao');
+    if (elC) {
+      const cs = this.state.composicao || [];
+      elC.innerHTML = !cs.length
+        ? '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Nenhum registro</p>'
+        : cs.map(c => {
+          const campos = this._composicaoCampos.filter(f => c[f.id] != null)
+            .map(f => `${f.icone} ${c[f.id]}${f.un ? f.un === '%' ? '%' : ' ' + f.un : ''}`).join(' · ');
+          return `<div class="med-item">
+            <div class="med-info"><h4 style="font-size:13px;color:var(--textm)">${this.fmt(c.data)} ${this._origemBadge(c.origem || 'bio')}</h4>
+            <p style="margin-top:4px">${campos}</p></div>
+            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerComposicao(${c.id})">🗑️</button>
+          </div>`;
+        }).join('');
+    }
+
+    // Medidas de fita
+    const elM = document.getElementById('histMedidas');
+    if (elM) {
+      const ms = this.state.medidas || [];
+      elM.innerHTML = !ms.length
+        ? '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Nenhum registro</p>'
+        : ms.map(m => {
+          const campos = this._medidasCampos.filter(f => m[f.id] != null)
+            .map(f => `${f.icone} ${f.nome} ${m[f.id]}cm`).join(' · ');
+          return `<div class="med-item">
+            <div class="med-info"><h4 style="font-size:13px;color:var(--textm)">${this.fmt(m.data)} ${this._origemBadge(m.origem || 'manual')}</h4>
+            <p style="margin-top:4px">${campos || '—'}</p></div>
+            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerMedida(${m.id})">🗑️</button>
+          </div>`;
+        }).join('');
+    }
+
+    // Exercícios
+    const elE = document.getElementById('histExercicios');
+    if (elE) {
+      const exs = this.state.exercicios || [];
+      elE.innerHTML = !exs.length
+        ? '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Nenhum registro</p>'
+        : exs.map(e => {
+          const ex = this._exercicios.find(t => t.id === e.tipo) || { icone: '💪', nome: e.tipo };
+          return `<div class="med-item">
+            <div class="med-info"><h4 style="font-size:13px">${ex.icone} ${ex.nome} ${this._origemBadge(e.origem || 'manual')}</h4>
+            <p style="margin-top:4px;color:var(--textm)">${this.fmt(e.data)} · ${e.duracao_min}min · ${e.calorias || 0} kcal</p></div>
+            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
+          </div>`;
+        }).join('');
+    }
+
+    // Diário
+    const elD = document.getElementById('histDiario');
+    if (elD) {
+      const ds = this.state.moodHistoricoCache || [];
+      if (!ds.length) {
+        // Carrega sob demanda (não estava em memória)
+        this.loadMoodHistorico().then(dados => {
+          this.state.moodHistoricoCache = dados;
+          if (dados.length) this.renderHistoricoCompleto();
+        }).catch(() => {});
+        elD.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Carregando…</p>';
+      } else {
+        elD.innerHTML = ds.slice().reverse().map(d => {
+          const e = this._moodEmojis;
+          const parts = [];
+          if (d.humor) parts.push(`${e.humor[d.humor]} Humor`);
+          if (d.energia) parts.push(`${e.energia[d.energia]} Energia`);
+          if (d.sono) parts.push(`${e.sono[d.sono]} Sono`);
+          return `<div class="med-item">
+            <div class="med-info"><h4 style="font-size:13px;color:var(--textm)">${this.fmt(d.data)}</h4>
+            <p style="margin-top:4px">${parts.join(' · ') || '—'}</p></div>
+            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerMood('${d.data}')">🗑️</button>
+          </div>`;
+        }).join('');
+      }
+    }
+  },
+
+  // Remove um registro de diário por data
+  async removerMood(data) {
+    if (!confirm('Remover o diário de ' + this.fmt(data) + '?')) return;
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return;
+    const { error } = await window.sb.from('mood_logs').delete().eq('user_id', user.id).eq('data', data);
+    if (error) return this.showAlert('error', 'Erro: ' + error.message);
+    this.state.moodHistoricoCache = (this.state.moodHistoricoCache || []).filter(d => d.data !== data);
+    if (this.state.moodHoje && this.state.moodHoje.data === data) {
+      this.state.moodHoje = null;
+      this.renderMoodCard();
+    }
+    this.renderHistoricoCompleto();
+    this.renderMoodHistorico();
+    this.showAlert('success', 'Diário removido.');
   },
 
   // =====================================================
