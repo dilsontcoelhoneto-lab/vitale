@@ -41,6 +41,8 @@ export async function onRequestPost(context) {
     const { image, mime, modo } = body;
     const mediaType = mime || 'image/jpeg';
     const isBio = modo === 'bioimpedancia';
+    const isFood = modo === 'alimento';
+    const pesoG = body.peso_g || null;
 
     // 3) Tamanho máximo (~10 MB de base64 ≈ 7.5 MB de imagem)
     if (image.length > 14 * 1024 * 1024) {
@@ -93,6 +95,17 @@ Campos a procurar (deixe null o que não houver):
 Responda APENAS com JSON puro, sem markdown:
 {"medidas":{"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null}}`;
 
+    const promptFood = `Esta imagem é uma foto de um prato de comida / refeição.
+
+Estime as calorias totais do prato. ${pesoG ? `O usuário informou que o prato pesa aproximadamente ${pesoG}g — use isso para calibrar a estimativa.` : 'Estime também o peso aproximado em gramas.'}
+
+Identifique os alimentos visíveis e dê uma descrição curta (ex: "Arroz, feijão, frango grelhado e salada").
+
+Responda APENAS com JSON puro, sem markdown:
+{"alimento":{"descricao":"...","calorias":0,"peso_g":0}}
+
+A estimativa de calorias é aproximada — seja realista, não otimista. Se não for comida, responda {"alimento":null}.`;
+
     // 6) Monta requisição para Claude API
     const claudePayload = {
       model: 'claude-haiku-4-5-20251001',
@@ -101,7 +114,7 @@ Responda APENAS com JSON puro, sem markdown:
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-          { type: 'text', text: isBio ? promptBio : promptPeso }
+          { type: 'text', text: isBio ? promptBio : (isFood ? promptFood : promptPeso) }
         ]
       }]
     };
@@ -163,6 +176,17 @@ Responda APENAS com JSON puro, sem markdown:
         }
       });
       return new Response(JSON.stringify({ medidas: limpa }), { headers: corsHeaders });
+    }
+
+    if (isFood) {
+      const a = parsed.alimento || parsed || {};
+      const out = {};
+      if (a.descricao && typeof a.descricao === 'string') out.descricao = a.descricao.slice(0, 200);
+      const cal = parseInt(a.calorias);
+      if (!isNaN(cal) && cal > 0 && cal < 10000) out.calorias = cal;
+      const pg = parseInt(a.peso_g);
+      if (!isNaN(pg) && pg > 0 && pg < 5000) out.peso_g = pg;
+      return new Response(JSON.stringify({ alimento: Object.keys(out).length ? out : null }), { headers: corsHeaders });
     }
 
     // modo peso (padrão) — preserva tua validação original
