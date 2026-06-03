@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Bloco Historico+ · 2026-06-01';
+const VITALE_VERSION = 'v4.2 · Fase A Alimentacao · 2026-06-03';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -37,7 +37,8 @@ const VITALE_CORE = {
     conquistas: [],       // badges desbloqueados (Bloco Gamificação)
     exercicios: [],       // atividades físicas registradas (Bloco Exercícios)
     medidas: [],          // medidas corporais de fita (Bloco Medidas)
-    composicao: []        // composição corporal / bioimpedância (Bloco Composição)
+    composicao: [],       // composição corporal / bioimpedância (Bloco Composição)
+    refeicoes: []         // refeições do dia (Fase A — Alimentação)
   },
 
   // =====================================================
@@ -63,11 +64,12 @@ const VITALE_CORE = {
         this.loadConquistas(),
         this.loadExercicios(),
         this.loadMedidas(),
-        this.loadComposicao()
+        this.loadComposicao(),
+        this.loadRefeicoesHoje()
       ]);
 
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao'];
-      const fallbacks = [null, [], [], [], [], null, null, [], [], [], []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -88,6 +90,7 @@ const VITALE_CORE = {
       this.state.exercicios = val[8] || [];
       this.state.medidas = val[9] || [];
       this.state.composicao = val[10] || [];
+      this.state.refeicoes = val[11] || [];
 
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -106,6 +109,9 @@ const VITALE_CORE = {
       try { this.renderMedidas(); } catch (e) { console.warn('renderMedidas', e); }
       try { this.buildMedidasChart(); } catch (e) { console.warn('buildMedidasChart', e); }
       try { this.renderComposicao(); } catch (e) { console.warn('renderComposicao', e); }
+      try { this.renderHistoricoCompleto(); } catch (e) { console.warn('renderHistoricoCompleto', e); }
+      try { this.renderRefeicoes(); } catch (e) { console.warn('renderRefeicoes', e); }
+      try { this.renderBalancoCalorico(); } catch (e) { console.warn('renderBalancoCalorico', e); }
       try { this.buildComposicaoChart(); } catch (e) { console.warn('buildComposicaoChart', e); }
       try { this.renderBadgeResumo(); } catch (e) { console.warn('renderBadgeResumo', e); }
 
@@ -367,7 +373,8 @@ const VITALE_CORE = {
     { id: 'submeta_1', icone: '🚩', nome: 'Primeira Submeta', desc: 'Atingiu uma submeta', cond: c => c.submetaAtingida },
     { id: 'exerc_1', icone: '💪', nome: 'Bora Treinar', desc: 'Primeiro exercício registrado', cond: c => c.temExercicio },
     { id: 'exerc_semana', icone: '🔥', nome: 'Semana Ativa', desc: '5 treinos numa semana', cond: c => c.treinosSemana >= 5 },
-    { id: 'medidas_1', icone: '📏', nome: 'Conhece o Corpo', desc: 'Primeira medida corporal registrada', cond: c => c.temMedida }
+    { id: 'medidas_1', icone: '📏', nome: 'Conhece o Corpo', desc: 'Primeira medida corporal registrada', cond: c => c.temMedida },
+    { id: 'refeicao_1', icone: '🍽️', nome: 'Prato Cheio', desc: 'Primeira refeição registrada', cond: c => c.temRefeicao }
   ],
 
   // Monta o contexto e desbloqueia badges novos. silencioso=true não celebra
@@ -386,7 +393,8 @@ const VITALE_CORE = {
       submetaAtingida: this.state.submetas.some(s => sorted.length && sorted[sorted.length - 1].peso <= s.pesoAlvo),
       temExercicio: this.state.exercicios.length > 0,
       treinosSemana: (() => { const d = new Date(); d.setDate(d.getDate() - 7); return this.state.exercicios.filter(e => new Date(e.data) >= d).length; })(),
-      temMedida: this.state.medidas.length > 0
+      temMedida: this.state.medidas.length > 0,
+      temRefeicao: (this.state.refeicoes || []).length > 0
     };
 
     const jaTem = new Set(this.state.conquistas.map(c => c.badge_id));
@@ -986,6 +994,178 @@ const VITALE_CORE = {
     });
   },
 
+  // =====================================================
+  // FASE A — ALIMENTAÇÃO (refeições)
+  // =====================================================
+  _tiposRefeicao: [
+    { id: 'cafe', nome: 'Café', icone: '☕' },
+    { id: 'almoco', nome: 'Almoço', icone: '🍽️' },
+    { id: 'jantar', nome: 'Jantar', icone: '🌙' },
+    { id: 'lanche', nome: 'Lanche', icone: '🍎' }
+  ],
+  refeicaoTipo: 'almoco',
+
+  selectRefeicaoTipo(tipo) {
+    this.refeicaoTipo = tipo;
+    this._renderRefeicaoForm();
+  },
+
+  async loadRefeicoesHoje() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const hoje = this._hojeSP();
+    const { data, error } = await window.sb
+      .from('refeicoes')
+      .select('id, data, tipo, descricao, calorias, peso_g, origem')
+      .eq('user_id', user.id)
+      .eq('data', hoje)
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async salvarRefeicao() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
+    const desc = document.getElementById('ref_desc')?.value.trim();
+    const cal = parseInt(document.getElementById('ref_cal')?.value);
+    const peso = parseInt(document.getElementById('ref_peso')?.value) || null;
+    if (!desc && !cal) return this.showAlert('error', 'Informe a descrição ou as calorias.');
+
+    try {
+      const reg = {
+        user_id: user.id, data: this._hojeSP(), tipo: this.refeicaoTipo,
+        descricao: desc || null, calorias: isNaN(cal) ? null : cal, peso_g: peso,
+        origem: this._refeicaoOrigem || 'manual'
+      };
+      const { data, error } = await window.sb.from('refeicoes').insert(reg).select().single();
+      if (error) throw error;
+      this.state.refeicoes.push(data);
+      this._refeicaoOrigem = null;
+      this.renderRefeicoes();
+      this.renderBalancoCalorico();
+      this._invalidateCoachCache();
+      ['ref_desc', 'ref_cal', 'ref_peso'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      this.showAlert('success', '✅ Refeição registrada!');
+      this.checkConquistas();
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('refeicao_salva', { tipo: this.refeicaoTipo });
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('salvar_refeicao', e);
+    }
+  },
+
+  async removerRefeicao(id) {
+    if (!confirm('Remover esta refeição?')) return;
+    const { error } = await window.sb.from('refeicoes').delete().eq('id', id);
+    if (error) return this.showAlert('error', 'Erro: ' + error.message);
+    this.state.refeicoes = this.state.refeicoes.filter(r => r.id !== id);
+    this.renderRefeicoes();
+    this.renderBalancoCalorico();
+    this._invalidateCoachCache();
+  },
+
+  _renderRefeicaoForm() {
+    const grid = document.getElementById('refTipoGrid');
+    if (!grid) return;
+    grid.innerHTML = this._tiposRefeicao.map(t => {
+      const sel = this.refeicaoTipo === t.id;
+      return `<button onclick="VITALE_CORE.selectRefeicaoTipo('${t.id}')"
+        style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:12px;cursor:pointer;background:${sel ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.02)'};border:1px solid ${sel ? 'var(--gold)' : 'var(--border)'}">
+        <span style="font-size:22px">${t.icone}</span><span style="font-size:10px;color:${sel ? 'var(--text)' : 'var(--textm)'}">${t.nome}</span>
+      </button>`;
+    }).join('');
+  },
+
+  renderRefeicoes() {
+    this._renderRefeicaoForm();
+    const el = document.getElementById('refLista');
+    if (!el) return;
+    const rs = this.state.refeicoes;
+    const totalCal = rs.reduce((s, r) => s + (r.calorias || 0), 0);
+    const tot = document.getElementById('refTotalDia');
+    if (tot) tot.innerHTML = `Total de hoje: <strong style="color:var(--gold)">${totalCal} kcal</strong>`;
+
+    if (!rs.length) {
+      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Nenhuma refeição hoje 🍽️</p>';
+      return;
+    }
+    el.innerHTML = rs.map(r => {
+      const t = this._tiposRefeicao.find(x => x.id === r.tipo) || { icone: '🍽️', nome: r.tipo };
+      const og = r.origem === 'foto' ? ' 📷' : '';
+      return `<div class="med-item">
+        <div class="med-info"><h4 style="font-size:13px">${t.icone} ${t.nome}${og}</h4>
+        <p style="margin-top:3px;color:var(--textm)">${r.descricao ? this._escapeHtml(r.descricao) + ' · ' : ''}${r.calorias || 0} kcal${r.peso_g ? ' · ' + r.peso_g + 'g' : ''}</p></div>
+        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerRefeicao(${r.id})">🗑️</button>
+      </div>`;
+    }).join('');
+  },
+
+  // =====================================================
+  // FASE A — BALANÇO CALÓRICO (consumido vs gasto)
+  // =====================================================
+  // TMB: prioriza bioimpedância mais recente; senão Mifflin-St Jeor com peso atual.
+  // Gasto = TMB × fator de atividade + exercícios extras do dia.
+  _getTMB() {
+    // 1) Bioimpedância mais recente com TMB
+    const compComTmb = (this.state.composicao || []).filter(c => c.tmb).sort((a, b) => (b.data > a.data ? 1 : -1));
+    if (compComTmb.length) return { valor: compComTmb[0].tmb, fonte: 'bioimpedância de ' + this.fmt(compComTmb[0].data) };
+    // 2) TMB manual no perfil
+    const hp = this.state.healthProfile || {};
+    if (hp.tmb_manual) return { valor: hp.tmb_manual, fonte: 'informada por você' };
+    // 3) Mifflin-St Jeor com peso atual (assume masculino; idade do perfil ou 40)
+    const sorted = this.getSorted();
+    const peso = sorted.length ? sorted[sorted.length - 1].peso : null;
+    if (!peso) return null;
+    const alturaCm = this.altura * 100;
+    const idade = hp.idade || 40;
+    // Mifflin-St Jeor (homem): 10*peso + 6.25*altura_cm - 5*idade + 5
+    const tmb = Math.round(10 * peso + 6.25 * alturaCm - 5 * idade + 5);
+    return { valor: tmb, fonte: 'estimada por fórmula (Mifflin-St Jeor)' };
+  },
+
+  renderBalancoCalorico() {
+    const el = document.getElementById('balancoCard');
+    if (!el) return;
+    const tmbInfo = this._getTMB();
+    if (!tmbInfo) { el.style.display = 'none'; return; }
+    el.style.display = '';
+
+    const hp = this.state.healthProfile || {};
+    const fator = hp.fator_atividade || 1.4; // sedentário-leve por padrão
+    const hoje = this._hojeSP();
+
+    // Consumido = refeições de hoje
+    const consumido = (this.state.refeicoes || []).reduce((s, r) => s + (r.calorias || 0), 0);
+    // Exercícios de hoje
+    const exHoje = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
+    // Gasto = TMB × fator + exercícios extras
+    const gasto = Math.round(tmbInfo.valor * fator + exHoje);
+    const saldo = consumido - gasto;
+    const emDeficit = saldo < 0;
+
+    const corSaldo = emDeficit ? 'var(--em)' : 'var(--orange)';
+    const rotuloSaldo = emDeficit ? 'Déficit' : 'Superávit';
+    const pctBarra = Math.min(Math.abs(consumido / gasto) * 100, 150);
+
+    el.innerHTML = `
+      <h3 style="margin-bottom:14px">⚖️ Balanço Calórico de Hoje</h3>
+      <div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:14px">
+        <div><div style="font-size:22px;font-weight:700;color:var(--cyan)">${consumido}</div><div style="font-size:10px;color:var(--textm)">CONSUMIDO</div></div>
+        <div style="align-self:center;font-size:18px;color:var(--textm)">−</div>
+        <div><div style="font-size:22px;font-weight:700;color:var(--gold)">${gasto}</div><div style="font-size:10px;color:var(--textm)">GASTO</div></div>
+        <div style="align-self:center;font-size:18px;color:var(--textm)">=</div>
+        <div><div style="font-size:22px;font-weight:700;color:${corSaldo}">${saldo > 0 ? '+' : ''}${saldo}</div><div style="font-size:10px;color:${corSaldo}">${rotuloSaldo.toUpperCase()}</div></div>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;margin-bottom:8px">
+        <div style="height:100%;width:${pctBarra}%;background:${corSaldo};border-radius:4px;transition:width .4s"></div>
+      </div>
+      <p style="font-size:10px;color:var(--textm);text-align:center">
+        Gasto = TMB (${tmbInfo.valor} kcal, ${tmbInfo.fonte}) × ${fator} atividade${exHoje ? ` + ${exHoje} kcal exercício` : ''}
+        ${emDeficit ? '<br>🎯 Em déficit — favorável à perda de peso' : '<br>⚠️ Acima do gasto hoje'}
+      </p>`;
+  },
+
   // Hoje no fuso de São Paulo (evita salvar no dia errado perto da meia-noite)
   _hojeSP() {
     return new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
@@ -1358,6 +1538,23 @@ const VITALE_CORE = {
     const mood = this.state.moodHoje ? {
       humor: this.state.moodHoje.humor, energia: this.state.moodHoje.energia, sono: this.state.moodHoje.sono
     } : null;
+    // Alimentação de hoje + balanço calórico
+    const hoje = this._hojeSP();
+    const refeicoesHoje = (this.state.refeicoes || []).filter(r => r.data === hoje);
+    const consumidoHoje = refeicoesHoje.reduce((s, r) => s + (r.calorias || 0), 0);
+    const tmbInfo = this._getTMB();
+    let balanco = null;
+    if (tmbInfo) {
+      const fator = hp.fator_atividade || 1.4;
+      const exHojeKcal = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
+      const gasto = Math.round(tmbInfo.valor * fator + exHojeKcal);
+      balanco = { consumido: consumidoHoje, gasto, saldo: consumidoHoje - gasto, em_deficit: (consumidoHoje - gasto) < 0 };
+    }
+    const alimentacao = refeicoesHoje.length ? {
+      refeicoes_hoje: refeicoesHoje.length,
+      calorias_consumidas: consumidoHoje,
+      itens: refeicoesHoje.map(r => r.descricao).filter(Boolean).slice(0, 6)
+    } : null;
 
     const ctx = {
       altura: this.altura,
@@ -1372,7 +1569,9 @@ const VITALE_CORE = {
       cintura_cm: ultMedida?.cintura || null,
       relacao_cintura_quadril: rcq,
       gordura_pct: ultMedida?.gordura_pct || null,
-      humor_hoje: mood
+      humor_hoje: mood,
+      alimentacao_hoje: alimentacao,
+      balanco_calorico: balanco
     };
 
     try {
@@ -1946,7 +2145,65 @@ const VITALE_CORE = {
     reader.readAsDataURL(file);
   },
 
-  // Comprime imagem antes de mandar pro OCR.
+  // FASE A — Foto de alimento → IA estima calorias
+  handleFoodUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return this.showAlert('error', 'Arquivo muito grande (máx 10MB)');
+    const r = document.getElementById('foodResult'); if (r) r.innerHTML = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.style.cssText = 'max-width:100%;border-radius:8px;margin-bottom:8px';
+      const prev = document.getElementById('foodPreview');
+      prev.innerHTML = ''; prev.appendChild(img);
+      document.getElementById('btnProcessarFood').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  },
+
+  async processarFotoAlimento() {
+    const imgEl = document.querySelector('#foodPreview img');
+    if (!imgEl) return this.showAlert('error', 'Selecione uma foto primeiro.');
+    const btn = document.getElementById('btnProcessarFood');
+    const out = document.getElementById('foodResult');
+    const pesoInformado = parseInt(document.getElementById('ref_peso')?.value) || null;
+    btn.disabled = true; btn.textContent = '⏳ Analisando...';
+    try {
+      const compressed = await this._compressImageForOCR(imgEl.src);
+      const base64 = compressed.split(',')[1];
+      const mimeType = 'image/jpeg';
+      const session = await window.sb.auth.getSession();
+      const token = session?.data?.session?.access_token;
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ image: base64, mime: mimeType, modo: 'alimento', peso_g: pesoInformado })
+      });
+      if (!res.ok) {
+        const ed = await res.json().catch(() => ({}));
+        throw new Error(`IA ${res.status}: ${ed.error || res.statusText}`);
+      }
+      const data = await res.json();
+      const a = data.alimento || data;
+      if (a && (a.calorias || a.descricao)) {
+        if (a.descricao) { const d = document.getElementById('ref_desc'); if (d) d.value = a.descricao; }
+        if (a.calorias) { const c = document.getElementById('ref_cal'); if (c) c.value = a.calorias; }
+        if (a.peso_g && !pesoInformado) { const p = document.getElementById('ref_peso'); if (p) p.value = a.peso_g; }
+        this._refeicaoOrigem = 'foto';
+        out.innerHTML = `<div class="alert alert-success">✅ Estimativa: <strong>${a.calorias || '?'} kcal</strong>. Revise abaixo e clique em "Registrar Refeição".</div>`;
+        document.getElementById('ref_desc')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        out.innerHTML = `<div class="alert alert-warning">⚠️ Não consegui identificar o alimento. Preencha manualmente.</div>`;
+      }
+    } catch (e) {
+      out.innerHTML = `<div class="alert alert-error">❌ ${e.message}</div>`;
+      if (window.VitaleErr) window.VitaleErr.log('foto_alimento', e);
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍 ESTIMAR COM IA';
+    }
+  },
   // Redimensiona pra máx 1280px (lado maior) e converte pra JPEG q=0.85.
   // Reduz token cost da Anthropic significativamente (até 80%).
   async _compressImageForOCR(srcDataUrl) {
@@ -2358,6 +2615,7 @@ const VITALE_CORE = {
     if (!this.state.weightsRaw.length) {
       el.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--textm);padding:24px">Nenhum registro ainda</td></tr>';
       this._atualizarBarraSelecao();
+      this.renderHistoricoCompleto();
       return;
     }
 
@@ -2372,6 +2630,7 @@ const VITALE_CORE = {
     if (!raw.length) {
       el.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--textm);padding:24px">Nenhum registro no período selecionado</td></tr>';
       this._atualizarBarraSelecao();
+      this.renderHistoricoCompleto();
       return;
     }
 
@@ -3115,6 +3374,10 @@ const VITALE_CORE = {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(tabName).classList.add('active');
     e.currentTarget.classList.add('active');
+    // Ao abrir o Histórico, garante que todos os painéis estão atualizados
+    if (tabName === 'historico') {
+      try { this.renderHistoricoCompleto(); } catch (err) { console.warn('hist', err); }
+    }
   },
 
   closeModal(id) { document.getElementById(id).classList.remove('active'); },
