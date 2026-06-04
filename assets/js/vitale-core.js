@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Fase A Alimentacao · 2026-06-03';
+const VITALE_VERSION = 'v4.2 · Bloco Fonte-Bio · 2026-06-04';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -862,7 +862,7 @@ const VITALE_CORE = {
     if (!user) return [];
     const { data, error } = await window.sb
       .from('composicao_corporal')
-      .select('id, data, peso, gordura_pct, massa_gordura, massa_muscular, agua_corporal, gordura_visceral, tmb, imc, nota')
+      .select('id, data, peso, gordura_pct, massa_gordura, massa_muscular, agua_corporal, gordura_visceral, tmb, imc, nota, fonte')
       .eq('user_id', user.id)
       .order('data', { ascending: false });
     if (error) throw error;
@@ -873,7 +873,8 @@ const VITALE_CORE = {
     const user = await window.VitaleAuth.getUser();
     if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
     const dataInput = document.getElementById('comp_data')?.value;
-    const reg = { user_id: user.id, data: dataInput || this._hojeSP() };
+    const fonteInput = document.getElementById('comp_fonte')?.value || 'manual';
+    const reg = { user_id: user.id, data: dataInput || this._hojeSP(), fonte: fonteInput };
     let algum = false;
     this._composicaoCampos.forEach(c => {
       const v = parseFloat(document.getElementById('comp_' + c.id)?.value);
@@ -894,6 +895,7 @@ const VITALE_CORE = {
       this._composicaoCampos.forEach(c => { const el = document.getElementById('comp_' + c.id); if (el) el.value = ''; });
       const n = document.getElementById('comp_nota'); if (n) n.value = '';
       const d = document.getElementById('comp_data'); if (d) d.value = '';
+      const f = document.getElementById('comp_fonte'); if (f) f.value = 'manual';
       this.showAlert('success', '✅ Composição corporal registrada!');
       this.checkConquistas();
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('composicao_salva');
@@ -947,7 +949,7 @@ const VITALE_CORE = {
       const notaTxt = c.nota ? `<div style="font-size:12px;color:var(--textm);font-style:italic;margin-top:4px">"${this._escapeHtml(c.nota)}"</div>` : '';
       return `<div class="med-item">
         <div class="med-info">
-          <h4 style="font-size:13px;color:var(--textm)">${this.fmt(c.data)}</h4>
+          <h4 style="font-size:13px;color:var(--textm)">${this.fmt(c.data)} ${this._fonteBadge(c.fonte)}</h4>
           <div style="margin-top:6px;line-height:1.8">${vals}</div>
           ${notaTxt}
         </div>
@@ -2289,8 +2291,14 @@ const VITALE_CORE = {
             if (el) { el.value = m[c]; achou++; }
           }
         });
+        // Detecta a fonte do aparelho (InBody / Xiaomi) e preenche o select — editável depois
+        if (m.fonte) {
+          const fEl = document.getElementById('comp_fonte');
+          if (fEl) fEl.value = ['inbody', 'xiaomi'].includes(m.fonte) ? m.fonte : 'outro';
+        }
         if (achou > 0) {
-          ocrDiv.innerHTML = `<div class="alert alert-success">✅ IA preencheu ${achou} campo(s) abaixo. Revise e clique em "Registrar Composição".</div>`;
+          const fonteTxt = m.fonte ? ` (detectado: ${m.fonte === 'inbody' ? 'InBody' : m.fonte === 'xiaomi' ? 'Xiaomi' : m.fonte})` : '';
+          ocrDiv.innerHTML = `<div class="alert alert-success">✅ IA preencheu ${achou} campo(s)${fonteTxt}. Revise a fonte e os valores, depois clique em "Registrar Composição".</div>`;
           document.getElementById('comp_peso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else {
           ocrDiv.innerHTML = `<div class="alert alert-warning">⚠️ Nenhum dado identificado. Tente um print mais nítido ou preencha manualmente.</div>`;
@@ -2687,6 +2695,18 @@ const VITALE_CORE = {
 
     // Renderiza também os demais tipos de dados no histórico
     this.renderHistoricoCompleto();
+  },
+
+  // Badge da fonte do aparelho de bioimpedância (não comparáveis entre si)
+  _fonteBadge(fonte) {
+    if (!fonte || fonte === 'manual') return '';
+    const map = {
+      inbody: { txt: 'InBody', cor: '#27c47d', bg: 'rgba(39,196,125,0.12)' },
+      xiaomi: { txt: 'Xiaomi', cor: '#e8924a', bg: 'rgba(232,146,74,0.12)' },
+      outro: { txt: 'Outro aparelho', cor: 'var(--textm)', bg: 'rgba(255,255,255,0.05)' }
+    };
+    const f = map[fonte] || map.outro;
+    return `<span style="font-size:9px;padding:2px 7px;border-radius:8px;background:${f.bg};color:${f.cor};letter-spacing:0.5px">⚖️ ${f.txt}</span>`;
   },
 
   // Badge de origem do dado (manual, bioimpedância, OCR, integração)
