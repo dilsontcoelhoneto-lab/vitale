@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Bloco Fonte-Bio · 2026-06-04';
+const VITALE_VERSION = 'v4.2 · Bloco Texto-Alimento · 2026-06-04';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -2163,6 +2163,45 @@ const VITALE_CORE = {
       document.getElementById('btnProcessarFood').style.display = 'block';
     };
     reader.readAsDataURL(file);
+  },
+
+  // FASE A — Texto livre → IA estima calorias (sem foto)
+  async processarTextoAlimento() {
+    const txt = document.getElementById('foodTexto')?.value.trim();
+    if (!txt) return this.showAlert('error', 'Escreva o que você comeu.');
+    const btn = document.getElementById('btnProcessarTexto');
+    const out = document.getElementById('foodTextoResult');
+    btn.disabled = true; btn.textContent = '⏳ Analisando...';
+    try {
+      const session = await window.sb.auth.getSession();
+      const token = session?.data?.session?.access_token;
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ modo: 'alimento_texto', texto: txt })
+      });
+      if (!res.ok) {
+        const ed = await res.json().catch(() => ({}));
+        throw new Error(`IA ${res.status}: ${ed.error || res.statusText}`);
+      }
+      const data = await res.json();
+      const a = data.alimento || data;
+      if (a && (a.calorias || a.descricao)) {
+        const d = document.getElementById('ref_desc'); if (d) d.value = a.descricao || txt;
+        const c = document.getElementById('ref_cal'); if (c && a.calorias) c.value = a.calorias;
+        const p = document.getElementById('ref_peso'); if (p && a.peso_g) p.value = a.peso_g;
+        this._refeicaoOrigem = 'texto';
+        out.innerHTML = `<div class="alert alert-success">✅ Estimativa: <strong>${a.calorias || '?'} kcal</strong>. Revise abaixo e clique em "Registrar Refeição".</div>`;
+        document.getElementById('ref_desc')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        out.innerHTML = `<div class="alert alert-warning">⚠️ Não consegui estimar. Tente detalhar mais ou preencha manualmente.</div>`;
+      }
+    } catch (e) {
+      out.innerHTML = `<div class="alert alert-error">❌ ${e.message}</div>`;
+      if (window.VitaleErr) window.VitaleErr.log('texto_alimento', e);
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍 ESTIMAR COM IA';
+    }
   },
 
   async processarFotoAlimento() {
