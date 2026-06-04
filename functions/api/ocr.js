@@ -76,24 +76,29 @@ Se a imagem NÃO contém dados de peso, responda:
 Se a imagem for ilegível ou irrelevante:
 {"registros":[],"erro":"motivo curto"}`;
 
-    const promptBio = `Esta imagem é um exame de bioimpedância (InBody, Tanita, balança Xiaomi/smart, etc.) com análise de COMPOSIÇÃO CORPORAL.
+    const promptBio = `Esta imagem é um exame de bioimpedância. Pode ser de uma balança InBody (relatório profissional, fundo branco/cinza, marca "InBody"), de uma balança Xiaomi/Mi (app azul claro, "Relatório de peso"), ou de outra balança smart.
 
 REGRA CRÍTICA: extraia SOMENTE valores que aparecem EXPLICITAMENTE na imagem. NUNCA invente, estime ou calcule valores ausentes. Se um campo não aparece, use null.
 
-Bioimpedância NÃO mede circunferências (cintura/quadril com fita) — não tente extrair isso.
+Aparelhos usam nomes diferentes para a mesma coisa — mapeie todos para os campos abaixo:
+- peso: "Peso" / peso corporal (kg)
+- gordura_pct: "PGC" / "Porcentagem de gordura corporal" / "% gordura" (%)
+- massa_gordura: "Massa de Gordura" / "Massa gorda" (kg)
+- massa_muscular: "Massa Muscular Esquelética" / "Massa de músculo esquelético" / "Massa muscular" (kg) — prefira a ESQUELÉTICA quando houver as duas
+- agua_corporal: "Água Corporal Total" / "Massa de água corporal" / "Água corporal" (L ou kg)
+- gordura_visceral: "Nível de Gordura Visceral" / "Classificação de gordura visceral" (número)
+- tmb: "Taxa Metabólica Basal" / "TMB" (kcal)
+- imc: "IMC" / "Índice de Massa Corporal"
 
-Campos a procurar (deixe null o que não houver):
-- peso: peso corporal em kg
-- gordura_pct: percentual de gordura corporal (PGC / %GC)
-- massa_gordura: massa de gordura em kg
-- massa_muscular: massa muscular esquelética em kg
-- agua_corporal: água corporal total em litros
-- gordura_visceral: nível de gordura visceral (número)
-- tmb: taxa metabólica basal em kcal
-- imc: índice de massa corporal
+Também identifique a FONTE do aparelho:
+- "inbody" se vir a marca InBody
+- "xiaomi" se for app Xiaomi/Mi (tela azul clara, "Relatório de peso", "Pontuação corporal")
+- "outro" se não conseguir identificar
+
+NÃO extraia circunferências (cintura/quadril) — bioimpedância não mede isso com fita.
 
 Responda APENAS com JSON puro, sem markdown:
-{"medidas":{"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null}}`;
+{"medidas":{"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null,"fonte":"inbody|xiaomi|outro"}}`;
 
     const promptFood = `Esta imagem é uma foto de um prato de comida / refeição.
 
@@ -175,6 +180,8 @@ A estimativa de calorias é aproximada — seja realista, não otimista. Se não
           limpa[k] = k === 'tmb' ? Math.round(v) : v;
         }
       });
+      // Repassa a fonte detectada (inbody/xiaomi/outro) — validada contra lista
+      if (['inbody', 'xiaomi', 'outro'].includes(m.fonte)) limpa.fonte = m.fonte;
       return new Response(JSON.stringify({ medidas: limpa }), { headers: corsHeaders });
     }
 
