@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Bloco Texto-Alimento · 2026-06-04';
+const VITALE_VERSION = 'v4.2 · Bloco Pacote-Completo · 2026-06-04';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -569,7 +569,11 @@ const VITALE_CORE = {
       if (error) throw error;
       this.state.exercicios.unshift(data);
       this.renderExercicios();
+      this.renderBalancoCalorico();
       this._invalidateCoachCache();
+      const efr = document.getElementById('exercFotoResult'); if (efr) efr.innerHTML = '';
+      const efp = document.getElementById('exercFotoPreview'); if (efp) efp.innerHTML = '';
+      const befp = document.getElementById('btnProcessarExercFoto'); if (befp) befp.style.display = 'none';
       document.getElementById('exercDuracao').value = '';
       if (document.getElementById('exercNota')) document.getElementById('exercNota').value = '';
       const ex = this._exercicios.find(e => e.id === tipo);
@@ -588,6 +592,7 @@ const VITALE_CORE = {
     if (error) return this.showAlert('error', 'Erro: ' + error.message);
     this.state.exercicios = this.state.exercicios.filter(e => e.id !== id);
     this.renderExercicios();
+    this.renderBalancoCalorico();
     this.renderHistoricoCompleto();
   },
 
@@ -803,7 +808,7 @@ const VITALE_CORE = {
     if (!canvas) return;
     const card = document.getElementById('medidasChartCard');
     // Ordena cronológico e pega registros com pelo menos cintura ou abdômen
-    const ms = [...this.state.medidas].reverse().filter(m => m.cintura || m.abdomen);
+    const ms = [...this.state.medidas].reverse().filter(m => (m.cintura || m.abdomen) && this._dentroDoFiltro(m.data));
     if (ms.length < 2) { if (card) card.style.display = 'none'; return; }
     if (card) card.style.display = '';
 
@@ -896,7 +901,8 @@ const VITALE_CORE = {
       const n = document.getElementById('comp_nota'); if (n) n.value = '';
       const d = document.getElementById('comp_data'); if (d) d.value = '';
       const f = document.getElementById('comp_fonte'); if (f) f.value = 'manual';
-      this.showAlert('success', '✅ Composição corporal registrada!');
+      const ocrR = document.getElementById('ocrResult'); if (ocrR) ocrR.innerHTML = '';
+      this.showAlert('success', '✅ Composição salva! Veja na lista abaixo ou no Histórico.');
       this.checkConquistas();
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('composicao_salva');
     } catch (e) {
@@ -963,7 +969,7 @@ const VITALE_CORE = {
     if (!canvas) return;
     const card = document.getElementById('composicaoChartCard');
     // Gráfico de músculo vs gordura ao longo do tempo (a história que importa)
-    const cs = [...this.state.composicao].reverse().filter(c => c.massa_muscular || c.massa_gordura);
+    const cs = [...this.state.composicao].reverse().filter(c => (c.massa_muscular || c.massa_gordura) && this._dentroDoFiltro(c.data));
     if (cs.length < 2) { if (card) card.style.display = 'none'; return; }
     if (card) card.style.display = '';
 
@@ -1048,7 +1054,12 @@ const VITALE_CORE = {
       this.renderBalancoCalorico();
       this._invalidateCoachCache();
       ['ref_desc', 'ref_cal', 'ref_peso'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-      this.showAlert('success', '✅ Refeição registrada!');
+      // Limpa as áreas de estimativa (foto/texto) e a prévia da foto
+      ['foodResult', 'foodTextoResult', 'foodPreview'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
+      const ft = document.getElementById('foodTexto'); if (ft) ft.value = '';
+      const bf = document.getElementById('btnProcessarFood'); if (bf) bf.style.display = 'none';
+      this.renderRefeicoes();
+      this.showAlert('success', '✅ Refeição salva! Veja em "Refeições de Hoje" abaixo.');
       this.checkConquistas();
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('refeicao_salva', { tipo: this.refeicaoTipo });
     } catch (e) {
@@ -1148,23 +1159,38 @@ const VITALE_CORE = {
 
     const corSaldo = emDeficit ? 'var(--em)' : 'var(--orange)';
     const rotuloSaldo = emDeficit ? 'Déficit' : 'Superávit';
-    const pctBarra = Math.min(Math.abs(consumido / gasto) * 100, 150);
+    // Barras proporcionais: a maior das duas vira 100%
+    const maxVal = Math.max(consumido, gasto, 1);
+    const pctConsumido = (consumido / maxVal) * 100;
+    const pctGasto = (gasto / maxVal) * 100;
 
     el.innerHTML = `
       <h3 style="margin-bottom:14px">⚖️ Balanço Calórico de Hoje</h3>
-      <div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:16px">
         <div><div style="font-size:22px;font-weight:700;color:var(--cyan)">${consumido}</div><div style="font-size:10px;color:var(--textm)">CONSUMIDO</div></div>
         <div style="align-self:center;font-size:18px;color:var(--textm)">−</div>
         <div><div style="font-size:22px;font-weight:700;color:var(--gold)">${gasto}</div><div style="font-size:10px;color:var(--textm)">GASTO</div></div>
         <div style="align-self:center;font-size:18px;color:var(--textm)">=</div>
         <div><div style="font-size:22px;font-weight:700;color:${corSaldo}">${saldo > 0 ? '+' : ''}${saldo}</div><div style="font-size:10px;color:${corSaldo}">${rotuloSaldo.toUpperCase()}</div></div>
       </div>
-      <div style="height:8px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;margin-bottom:8px">
-        <div style="height:100%;width:${pctBarra}%;background:${corSaldo};border-radius:4px;transition:width .4s"></div>
+      <!-- Barras comparativas -->
+      <div style="margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:10px;color:var(--cyan);width:70px;text-align:right">Consumido</span>
+          <div style="flex:1;height:14px;background:rgba(255,255,255,0.04);border-radius:7px;overflow:hidden"><div style="height:100%;width:${pctConsumido}%;background:var(--cyan);border-radius:7px;transition:width .5s"></div></div>
+          <span style="font-size:11px;color:var(--cyan);width:46px">${consumido}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:10px;color:var(--gold);width:70px;text-align:right">Gasto</span>
+          <div style="flex:1;height:14px;background:rgba(255,255,255,0.04);border-radius:7px;overflow:hidden"><div style="height:100%;width:${pctGasto}%;background:var(--gold);border-radius:7px;transition:width .5s"></div></div>
+          <span style="font-size:11px;color:var(--gold);width:46px">${gasto}</span>
+        </div>
       </div>
-      <p style="font-size:10px;color:var(--textm);text-align:center">
+      <div style="text-align:center;margin-top:12px;padding:8px;border-radius:8px;background:${emDeficit ? 'rgba(39,196,125,0.08)' : 'rgba(232,146,74,0.08)'}">
+        <span style="font-size:12px;color:${corSaldo};font-weight:600">${emDeficit ? '🎯 Em déficit de ' + Math.abs(saldo) + ' kcal — favorável à perda de peso' : '⚠️ Superávit de ' + saldo + ' kcal — acima do gasto hoje'}</span>
+      </div>
+      <p style="font-size:10px;color:var(--textm);text-align:center;margin-top:10px">
         Gasto = TMB (${tmbInfo.valor} kcal, ${tmbInfo.fonte}) × ${fator} atividade${exHoje ? ` + ${exHoje} kcal exercício` : ''}
-        ${emDeficit ? '<br>🎯 Em déficit — favorável à perda de peso' : '<br>⚠️ Acima do gasto hoje'}
       </p>`;
   },
 
@@ -1613,6 +1639,9 @@ const VITALE_CORE = {
     };
     this.buildWeightChart();
     this.buildIMCChart();
+    this.buildMedidasChart();
+    this.buildComposicaoChart();
+    this._atualizarInfoFiltro();
   },
 
   limparFiltroDashboard() {
@@ -1623,6 +1652,33 @@ const VITALE_CORE = {
     if (ate) ate.value = '';
     this.buildWeightChart();
     this.buildIMCChart();
+    this.buildMedidasChart();
+    this.buildComposicaoChart();
+    this._atualizarInfoFiltro();
+  },
+
+  // Helper central: um registro (por data) está dentro do filtro ativo?
+  _dentroDoFiltro(dataStr) {
+    const de = this.dashFiltro?.de ? (this._normData ? this._normData(this.dashFiltro.de) : this.dashFiltro.de) : null;
+    const ate = this.dashFiltro?.ate ? (this._normData ? this._normData(this.dashFiltro.ate) : this.dashFiltro.ate) : null;
+    const d = this._normData ? this._normData(dataStr) : dataStr;
+    if (de && d < de) return false;
+    if (ate && d > ate) return false;
+    return true;
+  },
+
+  _atualizarInfoFiltro() {
+    const info = document.getElementById('dashFiltroInfo');
+    if (!info) return;
+    const f = this.dashFiltro || {};
+    if (f.de || f.ate) {
+      const de = f.de ? this.fmt(f.de) : 'início';
+      const ate = f.ate ? this.fmt(f.ate) : 'hoje';
+      info.style.display = '';
+      info.innerHTML = `📅 Filtrando de <strong>${de}</strong> até <strong>${ate}</strong> — afeta todos os gráficos`;
+    } else {
+      info.style.display = 'none';
+    }
   },
 
   buildWeightChart() {
@@ -1673,8 +1729,33 @@ const VITALE_CORE = {
     }
 
     const metaLine = new Array(labels.length).fill(this.metaKg);
+
+    // SPOTS DE META: marca onde cada submeta cai sobre a projeção (com data estimada)
+    const spotData = new Array(labels.length).fill(null);
+    const spotInfo = {}; // índice → texto do tooltip
+    if (velDiaria > 0 && projecaoAtiva && this.state.submetas?.length) {
+      this.state.submetas.forEach(sm => {
+        const alvo = sm.pesoAlvo;
+        if (alvo >= last.peso || alvo < this.metaKg) return; // já passou ou abaixo da meta final
+        const diasAteAlvo = Math.ceil((last.peso - alvo) / velDiaria);
+        const dataAlvo = new Date(last.date + 'T12:00:00');
+        dataAlvo.setDate(dataAlvo.getDate() + diasAteAlvo);
+        const labelAlvo = this.fmt(dataAlvo.toISOString().slice(0, 10));
+        // Adiciona um ponto novo no eixo pra essa submeta
+        labels.push(labelAlvo);
+        realData.push(null);
+        projData.push(null);
+        metaLine.push(this.metaKg);
+        spotData.push(alvo);
+        spotInfo[labels.length - 1] = `🎯 Meta ${alvo}kg em ${labelAlvo}`;
+      });
+    }
+    // Repreenche spotData no tamanho final
+    while (spotData.length < labels.length) spotData.push(null);
+
     const ctx = canvas.getContext('2d');
     if (this.state.chartInstance) this.state.chartInstance.destroy();
+    this._spotInfo = spotInfo;
 
     this.state.chartInstance = new Chart(ctx, {
       type: 'line',
@@ -1683,7 +1764,8 @@ const VITALE_CORE = {
         datasets: [
           { label: 'Real', data: realData, borderColor: '#27c47d', backgroundColor: 'rgba(39,196,125,0.08)', borderWidth: 2.5, pointRadius: 5, pointBackgroundColor: '#27c47d', pointBorderColor: '#0d1223', pointBorderWidth: 2, tension: 0.4, fill: true, spanGaps: false },
           { label: 'Projeção', data: projData, borderColor: '#d4a843', backgroundColor: 'rgba(212,168,67,0.04)', borderWidth: 2, borderDash: [6, 4], pointRadius: 4, pointBackgroundColor: '#d4a843', pointBorderColor: '#0d1223', pointBorderWidth: 2, tension: 0.3, fill: false, spanGaps: true },
-          { label: 'Meta', data: metaLine, borderColor: 'rgba(232,80,74,0.5)', borderWidth: 1.5, borderDash: [3, 5], pointRadius: 0, fill: false }
+          { label: 'Meta', data: metaLine, borderColor: 'rgba(232,80,74,0.5)', borderWidth: 1.5, borderDash: [3, 5], pointRadius: 0, fill: false },
+          { label: 'Submetas', data: spotData, borderColor: 'transparent', backgroundColor: '#e8924a', pointRadius: 8, pointStyle: 'star', pointBorderColor: '#fff', pointBorderWidth: 1, showLine: false }
         ]
       },
       options: {
@@ -1694,7 +1776,10 @@ const VITALE_CORE = {
           tooltip: {
             backgroundColor: '#0d1223', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
             titleColor: '#d4a843', bodyColor: '#ede8e0', padding: 12,
-            callbacks: { label: (c) => c.raw === null ? null : ` ${c.raw.toFixed(1)}${c.datasetIndex === 2 ? ' (Meta)' : ' kg'}` }
+            callbacks: { label: (c) => {
+              if (c.datasetIndex === 3 && c.raw !== null) return this._spotInfo?.[c.dataIndex] || ` 🎯 ${c.raw} kg`;
+              return c.raw === null ? null : ` ${c.raw.toFixed(1)}${c.datasetIndex === 2 ? ' (Meta)' : ' kg'}`;
+            } }
           }
         },
         scales: {
@@ -2191,7 +2276,8 @@ const VITALE_CORE = {
         const c = document.getElementById('ref_cal'); if (c && a.calorias) c.value = a.calorias;
         const p = document.getElementById('ref_peso'); if (p && a.peso_g) p.value = a.peso_g;
         this._refeicaoOrigem = 'texto';
-        out.innerHTML = `<div class="alert alert-success">✅ Estimativa: <strong>${a.calorias || '?'} kcal</strong>. Revise abaixo e clique em "Registrar Refeição".</div>`;
+        out.innerHTML = `<div class="alert alert-success" style="margin-bottom:10px">✅ Estimativa: <strong>${a.calorias || '?'} kcal</strong> — ${this._escapeHtml(a.descricao || txt)}. Revise os valores abaixo se quiser.</div>
+          <button class="btn btn-primary" onclick="VITALE_CORE.salvarRefeicao()" style="width:100%;font-size:15px;padding:14px">✅ Confirmar e Salvar Refeição</button>`;
         document.getElementById('ref_desc')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else {
         out.innerHTML = `<div class="alert alert-warning">⚠️ Não consegui estimar. Tente detalhar mais ou preencha manualmente.</div>`;
@@ -2201,6 +2287,66 @@ const VITALE_CORE = {
       if (window.VitaleErr) window.VitaleErr.log('texto_alimento', e);
     } finally {
       btn.disabled = false; btn.textContent = '🔍 ESTIMAR COM IA';
+    }
+  },
+
+  // FASE B — Print de app de exercício → IA extrai dados
+  handleExercUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) return this.showAlert('error', 'Arquivo muito grande (máx 10MB)');
+    const r = document.getElementById('exercFotoResult'); if (r) r.innerHTML = '';
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.style.cssText = 'max-width:100%;border-radius:8px;margin-bottom:8px';
+      const prev = document.getElementById('exercFotoPreview');
+      prev.innerHTML = ''; prev.appendChild(img);
+      document.getElementById('btnProcessarExercFoto').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  },
+
+  async processarFotoExercicio() {
+    const imgEl = document.querySelector('#exercFotoPreview img');
+    if (!imgEl) return this.showAlert('error', 'Selecione um print primeiro.');
+    const btn = document.getElementById('btnProcessarExercFoto');
+    const out = document.getElementById('exercFotoResult');
+    btn.disabled = true; btn.textContent = '⏳ Analisando...';
+    try {
+      const compressed = await this._compressImageForOCR(imgEl.src);
+      const base64 = compressed.split(',')[1];
+      const session = await window.sb.auth.getSession();
+      const token = session?.data?.session?.access_token;
+      const res = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ image: base64, mime: 'image/jpeg', modo: 'exercicio' })
+      });
+      if (!res.ok) {
+        const ed = await res.json().catch(() => ({}));
+        throw new Error(`IA ${res.status}: ${ed.error || res.statusText}`);
+      }
+      const data = await res.json();
+      const ex = data.exercicio || data;
+      if (ex && (ex.tipo || ex.duracao_min)) {
+        if (ex.tipo) this.exercDraft.tipo = ex.tipo;
+        if (ex.intensidade) this.exercDraft.intensidade = ex.intensidade;
+        if (ex.duracao_min) { const d = document.getElementById('exercDuracao'); if (d) d.value = ex.duracao_min; }
+        this._renderExercForm();
+        const resumo = `${ex.tipo || '?'} · ${ex.duracao_min || '?'}min${ex.calorias ? ' · ' + ex.calorias + ' kcal' : ''}`;
+        out.innerHTML = `<div class="alert alert-success" style="margin-bottom:10px">✅ Detectado: <strong>${resumo}</strong>. Revise abaixo.</div>
+          <button class="btn btn-primary" onclick="VITALE_CORE.salvarExercicio()" style="width:100%;font-size:15px;padding:14px">✅ Confirmar e Salvar Exercício</button>`;
+        document.getElementById('exercDuracao')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        out.innerHTML = `<div class="alert alert-warning">⚠️ Não identifiquei o treino. Preencha manualmente.</div>`;
+      }
+    } catch (e) {
+      out.innerHTML = `<div class="alert alert-error">❌ ${e.message}</div>`;
+      if (window.VitaleErr) window.VitaleErr.log('foto_exercicio', e);
+    } finally {
+      btn.disabled = false; btn.textContent = '🔍 EXTRAIR COM IA';
     }
   },
 
@@ -2233,7 +2379,8 @@ const VITALE_CORE = {
         if (a.calorias) { const c = document.getElementById('ref_cal'); if (c) c.value = a.calorias; }
         if (a.peso_g && !pesoInformado) { const p = document.getElementById('ref_peso'); if (p) p.value = a.peso_g; }
         this._refeicaoOrigem = 'foto';
-        out.innerHTML = `<div class="alert alert-success">✅ Estimativa: <strong>${a.calorias || '?'} kcal</strong>. Revise abaixo e clique em "Registrar Refeição".</div>`;
+        out.innerHTML = `<div class="alert alert-success" style="margin-bottom:10px">✅ Estimativa: <strong>${a.calorias || '?'} kcal</strong>${a.descricao ? ' — ' + this._escapeHtml(a.descricao) : ''}. Revise os valores abaixo se quiser.</div>
+          <button class="btn btn-primary" onclick="VITALE_CORE.salvarRefeicao()" style="width:100%;font-size:15px;padding:14px">✅ Confirmar e Salvar Refeição</button>`;
         document.getElementById('ref_desc')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else {
         out.innerHTML = `<div class="alert alert-warning">⚠️ Não consegui identificar o alimento. Preencha manualmente.</div>`;
@@ -2337,7 +2484,8 @@ const VITALE_CORE = {
         }
         if (achou > 0) {
           const fonteTxt = m.fonte ? ` (detectado: ${m.fonte === 'inbody' ? 'InBody' : m.fonte === 'xiaomi' ? 'Xiaomi' : m.fonte})` : '';
-          ocrDiv.innerHTML = `<div class="alert alert-success">✅ IA preencheu ${achou} campo(s)${fonteTxt}. Revise a fonte e os valores, depois clique em "Registrar Composição".</div>`;
+          ocrDiv.innerHTML = `<div class="alert alert-success" style="margin-bottom:10px">✅ IA preencheu ${achou} campo(s)${fonteTxt}. Revise a fonte e os valores abaixo.</div>
+            <button class="btn btn-primary" onclick="VITALE_CORE.salvarComposicao()" style="width:100%;font-size:15px;padding:14px">✅ Confirmar e Salvar Composição</button>`;
           document.getElementById('comp_peso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else {
           ocrDiv.innerHTML = `<div class="alert alert-warning">⚠️ Nenhum dado identificado. Tente um print mais nítido ou preencha manualmente.</div>`;
