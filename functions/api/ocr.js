@@ -83,6 +83,7 @@ Se não der pra estimar (texto não é comida), responda {"alimento":null}.`;
     const mediaType = mime || 'image/jpeg';
     const isBio = modo === 'bioimpedancia';
     const isFood = modo === 'alimento';
+    const isExerc = modo === 'exercicio';
     const pesoG = body.peso_g || null;
 
     // 3) Tamanho máximo (~10 MB de base64 ≈ 7.5 MB de imagem)
@@ -152,6 +153,19 @@ Responda APENAS com JSON puro, sem markdown:
 
 A estimativa de calorias é aproximada — seja realista, não otimista. Se não for comida, responda {"alimento":null}.`;
 
+    const promptExerc = `Esta imagem é um print de um app de exercício (Apple Saúde, Strava, Google Fit, Nike Run, etc.) mostrando um treino/atividade.
+
+Extraia o que estiver visível. NÃO invente — use null para o que não aparecer.
+- tipo: classifique em UM destes: caminhada, corrida, bicicleta, musculacao, natacao, funcional, yoga, esporte, outro
+- duracao_min: duração em minutos (converta se estiver em h:min)
+- calorias: calorias gastas (kcal), se mostrado
+- intensidade: leve, moderada ou intensa (estime pela atividade se não explícito)
+
+Responda APENAS com JSON puro, sem markdown:
+{"exercicio":{"tipo":null,"duracao_min":null,"calorias":null,"intensidade":null}}
+
+Se não for um app de exercício, responda {"exercicio":null}.`;
+
     // 6) Monta requisição para Claude API
     const claudePayload = {
       model: 'claude-haiku-4-5-20251001',
@@ -160,7 +174,7 @@ A estimativa de calorias é aproximada — seja realista, não otimista. Se não
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-          { type: 'text', text: isBio ? promptBio : (isFood ? promptFood : promptPeso) }
+          { type: 'text', text: isBio ? promptBio : (isFood ? promptFood : (isExerc ? promptExerc : promptPeso)) }
         ]
       }]
     };
@@ -235,6 +249,19 @@ A estimativa de calorias é aproximada — seja realista, não otimista. Se não
       const pg = parseInt(a.peso_g);
       if (!isNaN(pg) && pg > 0 && pg < 5000) out.peso_g = pg;
       return new Response(JSON.stringify({ alimento: Object.keys(out).length ? out : null }), { headers: corsHeaders });
+    }
+
+    if (isExerc) {
+      const e = parsed.exercicio || parsed || {};
+      const out = {};
+      const tiposOk = ['caminhada', 'corrida', 'bicicleta', 'musculacao', 'natacao', 'funcional', 'yoga', 'esporte', 'outro'];
+      if (tiposOk.includes(e.tipo)) out.tipo = e.tipo;
+      const dur = parseInt(e.duracao_min);
+      if (!isNaN(dur) && dur > 0 && dur <= 600) out.duracao_min = dur;
+      const cal = parseInt(e.calorias);
+      if (!isNaN(cal) && cal > 0 && cal < 10000) out.calorias = cal;
+      if (['leve', 'moderada', 'intensa'].includes(e.intensidade)) out.intensidade = e.intensidade;
+      return new Response(JSON.stringify({ exercicio: Object.keys(out).length ? out : null }), { headers: corsHeaders });
     }
 
     // modo peso (padrão) — preserva tua validação original
