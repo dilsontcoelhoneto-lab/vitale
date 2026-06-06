@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Bloco Pacote-Completo · 2026-06-04';
+const VITALE_VERSION = 'v4.2 · Bloco CRM-Onboarding · 2026-06-04';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -133,6 +133,15 @@ const VITALE_CORE = {
 
       // Coach IA via API (com fallback determinístico)
       setTimeout(() => this.generateCoachMessageAI(), 1000);
+
+      // Walkthrough: mostra o tour no primeiro acesso (se ainda não viu e não está no onboarding)
+      const jaViuTour = this.state.healthProfile?.tour_visto;
+      const emOnboarding = document.getElementById('onboardingModal')?.classList.contains('active');
+      if (!jaViuTour && !emOnboarding) {
+        setTimeout(() => this.iniciarTour(), 1800);
+      }
+      // Dica diária da IA
+      setTimeout(() => this.renderDicaDiaria(), 2500);
     } catch (e) {
       console.error('[VITALE] init error:', e);
       if (window.VitaleErr) window.VitaleErr.log('app_init', e);
@@ -3168,7 +3177,7 @@ const VITALE_CORE = {
   // ONBOARDING WIZARD — 6 telas (Bloco A.1: + Objetivos)
   // =====================================================
   onbCurrentStep: 1,
-  ONB_TOTAL_STEPS: 6,
+  ONB_TOTAL_STEPS: 7,
 
   showOnboarding(prePreenchido = false) {
     try {
@@ -3326,12 +3335,27 @@ const VITALE_CORE = {
       if (isNaN(peso) || peso < 30 || peso > 500) return this.showAlert('error', 'Peso inválido');
     }
 
+    // Tela 7: aceite dos termos é obrigatório
+    if (this.onbCurrentStep === 7) {
+      const aceitou = document.getElementById('onbAceiteTermos')?.checked;
+      if (!aceitou) {
+        const aviso = document.getElementById('onbAceiteAviso');
+        if (aviso) aviso.style.display = 'block';
+        return;
+      }
+    }
+
     if (this.onbCurrentStep < this.ONB_TOTAL_STEPS) {
       this.onbCurrentStep++;
       this.onbRenderStep();
     } else {
       await this.onbFinalizar();
     }
+  },
+
+  verTermos(e) {
+    if (e) e.preventDefault();
+    window.open('https://vitale.acacianegocios.com.br/termos.html', '_blank');
   },
 
   async onbFinalizar() {
@@ -3355,10 +3379,21 @@ const VITALE_CORE = {
       const objetivoOutro = (objetivo === 'outro') ? getStr('onbObjetivoOutro') : null;
 
       // 2) health_profile
+      const aceiteMkt = getCheck('onbConsentMarketing');
+      const agora = new Date().toISOString();
       const hpData = {
         id: user.id,
         data_nascimento: document.getElementById('onbDataNasc')?.value || null,
         sexo: getStr('onbSexo'),
+        telefone: getStr('onbTelefone'),
+        estado: getStr('onbEstado'),
+        como_conheceu: getStr('onbComoConheceu'),
+        aceite_termos: getCheck('onbAceiteTermos'),
+        aceite_termos_em: agora,
+        aceite_termos_versao: '1.0',
+        consent_essencial: getCheck('onbConsentEssencial'),
+        consent_marketing: aceiteMkt,
+        consent_marketing_em: aceiteMkt ? agora : null,
         pa_sistolica: getInt('onbPaSist'),
         pa_diastolica: getInt('onbPaDiast'),
         glicemia_jejum: getNum('onbGlicemia'),
@@ -3529,6 +3564,10 @@ const VITALE_CORE = {
   async openSettings() {
     document.getElementById('alturaInput').value = this.state.profile?.altura || '';
     document.getElementById('nomeInput').value = this.state.profile?.nome || '';
+    const hp = this.state.healthProfile || {};
+    const tel = document.getElementById('telefoneInput'); if (tel) tel.value = hp.telefone || '';
+    const est = document.getElementById('estadoInput'); if (est) est.value = hp.estado || '';
+    const mkt = document.getElementById('consentMarketingInput'); if (mkt) mkt.checked = !!hp.consent_marketing;
     document.getElementById('modalSettings').classList.add('active');
   },
 
@@ -3538,11 +3577,21 @@ const VITALE_CORE = {
     const update = {};
     if (!isNaN(h) && h > 1 && h < 2.5) update.altura = h;
     if (n) update.nome = n;
-    if (!Object.keys(update).length) return this.showAlert('warning', 'Nenhuma alteração');
-    update.updated_at = new Date().toISOString();
-    const { error } = await window.sb.from('profiles').update(update).eq('id', this.state.profile.id);
-    if (error) return this.showAlert('error', 'Erro: ' + error.message);
-    this.state.profile = { ...this.state.profile, ...update };
+    if (Object.keys(update).length) {
+      update.updated_at = new Date().toISOString();
+      const { error } = await window.sb.from('profiles').update(update).eq('id', this.state.profile.id);
+      if (error) return this.showAlert('error', 'Erro: ' + error.message);
+      this.state.profile = { ...this.state.profile, ...update };
+    }
+    // Dados de contato/consentimento → health_profile
+    const tel = document.getElementById('telefoneInput')?.value.trim() || null;
+    const est = document.getElementById('estadoInput')?.value || null;
+    const mkt = !!document.getElementById('consentMarketingInput')?.checked;
+    const hpUpd = { id: this.state.profile.id, telefone: tel, estado: est, consent_marketing: mkt };
+    if (mkt && !this.state.healthProfile?.consent_marketing) hpUpd.consent_marketing_em = new Date().toISOString();
+    const { error: e2 } = await window.sb.from('health_profile').upsert(hpUpd);
+    if (e2) return this.showAlert('error', 'Erro ao salvar contato: ' + e2.message);
+    this.state.healthProfile = { ...this.state.healthProfile, ...hpUpd };
     this.updateDashboard();
     this.renderHeader();
     this.showAlert('success', '✅ Perfil salvo!');
