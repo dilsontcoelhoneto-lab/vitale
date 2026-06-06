@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Bloco CRM-Onboarding · 2026-06-04';
+const VITALE_VERSION = 'v4.2 · Bloco Tour-GLP1 · 2026-06-05';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -65,11 +65,13 @@ const VITALE_CORE = {
         this.loadExercicios(),
         this.loadMedidas(),
         this.loadComposicao(),
-        this.loadRefeicoesHoje()
+        this.loadRefeicoesHoje(),
+        this.loadDoses(),
+        this.loadEfeitos()
       ]);
 
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes'];
-      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -91,6 +93,8 @@ const VITALE_CORE = {
       this.state.medidas = val[9] || [];
       this.state.composicao = val[10] || [];
       this.state.refeicoes = val[11] || [];
+      this.state.doses = val[12] || [];
+      this.state.efeitos = val[13] || [];
 
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -877,6 +881,30 @@ const VITALE_CORE = {
     const { data, error } = await window.sb
       .from('composicao_corporal')
       .select('id, data, peso, gordura_pct, massa_gordura, massa_muscular, agua_corporal, gordura_visceral, tmb, imc, nota, fonte')
+      .eq('user_id', user.id)
+      .order('data', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async loadDoses() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('doses_medicacao')
+      .select('id, data, medicamento, dose, nota')
+      .eq('user_id', user.id)
+      .order('data', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async loadEfeitos() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('efeitos_colaterais')
+      .select('id, data, tipo, intensidade, nota')
       .eq('user_id', user.id)
       .order('data', { ascending: false });
     if (error) throw error;
@@ -3353,6 +3381,229 @@ const VITALE_CORE = {
     }
   },
 
+  // =====================================================
+  // WALKTHROUGH — Tour de primeiro acesso (balões + checklist)
+  // =====================================================
+  _tourPassos: [
+    { titulo: '👋 Bem-vindo ao VITALE!', texto: 'Deixa eu te mostrar rapidinho onde fica cada coisa. Leva 30 segundos.', destaque: null },
+    { titulo: '📊 Dashboard', texto: 'Aqui você vê seu peso, projeção, balanço calórico e a mensagem do seu Coach IA — tudo num lugar.', destaque: "dashboard" },
+    { titulo: '⚖️ Registrar Peso', texto: 'Toque em "Registrar" para adicionar seu peso. Ou suba um print da balança e a IA lê pra você.', destaque: "upload" },
+    { titulo: '🍽️ Alimentação', texto: 'Registre o que comeu — por foto, por texto ("um pão com café") ou manual. A IA estima as calorias.', destaque: "alimentacao" },
+    { titulo: '🏃 Exercícios', texto: 'Registre treinos ou suba um print do Apple Saúde/Strava. Conta no seu balanço calórico do dia.', destaque: "exercicios" },
+    { titulo: '🎯 Metas', texto: 'Defina sua meta e acompanhe submetas. Elas aparecem como estrelas no seu gráfico de peso.', destaque: "metas" },
+    { titulo: '✅ Pronto!', texto: 'Comece registrando seu peso de hoje. Você pode rever este tour quando quiser, nas Configurações.', destaque: null }
+  ],
+  _tourIdx: 0,
+
+  iniciarTour() {
+    this._tourIdx = 0;
+    let ov = document.getElementById('tourOverlay');
+    if (!ov) {
+      ov = document.createElement('div');
+      ov.id = 'tourOverlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(4,6,8,0.85);display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)';
+      document.body.appendChild(ov);
+    }
+    ov.style.display = 'flex';
+    this._tourRender();
+  },
+
+  _tourRender() {
+    const ov = document.getElementById('tourOverlay');
+    if (!ov) return;
+    const p = this._tourPassos[this._tourIdx];
+    const ehUltimo = this._tourIdx === this._tourPassos.length - 1;
+    const ehPrimeiro = this._tourIdx === 0;
+    // destaca a aba correspondente, se houver
+    document.querySelectorAll('.tab-btn').forEach(b => { b.style.outline = ''; b.style.outlineOffset = ''; });
+    if (p.destaque) {
+      const btn = document.querySelector(`.tab-btn[onclick*="'${p.destaque}'"]`);
+      if (btn) { btn.style.outline = '3px solid var(--gold)'; btn.style.outlineOffset = '2px'; btn.scrollIntoView({ block: 'nearest', inline: 'center' }); }
+    }
+    const dots = this._tourPassos.map((_, i) => `<span style="width:7px;height:7px;border-radius:50%;background:${i === this._tourIdx ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}"></span>`).join('');
+    ov.innerHTML = `
+      <div style="background:var(--card,#0d1223);border:1px solid var(--gold);border-radius:18px;padding:28px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+        <h2 style="color:var(--gold);font-size:24px;margin-bottom:10px">${p.titulo}</h2>
+        <p style="color:var(--text,#ede8e0);font-size:15px;line-height:1.7;margin-bottom:22px">${p.texto}</p>
+        <div style="display:flex;gap:6px;justify-content:center;margin-bottom:20px">${dots}</div>
+        <div style="display:flex;gap:10px;justify-content:space-between;align-items:center">
+          <button onclick="VITALE_CORE._tourPular()" style="background:none;border:none;color:var(--textm,#8c8880);font-size:13px;cursor:pointer">Pular</button>
+          <div style="display:flex;gap:8px">
+            ${!ehPrimeiro ? '<button class="btn btn-secondary btn-small" onclick="VITALE_CORE._tourAnterior()">← Voltar</button>' : ''}
+            <button class="btn btn-primary btn-small" onclick="VITALE_CORE._tourProximo()">${ehUltimo ? '✅ Começar' : 'Próximo →'}</button>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  _tourProximo() {
+    if (this._tourIdx < this._tourPassos.length - 1) {
+      this._tourIdx++;
+      this._tourRender();
+    } else {
+      this._tourFinalizar();
+    }
+  },
+  _tourAnterior() { if (this._tourIdx > 0) { this._tourIdx--; this._tourRender(); } },
+  _tourPular() { this._tourFinalizar(); },
+
+  async _tourFinalizar() {
+    const ov = document.getElementById('tourOverlay');
+    if (ov) ov.style.display = 'none';
+    document.querySelectorAll('.tab-btn').forEach(b => { b.style.outline = ''; b.style.outlineOffset = ''; });
+    // persiste que viu o tour
+    try {
+      const user = await window.VitaleAuth.getUser();
+      if (user) {
+        await window.sb.from('health_profile').upsert({ id: user.id, tour_visto: true });
+        if (this.state.healthProfile) this.state.healthProfile.tour_visto = true;
+      }
+    } catch (e) { console.warn('tour persist', e); }
+  },
+
+  // chamado pelo botão "Rever tour" nas configurações
+  refazerTour() {
+    this.closeModal('modalSettings');
+    setTimeout(() => this.iniciarTour(), 300);
+  },
+
+  // =====================================================
+  // DICA DIÁRIA — mensagem curta da IA (reusa Coach, cache diário)
+  // =====================================================
+  renderDicaDiaria() {
+    const el = document.getElementById('dicaDiaria');
+    if (!el) return;
+    const hoje = this._hojeSP();
+    // cache: 1 dica por dia, guardada em localStorage
+    let cache = null;
+    try { cache = JSON.parse(localStorage.getItem('vitale_dica') || 'null'); } catch (e) {}
+    if (cache && cache.data === hoje && cache.texto) {
+      el.innerHTML = `<div style="font-size:13px;color:var(--text);line-height:1.6">💡 <strong style="color:var(--gold)">Dica do dia:</strong> ${this._escapeHtml(cache.texto)}</div>`;
+      el.style.display = '';
+      return;
+    }
+    // gera uma dica curta determinística (sem custo de IA) baseada no estado
+    const dica = this._gerarDicaLocal();
+    if (dica) {
+      try { localStorage.setItem('vitale_dica', JSON.stringify({ data: hoje, texto: dica })); } catch (e) {}
+      el.innerHTML = `<div style="font-size:13px;color:var(--text);line-height:1.6">💡 <strong style="color:var(--gold)">Dica do dia:</strong> ${this._escapeHtml(dica)}</div>`;
+      el.style.display = '';
+    }
+  },
+
+  _gerarDicaLocal() {
+    const dicas = [
+      'Pese-se sempre no mesmo horário, de preferência em jejum, para comparações mais justas.',
+      'No tratamento GLP-1, manter a massa muscular é tão importante quanto perder peso. Não esqueça da proteína.',
+      'Beber água ao longo do dia ajuda na saciedade e no funcionamento do metabolismo.',
+      'Registrar a alimentação, mesmo nos dias ruins, é o que mais ajuda a entender seu padrão.',
+      'Treino de força preserva músculo durante o emagrecimento. Caminhar também conta muito.',
+      'O peso oscila dia a dia (água, sal, intestino). Olhe a tendência da semana, não o número de hoje.',
+      'Sono ruim aumenta a fome no dia seguinte. Cuidar do sono é cuidar do peso.',
+      'Constância vence intensidade. Pequenos registros diários valem mais que esforços isolados.'
+    ];
+    // escolhe pela data pra ser estável no dia
+    const hoje = this._hojeSP();
+    const seed = hoje.split('-').reduce((s, n) => s + parseInt(n), 0);
+    return dicas[seed % dicas.length];
+  },
+
+  // =====================================================
+  // DIFERENCIAL GLP-1 — Doses e Efeitos Colaterais
+  // =====================================================
+  _efeitoTipos: [
+    { id: 'nausea', label: '🤢 Náusea' }, { id: 'constipacao', label: '🚽 Constipação' },
+    { id: 'saciedade', label: '🍽️ Saciedade' }, { id: 'fadiga', label: '😴 Fadiga' },
+    { id: 'refluxo', label: '🔥 Refluxo' }, { id: 'outro', label: '➕ Outro' }
+  ],
+  _efeitoSel: { tipo: null, intensidade: 3 },
+
+  renderGlp1Forms() {
+    const grid = document.getElementById('efeitoTipoGrid');
+    if (grid) grid.innerHTML = this._efeitoTipos.map(t =>
+      `<span class="checkbox-chip${this._efeitoSel.tipo === t.id ? ' selected' : ''}" onclick="VITALE_CORE.selEfeitoTipo('${t.id}')">${t.label}</span>`).join('');
+    const intens = document.getElementById('efeitoIntensidade');
+    if (intens) intens.innerHTML = [1, 2, 3, 4, 5].map(n =>
+      `<span class="checkbox-chip${this._efeitoSel.intensidade === n ? ' selected' : ''}" onclick="VITALE_CORE.selEfeitoIntens(${n})" style="min-width:40px;text-align:center">${n}</span>`).join('');
+    const dd = document.getElementById('doseData'); if (dd && !dd.value) dd.value = this._hojeSP();
+  },
+  selEfeitoTipo(t) { this._efeitoSel.tipo = t; this.renderGlp1Forms(); },
+  selEfeitoIntens(n) { this._efeitoSel.intensidade = n; this.renderGlp1Forms(); },
+
+  async salvarDose() {
+    const med = document.getElementById('doseMed')?.value.trim();
+    const dose = document.getElementById('doseValor')?.value.trim();
+    const data = document.getElementById('doseData')?.value || this._hojeSP();
+    if (!med || !dose) return this.showAlert('error', 'Informe o medicamento e a dose.');
+    try {
+      const user = await window.VitaleAuth.getUser();
+      const reg = { user_id: user.id, medicamento: med, dose, data };
+      const { data: saved, error } = await window.sb.from('doses_medicacao').insert(reg).select().single();
+      if (error) throw error;
+      if (!this.state.doses) this.state.doses = [];
+      this.state.doses.unshift(saved);
+      document.getElementById('doseMed').value = '';
+      document.getElementById('doseValor').value = '';
+      this.renderDosesList();
+      this._invalidateCoachCache();
+      this.showAlert('success', '✅ Dose registrada!');
+    } catch (e) { this.showAlert('error', 'Erro: ' + (e.message || e)); }
+  },
+
+  renderDosesList() {
+    const el = document.getElementById('dosesList');
+    if (!el) return;
+    const ds = this.state.doses || [];
+    if (!ds.length) { el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center">Nenhuma dose registrada ainda.</p>'; return; }
+    el.innerHTML = ds.map(d =>
+      `<div class="med-item"><div class="med-info"><h4 style="font-size:14px">${this._escapeHtml(d.medicamento)} — ${this._escapeHtml(d.dose)}</h4><div style="font-size:12px;color:var(--textm)">${this.fmt(d.data)}</div></div><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerDose(${d.id})">🗑️</button></div>`).join('');
+  },
+
+  async removerDose(id) {
+    if (!confirm('Remover esta dose?')) return;
+    try {
+      await window.sb.from('doses_medicacao').delete().eq('id', id);
+      this.state.doses = (this.state.doses || []).filter(d => d.id !== id);
+      this.renderDosesList();
+    } catch (e) { this.showAlert('error', 'Erro: ' + (e.message || e)); }
+  },
+
+  async salvarEfeito() {
+    if (!this._efeitoSel.tipo) return this.showAlert('error', 'Selecione um sintoma.');
+    try {
+      const user = await window.VitaleAuth.getUser();
+      const reg = { user_id: user.id, tipo: this._efeitoSel.tipo, intensidade: this._efeitoSel.intensidade, data: this._hojeSP() };
+      const { data: saved, error } = await window.sb.from('efeitos_colaterais').insert(reg).select().single();
+      if (error) throw error;
+      if (!this.state.efeitos) this.state.efeitos = [];
+      this.state.efeitos.unshift(saved);
+      this._efeitoSel = { tipo: null, intensidade: 3 };
+      this.renderGlp1Forms();
+      this.renderEfeitosList();
+      this._invalidateCoachCache();
+      this.showAlert('success', '✅ Sintoma registrado!');
+    } catch (e) { this.showAlert('error', 'Erro: ' + (e.message || e)); }
+  },
+
+  renderEfeitosList() {
+    const el = document.getElementById('efeitosList');
+    if (!el) return;
+    const es = this.state.efeitos || [];
+    if (!es.length) { el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center">Nenhum sintoma registrado.</p>'; return; }
+    const nomes = {}; this._efeitoTipos.forEach(t => nomes[t.id] = t.label);
+    el.innerHTML = es.slice(0, 20).map(e =>
+      `<div class="med-item"><div class="med-info"><h4 style="font-size:14px">${nomes[e.tipo] || e.tipo} <span style="color:var(--gold)">·</span> intensidade ${e.intensidade}/5</h4><div style="font-size:12px;color:var(--textm)">${this.fmt(e.data)}</div></div><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerEfeito(${e.id})">🗑️</button></div>`).join('');
+  },
+
+  async removerEfeito(id) {
+    if (!confirm('Remover este registro?')) return;
+    try {
+      await window.sb.from('efeitos_colaterais').delete().eq('id', id);
+      this.state.efeitos = (this.state.efeitos || []).filter(e => e.id !== id);
+      this.renderEfeitosList();
+    } catch (e) { this.showAlert('error', 'Erro: ' + (e.message || e)); }
+  },
+
   verTermos(e) {
     if (e) e.preventDefault();
     window.open('https://vitale.acacianegocios.com.br/termos.html', '_blank');
@@ -3633,6 +3884,10 @@ const VITALE_CORE = {
     // Ao abrir o Histórico, garante que todos os painéis estão atualizados
     if (tabName === 'historico') {
       try { this.renderHistoricoCompleto(); } catch (err) { console.warn('hist', err); }
+    }
+    // Ao abrir Medicações, renderiza os forms e listas GLP-1
+    if (tabName === 'medic') {
+      try { this.renderGlp1Forms(); this.renderDosesList(); this.renderEfeitosList(); } catch (err) { console.warn('glp1', err); }
     }
   },
 
