@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.3 · Bloco Correcao-PWA · 2026-06-10';
+const VITALE_VERSION = 'v4.3 · Bloco Data-Exerc · 2026-06-16';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -573,11 +573,12 @@ const VITALE_CORE = {
     const tipo = this.exercDraft.tipo;
     const intensidade = this.exercDraft.intensidade;
     const nota = document.getElementById('exercNota')?.value.trim() || null;
+    const dataExerc = document.getElementById('exercData')?.value || this._hojeSP();
     const calorias = this._estimaCalorias(tipo, intensidade, dur);
 
     try {
       const { data, error } = await window.sb.from('exercicios').insert({
-        user_id: user.id, tipo, duracao_min: dur, intensidade, calorias, nota
+        user_id: user.id, tipo, duracao_min: dur, intensidade, calorias, nota, data: dataExerc
       }).select().single();
       if (error) throw error;
       this.state.exercicios.unshift(data);
@@ -588,6 +589,7 @@ const VITALE_CORE = {
       const efp = document.getElementById('exercFotoPreview'); if (efp) efp.innerHTML = '';
       const befp = document.getElementById('btnProcessarExercFoto'); if (befp) befp.style.display = 'none';
       document.getElementById('exercDuracao').value = '';
+      const edEl = document.getElementById('exercData'); if (edEl) edEl.value = '';
       if (document.getElementById('exercNota')) document.getElementById('exercNota').value = '';
       const ex = this._exercicios.find(e => e.id === tipo);
       this.showAlert('success', `✅ ${ex.icone} ${ex.nome} registrado — ${calorias} kcal!`);
