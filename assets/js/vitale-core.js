@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.3 · Bloco Data-Exerc · 2026-06-16';
+const VITALE_VERSION = 'v4.4 · Bloco Cerebro-IA · 2026-06-16';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -67,11 +67,12 @@ const VITALE_CORE = {
         this.loadComposicao(),
         this.loadRefeicoesHoje(),
         this.loadDoses(),
-        this.loadEfeitos()
+        this.loadEfeitos(),
+        this.loadMemoria()
       ]);
 
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos'];
-      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos', 'memoria'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -95,6 +96,7 @@ const VITALE_CORE = {
       this.state.refeicoes = val[11] || [];
       this.state.doses = val[12] || [];
       this.state.efeitos = val[13] || [];
+      this.state.memoria = val[14] || [];
 
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -913,6 +915,19 @@ const VITALE_CORE = {
     return data || [];
   },
 
+  async loadMemoria() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('user_memory')
+      .select('id, tipo, conteudo, relevancia, created_at')
+      .eq('user_id', user.id)
+      .order('relevancia', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
   async salvarComposicao() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue a página.');
@@ -1577,6 +1592,168 @@ const VITALE_CORE = {
   },
 
   // Coach IA via API com cache de 5min e objetivo no contexto
+  // =====================================================
+  // CÉREBRO INTEGRADO — monta a visão COMPLETA da pessoa pra IA.
+  // Usado pelo Coach do dia (profundo:false) e pela Análise Completa (profundo:true).
+  // Aqui é onde todos os dados isolados viram uma pessoa só.
+  // =====================================================
+  _buildContextoIA({ profundo = false } = {}) {
+    const hp = this.state.healthProfile || {};
+    const sorted = this.getSorted();
+    const hoje = this._hojeSP();
+    const seteDias = new Date(); seteDias.setDate(seteDias.getDate() - 7);
+
+    // Peso e tendência
+    const pesoAtual = sorted.length ? sorted[sorted.length - 1].peso : null;
+    const pesoInicial = sorted.length ? sorted[0].peso : null;
+
+    // Exercício da semana
+    const exSemana = (this.state.exercicios || []).filter(e => new Date(e.data) >= seteDias);
+    const exResumo = exSemana.length ? {
+      treinos: exSemana.length,
+      minutos: exSemana.reduce((s, e) => s + (e.duracao_min || 0), 0),
+      kcal: exSemana.reduce((s, e) => s + (e.calorias || 0), 0),
+      tipos: [...new Set(exSemana.map(e => e.tipo))]
+    } : null;
+
+    // Medidas + composição (a métrica-rainha do GLP-1)
+    const ultMedida = (this.state.medidas || [])[0] || null;
+    const rcq = ultMedida ? this._calcRCQ(ultMedida.cintura, ultMedida.quadril) : null;
+    const ultComp = (this.state.composicao || [])[0] || null;
+    const composicao = ultComp ? {
+      data: ultComp.data, fonte: ultComp.fonte,
+      massa_muscular: ultComp.massa_muscular, massa_gordura: ultComp.massa_gordura,
+      gordura_pct: ultComp.gordura_pct, gordura_visceral: ultComp.gordura_visceral
+    } : null;
+
+    // Mood + alimentação + balanço de hoje
+    const mood = this.state.moodHoje ? { humor: this.state.moodHoje.humor, energia: this.state.moodHoje.energia, sono: this.state.moodHoje.sono } : null;
+    const refeicoesHoje = (this.state.refeicoes || []).filter(r => r.data === hoje);
+    const consumidoHoje = refeicoesHoje.reduce((s, r) => s + (r.calorias || 0), 0);
+    const tmbInfo = this._getTMB();
+    let balanco = null;
+    if (tmbInfo) {
+      const fator = hp.fator_atividade || 1.4;
+      const exHojeKcal = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
+      const gasto = Math.round(tmbInfo.valor * fator + exHojeKcal);
+      balanco = { consumido: consumidoHoje, gasto, saldo: consumidoHoje - gasto, em_deficit: (consumidoHoje - gasto) < 0 };
+    }
+    const alimentacao = refeicoesHoje.length ? { refeicoes_hoje: refeicoesHoje.length, calorias_consumidas: consumidoHoje, itens: refeicoesHoje.map(r => r.descricao).filter(Boolean).slice(0, 6) } : null;
+
+    // GLP-1: doses e efeitos (diferencial de nicho — agora chega na IA)
+    const doses = (this.state.doses || []).slice(0, 5).map(d => ({ data: d.data, medicamento: d.medicamento, dose: d.dose }));
+    const efeitos = (this.state.efeitos || []).slice(0, 8).map(e => ({ data: e.data, tipo: e.tipo, intensidade: e.intensidade }));
+
+    // Dados clínicos do perfil (antes coletados e IGNORADOS — agora usados)
+    const clinico = {
+      condicoes: hp.condicoes || null, glicemia: hp.glicemia || null,
+      pressao: (hp.pa_sistolica && hp.pa_diastolica) ? `${hp.pa_sistolica}/${hp.pa_diastolica}` : null,
+      fc_repouso: hp.fc_repouso || null, sono_habitual: hp.sono || null, stress: hp.stress || null,
+      medicamentos: hp.medicamentos || null
+    };
+
+    // MEMÓRIA do usuário — o que a IA já aprendeu sobre a pessoa
+    const memoria = (this.state.memoria || []).slice(0, 12).map(m => m.conteudo);
+
+    const ctx = {
+      nome: this.state.profile?.nome || null,
+      altura: this.altura,
+      meta_kg: this.metaKg.toFixed(1),
+      peso_atual: pesoAtual, peso_inicial: pesoInicial,
+      objetivo: hp.objetivo || null,
+      urgencia: hp.urgencia || null,
+      historico_peso: profundo ? sorted.slice(-30) : sorted.slice(-12),
+      submetas: this.state.submetas.slice(0, 5),
+      exercicios_semana: exResumo,
+      cintura_cm: ultMedida?.cintura || null,
+      relacao_cintura_quadril: rcq,
+      composicao_corporal: composicao,
+      humor_hoje: mood,
+      alimentacao_hoje: alimentacao,
+      balanco_calorico: balanco,
+      doses_glp1: doses.length ? doses : null,
+      efeitos_colaterais: efeitos.length ? efeitos : null,
+      dados_clinicos: clinico,
+      memoria_usuario: memoria.length ? memoria : null
+    };
+    return ctx;
+  },
+
+  // E-mail(s) com acesso ilimitado (admin). Ajuste com o seu.
+  _ADMIN_EMAILS: ['dilson@acacianegocios.com.br'],
+
+  _isAdmin() {
+    const email = (this.state.profile?.email || '').toLowerCase();
+    if (this._ADMIN_EMAILS.map(e => e.toLowerCase()).includes(email)) return true;
+    // fallback: plano marcado como admin no banco (via SQL)
+    return this.state.healthProfile?.plano === 'admin';
+  },
+  _isPago() {
+    const p = this.state.healthProfile?.plano;
+    return p === 'pro' || p === 'med' || p === 'admin';
+  },
+
+  // ANÁLISE COMPLETA — mergulho profundo da IA na pessoa inteira.
+  // Limite: 1/dia no grátis; ilimitado pra pago e admin. (Trava real fica no endpoint.)
+  async pedirAnaliseCompleta() {
+    const el = document.getElementById('analiseResultado');
+    const btn = document.getElementById('btnAnaliseCompleta');
+    const ilimitado = this._isAdmin() || this._isPago();
+
+    // Trava client-side (UX). A trava anti-burla é server-side (ver endpoint).
+    if (!ilimitado) {
+      try {
+        const user = await window.VitaleAuth.getUser();
+        const hoje = this._hojeSP();
+        const { data: logs } = await window.sb.from('analise_log').select('id, resultado').eq('user_id', user.id).eq('data', hoje);
+        if (logs && logs.length > 0) {
+          // já usou hoje — mostra a última e oferece upgrade
+          if (el) el.innerHTML = `<div class="alert alert-warning">📊 Você já fez sua análise de hoje (1/dia no plano grátis). ${logs[0].resultado ? '' : ''}</div>
+            ${logs[0].resultado ? `<div style="margin-top:12px">${logs[0].resultado}</div>` : ''}
+            <div style="margin-top:14px;padding:14px;background:rgba(212,168,67,0.08);border-radius:10px;text-align:center">
+              <p style="font-size:13px;margin-bottom:8px">Quer análises ilimitadas e acompanhamento profundo?</p>
+              <strong style="color:var(--gold)">Conheça o VITALE PRO</strong>
+            </div>`;
+          return;
+        }
+      } catch (e) { /* se falhar a checagem, deixa seguir — endpoint barra */ }
+    }
+
+    if (btn) { btn.disabled = true; btn.textContent = '🧠 Analisando sua evolução...'; }
+    if (el) el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--textm)">🧠 A IA está analisando seu histórico completo...</div>';
+
+    try {
+      const ctx = this._buildContextoIA({ profundo: true });
+      const { data: { session } } = await window.sb.auth.getSession();
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token || ''}` },
+        body: JSON.stringify({ tipo: 'analise_completa', contexto: ctx })
+      });
+      if (!res.ok) {
+        if (res.status === 429) { // limite do servidor
+          if (el) el.innerHTML = '<div class="alert alert-warning">📊 Limite diário de análise atingido. No plano grátis é 1 por dia.</div>';
+          return;
+        }
+        throw new Error('API ' + res.status);
+      }
+      const data = await res.json();
+      const texto = data.message || 'Não consegui gerar a análise agora. Tente novamente.';
+      if (el) el.innerHTML = `<div style="line-height:1.7">${texto}</div>
+        <p style="font-size:11px;color:var(--textm);margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">⚕️ Análise gerada por IA com base nos seus registros e em conhecimento de saúde atualizado. <strong>É apoio, não diagnóstico.</strong> Sempre leve suas dúvidas ao seu médico.</p>`;
+      // registra uso + guarda resultado (pra reexibir sem gastar IA)
+      try {
+        const user = await window.VitaleAuth.getUser();
+        await window.sb.from('analise_log').insert({ user_id: user.id, resultado: texto });
+      } catch (e) { /* não bloqueia a exibição */ }
+    } catch (e) {
+      if (el) el.innerHTML = '<div class="alert alert-error">❌ Não consegui analisar agora. Tente em instantes.</div>';
+      if (window.VitaleErr) window.VitaleErr.log('analise_completa', e);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🧠 Gerar Análise Completa'; }
+    }
+  },
+
   async generateCoachMessageAI() {
     const enabled = await window.VitaleFlags.isEnabled('coach_ia');
     if (!enabled) return this.generateCoachMessage();
@@ -1629,23 +1806,7 @@ const VITALE_CORE = {
       itens: refeicoesHoje.map(r => r.descricao).filter(Boolean).slice(0, 6)
     } : null;
 
-    const ctx = {
-      altura: this.altura,
-      meta_kg: this.metaKg.toFixed(1),
-      nome: this.state.profile?.nome || null,
-      historico: sorted.slice(-12),
-      submetas: this.state.submetas.slice(0, 5),
-      objetivo: hp.objetivo || null,
-      urgencia: hp.urgencia || null,
-      health_profile: hp,
-      exercicios_semana: exResumo,
-      cintura_cm: ultMedida?.cintura || null,
-      relacao_cintura_quadril: rcq,
-      gordura_pct: ultMedida?.gordura_pct || null,
-      humor_hoje: mood,
-      alimentacao_hoje: alimentacao,
-      balanco_calorico: balanco
-    };
+    const ctx = this._buildContextoIA({ profundo: false });
 
     try {
       const { data: { session } } = await window.sb.auth.getSession();
