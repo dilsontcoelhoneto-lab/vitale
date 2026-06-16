@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.2 · Bloco Tour-GLP1 · 2026-06-05';
+const VITALE_VERSION = 'v4.3 · Bloco Correcao-PWA · 2026-06-10';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -140,7 +140,7 @@ const VITALE_CORE = {
 
       // Walkthrough: mostra o tour no primeiro acesso (se ainda não viu e não está no onboarding)
       const jaViuTour = this.state.healthProfile?.tour_visto;
-      const emOnboarding = document.getElementById('onboardingModal')?.classList.contains('active');
+      const emOnboarding = document.getElementById('modalOnboarding')?.classList.contains('active');
       if (!jaViuTour && !emOnboarding) {
         setTimeout(() => this.iniciarTour(), 1800);
       }
@@ -1058,12 +1058,14 @@ const VITALE_CORE = {
   async loadRefeicoesHoje() {
     const user = await window.VitaleAuth.getUser();
     if (!user) return [];
-    const hoje = this._hojeSP();
+    // Carrega os últimos 30 dias (para o histórico); telas "de hoje" filtram pela data
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    const corte = d.toISOString().slice(0, 10);
     const { data, error } = await window.sb
       .from('refeicoes')
       .select('id, data, tipo, descricao, calorias, peso_g, origem')
       .eq('user_id', user.id)
-      .eq('data', hoje)
+      .gte('data', corte)
       .order('created_at', { ascending: true });
     if (error) throw error;
     return data || [];
@@ -1112,6 +1114,9 @@ const VITALE_CORE = {
     this.state.refeicoes = this.state.refeicoes.filter(r => r.id !== id);
     this.renderRefeicoes();
     this.renderBalancoCalorico();
+    this.renderHistoricoCompleto();
+    this._invalidateCoachCache();
+    this.renderBalancoCalorico();
     this._invalidateCoachCache();
   },
 
@@ -1131,7 +1136,8 @@ const VITALE_CORE = {
     this._renderRefeicaoForm();
     const el = document.getElementById('refLista');
     if (!el) return;
-    const rs = this.state.refeicoes;
+    const hoje = this._hojeSP();
+    const rs = (this.state.refeicoes || []).filter(r => r.data === hoje);
     const totalCal = rs.reduce((s, r) => s + (r.calorias || 0), 0);
     const tot = document.getElementById('refTotalDia');
     if (tot) tot.innerHTML = `Total de hoje: <strong style="color:var(--gold)">${totalCal} kcal</strong>`;
@@ -1186,7 +1192,7 @@ const VITALE_CORE = {
     const hoje = this._hojeSP();
 
     // Consumido = refeições de hoje
-    const consumido = (this.state.refeicoes || []).reduce((s, r) => s + (r.calorias || 0), 0);
+    const consumido = (this.state.refeicoes || []).filter(r => r.data === hoje).reduce((s, r) => s + (r.calorias || 0), 0);
     // Exercícios de hoje
     const exHoje = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
     // Gasto = TMB × fator + exercícios extras
@@ -1790,6 +1796,28 @@ const VITALE_CORE = {
     // Repreenche spotData no tamanho final
     while (spotData.length < labels.length) spotData.push(null);
 
+    // MARCADORES DE DOSE: mostra no gráfico onde houve mudança de dose do GLP-1
+    const doseMarkers = new Array(labels.length).fill(null);
+    const doseInfo = {};
+    const doses = this.state.doses || [];
+    if (doses.length) {
+      // mapeia cada dose à data de peso mais próxima (mesmo dia ou anterior)
+      doses.forEach(dose => {
+        const dDose = this._normData ? this._normData(dose.data) : dose.data;
+        // acha o índice do peso real na mesma data (ou a mais próxima antes)
+        let idx = -1;
+        for (let i = 0; i < sorted.length; i++) {
+          const dPeso = this._normData ? this._normData(sorted[i].date) : sorted[i].date;
+          if (dPeso <= dDose) idx = i; else break;
+        }
+        if (idx >= 0 && realData[idx] != null) {
+          doseMarkers[idx] = realData[idx];
+          doseInfo[idx] = `💉 ${dose.medicamento} ${dose.dose} (${this.fmt(dose.data)})`;
+        }
+      });
+    }
+    this._doseInfo = doseInfo;
+
     const ctx = canvas.getContext('2d');
     if (this.state.chartInstance) this.state.chartInstance.destroy();
     this._spotInfo = spotInfo;
@@ -1802,7 +1830,8 @@ const VITALE_CORE = {
           { label: 'Real', data: realData, borderColor: '#27c47d', backgroundColor: 'rgba(39,196,125,0.08)', borderWidth: 2.5, pointRadius: 5, pointBackgroundColor: '#27c47d', pointBorderColor: '#0d1223', pointBorderWidth: 2, tension: 0.4, fill: true, spanGaps: false },
           { label: 'Projeção', data: projData, borderColor: '#d4a843', backgroundColor: 'rgba(212,168,67,0.04)', borderWidth: 2, borderDash: [6, 4], pointRadius: 4, pointBackgroundColor: '#d4a843', pointBorderColor: '#0d1223', pointBorderWidth: 2, tension: 0.3, fill: false, spanGaps: true },
           { label: 'Meta', data: metaLine, borderColor: 'rgba(232,80,74,0.5)', borderWidth: 1.5, borderDash: [3, 5], pointRadius: 0, fill: false },
-          { label: 'Submetas', data: spotData, borderColor: 'transparent', backgroundColor: '#e8924a', pointRadius: 8, pointStyle: 'star', pointBorderColor: '#fff', pointBorderWidth: 1, showLine: false }
+          { label: 'Submetas', data: spotData, borderColor: 'transparent', backgroundColor: '#e8924a', pointRadius: 8, pointStyle: 'star', pointBorderColor: '#fff', pointBorderWidth: 1, showLine: false },
+          { label: 'Dose', data: doseMarkers, borderColor: 'transparent', backgroundColor: '#4a9de8', pointRadius: 7, pointStyle: 'rectRot', pointBorderColor: '#fff', pointBorderWidth: 1.5, showLine: false }
         ]
       },
       options: {
@@ -1814,6 +1843,7 @@ const VITALE_CORE = {
             backgroundColor: '#0d1223', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1,
             titleColor: '#d4a843', bodyColor: '#ede8e0', padding: 12,
             callbacks: { label: (c) => {
+              if (c.datasetIndex === 4 && c.raw !== null) return this._doseInfo?.[c.dataIndex] || ' 💉 Dose';
               if (c.datasetIndex === 3 && c.raw !== null) return this._spotInfo?.[c.dataIndex] || ` 🎯 ${c.raw} kg`;
               return c.raw === null ? null : ` ${c.raw.toFixed(1)}${c.datasetIndex === 2 ? ' (Meta)' : ' kg'}`;
             } }
@@ -3025,6 +3055,54 @@ const VITALE_CORE = {
         }).join('');
       }
     }
+
+    // Refeições (últimos 30 dias) — agrupadas por dia
+    const elR = document.getElementById('histRefeicoes');
+    if (elR) {
+      const rs = [...(this.state.refeicoes || [])].reverse();
+      if (!rs.length) {
+        elR.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Nenhuma refeição nos últimos 30 dias</p>';
+      } else {
+        let diaAtual = null;
+        elR.innerHTML = rs.map(r => {
+          const t = (this._tiposRefeicao || []).find(x => x.id === r.tipo) || { icone: '🍽️', nome: r.tipo || '' };
+          const cab = r.data !== diaAtual ? `<div style="font-size:11px;color:var(--gold);letter-spacing:1px;margin:14px 0 6px">${this.fmt(r.data)}</div>` : '';
+          diaAtual = r.data;
+          return `${cab}<div class="med-item">
+            <div class="med-info"><h4 style="font-size:13px">${t.icone} ${this._escapeHtml(r.descricao || t.nome)} ${this._origemBadge(r.origem || 'manual')}</h4>
+            <p style="margin-top:3px;font-size:12px;color:var(--textm)">${r.calorias ? r.calorias + ' kcal' : '—'}${r.peso_g ? ' · ' + r.peso_g + 'g' : ''}</p></div>
+            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerRefeicao(${r.id})">🗑️</button>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    // Doses GLP-1
+    const elDo = document.getElementById('histDoses');
+    if (elDo) {
+      const ds2 = this.state.doses || [];
+      elDo.innerHTML = !ds2.length
+        ? '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Nenhuma dose registrada</p>'
+        : ds2.map(d => `<div class="med-item">
+            <div class="med-info"><h4 style="font-size:13px">💉 ${this._escapeHtml(d.medicamento)} — ${this._escapeHtml(d.dose)}</h4>
+            <p style="margin-top:3px;font-size:12px;color:var(--textm)">${this.fmt(d.data)}</p></div>
+            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerDose(${d.id})">🗑️</button>
+          </div>`).join('');
+    }
+
+    // Efeitos colaterais
+    const elEf = document.getElementById('histEfeitos');
+    if (elEf) {
+      const es = this.state.efeitos || [];
+      const nomes = {}; (this._efeitoTipos || []).forEach(t => nomes[t.id] = t.label);
+      elEf.innerHTML = !es.length
+        ? '<p style="color:var(--textm);font-size:13px;text-align:center;padding:14px 0">Nenhum sintoma registrado</p>'
+        : es.map(e => `<div class="med-item">
+            <div class="med-info"><h4 style="font-size:13px">${nomes[e.tipo] || e.tipo} · intensidade ${e.intensidade}/5</h4>
+            <p style="margin-top:3px;font-size:12px;color:var(--textm)">${this.fmt(e.data)}</p></div>
+            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerEfeito(${e.id})">🗑️</button>
+          </div>`).join('');
+    }
   },
 
   // Remove um registro de diário por data
@@ -3401,10 +3479,10 @@ const VITALE_CORE = {
     if (!ov) {
       ov = document.createElement('div');
       ov.id = 'tourOverlay';
-      ov.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(4,6,8,0.85);display:flex;align-items:center;justify-content:center;padding:24px;backdrop-filter:blur(3px)';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:99990;display:block;pointer-events:auto';
       document.body.appendChild(ov);
     }
-    ov.style.display = 'flex';
+    ov.style.display = 'block';
     this._tourRender();
   },
 
@@ -3414,23 +3492,51 @@ const VITALE_CORE = {
     const p = this._tourPassos[this._tourIdx];
     const ehUltimo = this._tourIdx === this._tourPassos.length - 1;
     const ehPrimeiro = this._tourIdx === 0;
-    // destaca a aba correspondente, se houver
-    document.querySelectorAll('.tab-btn').forEach(b => { b.style.outline = ''; b.style.outlineOffset = ''; });
+
+    // SPOTLIGHT: mede o elemento destacado e recorta o overlay em volta dele.
+    // O escuro é o box-shadow do recorte — funciona acima de qualquer stacking context.
+    let spotStyle = 'display:none';
     if (p.destaque) {
       const btn = document.querySelector(`.tab-btn[onclick*="'${p.destaque}'"]`);
-      if (btn) { btn.style.outline = '3px solid var(--gold)'; btn.style.outlineOffset = '2px'; btn.scrollIntoView({ block: 'nearest', inline: 'center' }); }
+      if (btn) {
+        btn.scrollIntoView({ block: 'nearest', inline: 'center' }); // instantâneo p/ medir certo
+        const r = btn.getBoundingClientRect();
+        const pad = 6;
+        spotStyle = `display:block;position:fixed;left:${r.left - pad}px;top:${r.top - pad}px;width:${r.width + pad * 2}px;height:${r.height + pad * 2}px;border-radius:10px;box-shadow:0 0 0 100vmax rgba(4,6,8,0.85);outline:3px solid var(--gold);animation:tourSpotPulse 1.4s ease-in-out infinite;pointer-events:none`;
+      }
     }
+    const fundoCheio = spotStyle === 'display:none' ? 'background:rgba(4,6,8,0.85);' : '';
+
+    // CHECKLIST de primeiros passos (último passo do tour)
+    let checklistHtml = '';
+    if (ehUltimo) {
+      const temPeso = (this.state.weights || []).length > 0;
+      const temRef = (this.state.refeicoes || []).length > 0;
+      const temExerc = (this.state.exercicios || []).length > 0;
+      const item = (ok, txt) => `<div style="display:flex;gap:8px;align-items:center;font-size:13.5px;color:${ok ? 'var(--em)' : 'var(--text)'};margin-bottom:8px">${ok ? '✅' : '⬜'} ${txt}</div>`;
+      checklistHtml = `<div style="background:rgba(212,168,67,0.06);border:1px solid rgba(212,168,67,0.18);border-radius:10px;padding:14px;margin-bottom:18px;text-align:left">
+        <div style="font-size:11px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Primeiros passos</div>
+        ${item(temPeso, 'Registrar meu primeiro peso')}
+        ${item(temRef, 'Registrar uma refeição')}
+        ${item(temExerc, 'Registrar um exercício')}
+      </div>`;
+    }
+
     const dots = this._tourPassos.map((_, i) => `<span style="width:7px;height:7px;border-radius:50%;background:${i === this._tourIdx ? 'var(--gold)' : 'rgba(255,255,255,0.2)'}"></span>`).join('');
     ov.innerHTML = `
-      <div style="background:var(--card,#0d1223);border:1px solid var(--gold);border-radius:18px;padding:28px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
-        <h2 style="color:var(--gold);font-size:24px;margin-bottom:10px">${p.titulo}</h2>
-        <p style="color:var(--text,#ede8e0);font-size:15px;line-height:1.7;margin-bottom:22px">${p.texto}</p>
-        <div style="display:flex;gap:6px;justify-content:center;margin-bottom:20px">${dots}</div>
-        <div style="display:flex;gap:10px;justify-content:space-between;align-items:center">
-          <button onclick="VITALE_CORE._tourPular()" style="background:none;border:none;color:var(--textm,#8c8880);font-size:13px;cursor:pointer">Pular</button>
-          <div style="display:flex;gap:8px">
-            ${!ehPrimeiro ? '<button class="btn btn-secondary btn-small" onclick="VITALE_CORE._tourAnterior()">← Voltar</button>' : ''}
-            <button class="btn btn-primary btn-small" onclick="VITALE_CORE._tourProximo()">${ehUltimo ? '✅ Começar' : 'Próximo →'}</button>
+      <div id="tourSpot" style="${spotStyle}"></div>
+      <div style="position:fixed;inset:0;${fundoCheio}display:flex;align-items:flex-end;justify-content:center;padding:24px;pointer-events:none">
+        <div style="background:var(--card,#0d1223);border:1px solid var(--gold);border-radius:18px;padding:26px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.55);pointer-events:auto;margin-bottom:8vh">
+          <h2 style="color:var(--gold);font-size:23px;margin-bottom:10px">${p.titulo}</h2>
+          <p style="color:var(--text,#ede8e0);font-size:14.5px;line-height:1.65;margin-bottom:18px">${p.texto}</p>
+          ${checklistHtml}
+          <div style="display:flex;gap:6px;justify-content:center;margin-bottom:18px">${dots}</div>
+          <div style="display:flex;gap:10px;justify-content:space-between;align-items:center">
+            <button onclick="VITALE_CORE._tourPular()" style="background:none;border:none;color:var(--textm,#8c8880);font-size:13px;cursor:pointer">Pular</button>
+            <div style="display:flex;gap:8px">
+              ${!ehPrimeiro ? '<button class="btn btn-secondary btn-small" onclick="VITALE_CORE._tourAnterior()">← Voltar</button>' : ''}
+              <button class="btn btn-primary btn-small" onclick="VITALE_CORE._tourProximo()">${ehUltimo ? '✅ Começar' : 'Próximo →'}</button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -3449,8 +3555,7 @@ const VITALE_CORE = {
 
   async _tourFinalizar() {
     const ov = document.getElementById('tourOverlay');
-    if (ov) ov.style.display = 'none';
-    document.querySelectorAll('.tab-btn').forEach(b => { b.style.outline = ''; b.style.outlineOffset = ''; });
+    if (ov) { ov.style.display = 'none'; ov.innerHTML = ''; }
     // persiste que viu o tour
     try {
       const user = await window.VitaleAuth.getUser();
@@ -3545,6 +3650,7 @@ const VITALE_CORE = {
       document.getElementById('doseMed').value = '';
       document.getElementById('doseValor').value = '';
       this.renderDosesList();
+      this.buildWeightChart();
       this._invalidateCoachCache();
       this.showAlert('success', '✅ Dose registrada!');
     } catch (e) { this.showAlert('error', 'Erro: ' + (e.message || e)); }
@@ -3565,6 +3671,7 @@ const VITALE_CORE = {
       await window.sb.from('doses_medicacao').delete().eq('id', id);
       this.state.doses = (this.state.doses || []).filter(d => d.id !== id);
       this.renderDosesList();
+      this.buildWeightChart();
     } catch (e) { this.showAlert('error', 'Erro: ' + (e.message || e)); }
   },
 
@@ -3606,7 +3713,7 @@ const VITALE_CORE = {
 
   verTermos(e) {
     if (e) e.preventDefault();
-    window.open('https://vitale.acacianegocios.com.br/termos.html', '_blank');
+    window.open('/termos.html', '_blank');
   },
 
   async onbFinalizar() {
@@ -3704,6 +3811,8 @@ const VITALE_CORE = {
       this.closeModal('modalOnboarding');
       this.renderHeader();
       this._invalidateCoachCache();
+      // Após o onboarding, mostra o tour de boas-vindas (se ainda não viu)
+      if (!this.state.healthProfile?.tour_visto) setTimeout(() => this.iniciarTour(), 800);
 
       if (geraMetasNoFinal) {
         await this.gerarMetasAutomaticas(/* silencioso */ true);
@@ -3823,6 +3932,7 @@ const VITALE_CORE = {
   },
 
   async salvarPerfil() {
+    if (!this.state.profile?.id) return this.showAlert('error', 'Perfil ainda carregando — tente em instantes.');
     const h = parseFloat(document.getElementById('alturaInput').value.replace(',', '.'));
     const n = document.getElementById('nomeInput').value.trim();
     const update = {};
