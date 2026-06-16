@@ -142,3 +142,70 @@ export async function onRequestOptions() {
     }
   });
 }
+// =====================================================
+// VITALE — Trecho para o endpoint /functions/api/chat.js (Cloudflare)
+// Cole/adapte ao seu endpoint existente. Faz 2 coisas:
+//   1) Trava de limite de Análise Completa (anti-burla, server-side)
+//   2) Prompt da Análise Completa com disclaimer forte
+// Precisa do Supabase service role pra checar o log com segurança.
+// =====================================================
+
+// --- Dentro do onRequestPost, depois de identificar o usuário (user.id) ---
+
+if (body.tipo === 'analise_completa') {
+  // 1) Descobrir plano/admin do usuário
+  const ADMIN_EMAILS = ['dilson@acacianegocios.com.br']; // ajuste
+  const isAdmin = ADMIN_EMAILS.includes((user.email || '').toLowerCase());
+
+  // lê o plano no health_profile
+  let plano = 'free';
+  try {
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/health_profile?id=eq.${user.id}&select=plano`, {
+      headers: { apikey: env.SUPABASE_SERVICE_ROLE, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}` }
+    });
+    const rows = await r.json();
+    if (rows && rows[0]) plano = rows[0].plano || 'free';
+  } catch (e) {}
+  const ilimitado = isAdmin || plano === 'pro' || plano === 'med' || plano === 'admin';
+
+  // 2) Se não for ilimitado, checar se já usou hoje
+  if (!ilimitado) {
+    const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
+    const r = await fetch(`${env.SUPABASE_URL}/rest/v1/analise_log?user_id=eq.${user.id}&data=eq.${hoje}&select=id`, {
+      headers: { apikey: env.SUPABASE_SERVICE_ROLE, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}` }
+    });
+    const usadas = await r.json();
+    if (Array.isArray(usadas) && usadas.length >= 1) {
+      return new Response(JSON.stringify({ error: 'limite_diario' }), { status: 429, headers: corsHeaders });
+    }
+  }
+
+  // 3) Prompt da análise completa
+  const ctx = body.contexto || {};
+  const promptAnalise = `Você é um analista de saúde metabólica do VITALE, com conhecimento atualizado em obesidade, tratamento GLP-1, composição corporal e hábitos.
+
+Analise a PESSOA COMO UM TODO a partir dos dados abaixo — não comente números isolados, encontre conexões, padrões e a história. Seja específico, acolhedor e direto. Destaque o que está indo bem, o que merece atenção, e 2-3 ações concretas. Se houver memória do usuário (eventos como viagens, padrões emocionais), use-a para contextualizar.
+
+REGRAS:
+- Linguagem clara, em português do Brasil, sem jargão desnecessário.
+- Baseie-se em conhecimento de saúde atualizado, mas NUNCA dê diagnóstico nem prescrição.
+- Se algum dado clínico (glicemia, pressão) parecer alterado, sugira levar ao médico — sem alarmar.
+- No tratamento GLP-1, valorize a preservação de massa muscular e a relação dose × resposta.
+- Máximo ~400 palavras. Use parágrafos curtos.
+
+DADOS DA PESSOA (JSON):
+${JSON.stringify(ctx, null, 2)}`;
+
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, messages: [{ role: 'user', content: promptAnalise }] })
+  });
+  const d = await r.json();
+  const message = (d.content || []).map(c => c.text || '').join('').trim();
+  return new Response(JSON.stringify({ message }), { headers: corsHeaders });
+}
+
+// IMPORTANTE: o registro no analise_log é feito pelo app (client) após receber a resposta.
+// Se quiser blindar 100%, mova o insert do log pra cá (server) usando o service role.
+
