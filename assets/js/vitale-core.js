@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.4 · Bloco Cerebro-IA · 2026-06-16';
+const VITALE_VERSION = 'v4.5 · Bloco Peso-Contexto · 2026-06-17';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1593,6 +1593,81 @@ const VITALE_CORE = {
 
   // Coach IA via API com cache de 5min e objetivo no contexto
   // =====================================================
+  // ETAPA 2 — Peso com Contexto e Acolhimento
+  // Variação atípica (±1,5kg vs último) → pergunta o que mudou,
+  // grava na memória do usuário e acolhe. A memória entra na Análise.
+  // =====================================================
+  _LIMIAR_VARIACAO: 1.5,
+
+  _checarVariacaoPeso(pesoNovo, dataNovo) {
+    const sorted = this.getSorted();
+    if (sorted.length < 2) return;
+    // pega o ponto anterior ao novo pra comparar
+    const ref = sorted[sorted.length - 2];
+    if (!ref) return;
+    const delta = pesoNovo - ref.peso;
+    if (Math.abs(delta) < this._LIMIAR_VARIACAO) return; // variação normal, não pergunta
+    this._abrirContextoPeso(delta, dataNovo);
+  },
+
+  _abrirContextoPeso(delta, data) {
+    const subiu = delta > 0;
+    const absKg = Math.abs(delta).toFixed(1);
+    const opcoes = subiu
+      ? ['Viagem / rotina diferente', 'Comi mais sal / processados', 'Treino forte (retenção)', 'Período menstrual', 'Intestino preso', 'Nada especial', 'Outro']
+      : ['Desidratado / suei muito', 'Doente / sem apetite', 'Jejum / comi pouco', 'Ótima semana de hábitos', 'Nada especial', 'Outro'];
+    const botoes = opcoes.map(o =>
+      `<button class="btn btn-secondary" style="width:100%;text-align:left;margin-bottom:8px" onclick="VITALE_CORE._salvarContextoPeso('${this._escapeHtml(o)}','${data}',${delta.toFixed(1)})">${o}</button>`
+    ).join('');
+    const titulo = subiu
+      ? `Notei que você subiu ${absKg} kg desde o último registro.`
+      : `Notei que você desceu ${absKg} kg desde o último registro.`;
+    const acolhe = subiu
+      ? `Variações assim, em poucos dias, costumam ser <strong>água, sal e glicogênio</strong> — não gordura. Não desanime. Me conta o que mudou pra eu te acompanhar melhor:`
+      : `Quedas rápidas geralmente são <strong>água</strong>, não gordura de verdade. Me conta o que aconteceu pra eu entender seu corpo:`;
+    const html = `
+      <div id="modalContextoPeso" class="modal active">
+        <div class="modal-content" style="max-width:420px">
+          <h2 style="color:var(--gold);font-size:22px;margin-bottom:10px">${titulo}</h2>
+          <p style="font-size:14.5px;color:var(--text);line-height:1.6;margin-bottom:18px">${acolhe}</p>
+          ${botoes}
+          <button class="btn" style="width:100%;background:none;color:var(--textm);margin-top:4px" onclick="VITALE_CORE._fecharContextoPeso()">Agora não</button>
+        </div>
+      </div>`;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = html;
+    document.body.appendChild(wrap.firstElementChild);
+  },
+
+  async _salvarContextoPeso(motivo, data, delta) {
+    this._fecharContextoPeso();
+    if (motivo === 'Nada especial') return; // não polui a memória
+    try {
+      const user = await window.VitaleAuth.getUser();
+      const sinal = delta > 0 ? '+' : '';
+      const conteudo = `Em ${this.fmt(data)} o peso variou ${sinal}${delta}kg — motivo informado: ${motivo}.`;
+      const { data: novo, error } = await window.sb.from('user_memory').insert({
+        user_id: user.id, tipo: 'evento', conteudo, relevancia: 4
+      }).select().single();
+      if (error) throw error;
+      if (novo) this.state.memoria.unshift(novo);
+      this._invalidateCoachCache();
+      // acolhimento final
+      const msg = delta > 0
+        ? 'Anotado. 💚 Lembra: o peso na balança oscila todo dia. O que importa é a tendência ao longo das semanas, não um dia.'
+        : 'Anotado. 💚 Continue assim — e lembre que o foco é a tendência, não a balança de um único dia.';
+      this.showAlert('success', msg);
+    } catch (e) {
+      if (window.VitaleErr) window.VitaleErr.log('contexto_peso', e);
+    }
+  },
+
+  _fecharContextoPeso() {
+    const m = document.getElementById('modalContextoPeso');
+    if (m) m.remove();
+  },
+
+  // =====================================================
   // CÉREBRO INTEGRADO — monta a visão COMPLETA da pessoa pra IA.
   // Usado pelo Coach do dia (profundo:false) e pela Análise Completa (profundo:true).
   // Aqui é onde todos os dados isolados viram uma pessoa só.
@@ -1719,8 +1794,12 @@ const VITALE_CORE = {
       } catch (e) { /* se falhar a checagem, deixa seguir — endpoint barra */ }
     }
 
-    if (btn) { btn.disabled = true; btn.textContent = '🧠 Analisando sua evolução...'; }
-    if (el) el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--textm)">🧠 A IA está analisando seu histórico completo...</div>';
+    if (btn) { btn.disabled = true; btn.textContent = '🧠 Analisando...'; }
+    // Feedback rotativo — a análise é profunda (Sonnet) e leva alguns segundos
+    const fases = ['🧠 Lendo seu histórico completo...', '🔍 Procurando padrões e conexões...', '📊 Avaliando peso, composição e hábitos...', '✍️ Montando sua análise personalizada...'];
+    let fi = 0;
+    if (el) el.innerHTML = `<div style="text-align:center;padding:24px;color:var(--textm)"><div id="analiseFase" style="font-size:14px">${fases[0]}</div><div style="margin-top:10px;font-size:12px;opacity:0.6">Isso pode levar até 30 segundos</div></div>`;
+    const timer = setInterval(() => { fi = (fi + 1) % fases.length; const f = document.getElementById('analiseFase'); if (f) f.textContent = fases[fi]; }, 4000);
 
     try {
       const ctx = this._buildContextoIA({ profundo: true });
@@ -1741,15 +1820,12 @@ const VITALE_CORE = {
       const texto = data.message || 'Não consegui gerar a análise agora. Tente novamente.';
       if (el) el.innerHTML = `<div style="line-height:1.7">${texto}</div>
         <p style="font-size:11px;color:var(--textm);margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">⚕️ Análise gerada por IA com base nos seus registros e em conhecimento de saúde atualizado. <strong>É apoio, não diagnóstico.</strong> Sempre leve suas dúvidas ao seu médico.</p>`;
-      // registra uso + guarda resultado (pra reexibir sem gastar IA)
-      try {
-        const user = await window.VitaleAuth.getUser();
-        await window.sb.from('analise_log').insert({ user_id: user.id, resultado: texto });
-      } catch (e) { /* não bloqueia a exibição */ }
+      // O registro no analise_log é feito pelo SERVIDOR (blindado). Não inserir aqui (evita duplicar).
     } catch (e) {
       if (el) el.innerHTML = '<div class="alert alert-error">❌ Não consegui analisar agora. Tente em instantes.</div>';
       if (window.VitaleErr) window.VitaleErr.log('analise_completa', e);
     } finally {
+      clearInterval(timer);
       if (btn) { btn.disabled = false; btn.textContent = '🧠 Gerar Análise Completa'; }
     }
   },
@@ -2339,6 +2415,8 @@ const VITALE_CORE = {
       document.getElementById('manualDate').value = new Date().toISOString().slice(0, 10);
       document.getElementById('manualPeso').value = '';
       this.showAlert('success', `✅ ${peso.toFixed(1)} kg adicionado para ${this.fmt(date)}!`);
+      // Etapa 2: se a variação for atípica, pergunta o contexto e acolhe
+      this._checarVariacaoPeso(peso, date);
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
       if (window.VitaleErr) window.VitaleErr.log('add_weight_manual', e);
