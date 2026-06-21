@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.6 · Bloco Exames-Lab · 2026-06-17';
+const VITALE_VERSION = 'v4.6 · Bloco Exames-Fix · 2026-06-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
