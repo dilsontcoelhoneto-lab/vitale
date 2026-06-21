@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.5 · Bloco Peso-Contexto · 2026-06-17';
+const VITALE_VERSION = 'v4.6 · Bloco Exames-Lab · 2026-06-17';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -68,11 +68,12 @@ const VITALE_CORE = {
         this.loadRefeicoesHoje(),
         this.loadDoses(),
         this.loadEfeitos(),
-        this.loadMemoria()
+        this.loadMemoria(),
+        this.loadExames()
       ]);
 
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos', 'memoria'];
-      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], [], []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos', 'memoria', 'exames'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -97,6 +98,7 @@ const VITALE_CORE = {
       this.state.doses = val[12] || [];
       this.state.efeitos = val[13] || [];
       this.state.memoria = val[14] || [];
+      this.state.exames = val[15] || [];
 
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -556,7 +558,7 @@ const VITALE_CORE = {
     const ini = new Date(); ini.setDate(ini.getDate() - 30);
     const { data, error } = await window.sb
       .from('exercicios')
-      .select('id, data, tipo, duracao_min, intensidade, calorias, nota')
+      .select('id, data, tipo, duracao_min, intensidade, calorias, nota, distancia_km, fc_media, calorias_manual')
       .eq('user_id', user.id)
       .gte('data', ini.toISOString().slice(0, 10))
       .order('data', { ascending: false })
@@ -576,11 +578,16 @@ const VITALE_CORE = {
     const intensidade = this.exercDraft.intensidade;
     const nota = document.getElementById('exercNota')?.value.trim() || null;
     const dataExerc = document.getElementById('exercData')?.value || this._hojeSP();
-    const calorias = this._estimaCalorias(tipo, intensidade, dur);
+    const distancia = parseFloat((document.getElementById('exercDistancia')?.value || '').replace(',', '.')) || null;
+    const fc = parseInt(document.getElementById('exercFC')?.value) || null;
+    const calManual = parseInt(document.getElementById('exercCalManual')?.value) || null;
+    // Caloria: usa a manual se informada; senão, estima
+    const calorias = calManual || this._estimaCalorias(tipo, intensidade, dur);
 
     try {
       const { data, error } = await window.sb.from('exercicios').insert({
-        user_id: user.id, tipo, duracao_min: dur, intensidade, calorias, nota, data: dataExerc
+        user_id: user.id, tipo, duracao_min: dur, intensidade, calorias, nota, data: dataExerc,
+        distancia_km: distancia, fc_media: fc, calorias_manual: calManual
       }).select().single();
       if (error) throw error;
       this.state.exercicios.unshift(data);
@@ -592,6 +599,7 @@ const VITALE_CORE = {
       const befp = document.getElementById('btnProcessarExercFoto'); if (befp) befp.style.display = 'none';
       document.getElementById('exercDuracao').value = '';
       const edEl = document.getElementById('exercData'); if (edEl) edEl.value = '';
+      ['exercDistancia', 'exercFC', 'exercCalManual'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
       if (document.getElementById('exercNota')) document.getElementById('exercNota').value = '';
       const ex = this._exercicios.find(e => e.id === tipo);
       this.showAlert('success', `✅ ${ex.icone} ${ex.nome} registrado — ${calorias} kcal!`);
@@ -634,15 +642,44 @@ const VITALE_CORE = {
           style="flex:1;padding:8px;border-radius:10px;cursor:pointer;background:${sel ? 'rgba(212,168,67,0.15)' : 'rgba(255,255,255,0.02)'};border:1px solid ${sel ? 'var(--gold)' : 'var(--border)'};color:${sel ? 'var(--text)' : 'var(--textm)'};font-size:13px">${label}</button>`;
       }).join('');
     }
-    // Preview de calorias em tempo real
+    // Distância: só faz sentido para exercícios de distância (cardio)
+    const tiposDistancia = ['caminhada', 'corrida', 'bicicleta', 'natacao'];
+    const ehDistancia = tiposDistancia.includes(this.exercDraft.tipo);
+    const camposDist = document.getElementById('exercCamposDistancia');
+    if (camposDist) camposDist.style.display = ehDistancia ? 'block' : 'none';
+
     const dur = parseInt(document.getElementById('exercDuracao')?.value) || 0;
+    const dist = parseFloat((document.getElementById('exercDistancia')?.value || '').replace(',', '.')) || 0;
+
+    // Pace (min/km) — só para distância com tempo e km informados
+    const pacePrev = document.getElementById('exercPacePreview');
+    if (pacePrev) {
+      if (ehDistancia && dur > 0 && dist > 0) {
+        const paceMin = dur / dist;
+        const min = Math.floor(paceMin);
+        const seg = Math.round((paceMin - min) * 60);
+        const velKmh = (dist / (dur / 60)).toFixed(1);
+        pacePrev.innerHTML = `🏃 Ritmo: <strong>${min}'${String(seg).padStart(2, '0')}"/km</strong> · ${velKmh} km/h`;
+        pacePrev.style.display = 'block';
+      } else {
+        pacePrev.style.display = 'none';
+      }
+    }
+
+    // Preview de calorias: manual (se informada) tem prioridade sobre a estimativa
+    const calManual = parseInt(document.getElementById('exercCalManual')?.value) || 0;
     const prev = document.getElementById('exercCalPreview');
-    if (prev && dur > 0) {
-      const cal = this._estimaCalorias(this.exercDraft.tipo, this.exercDraft.intensidade, dur);
-      prev.innerHTML = `≈ <strong style="color:var(--gold)">${cal} kcal</strong> estimadas`;
-      prev.style.display = 'block';
-    } else if (prev) {
-      prev.style.display = 'none';
+    if (prev) {
+      if (calManual > 0) {
+        prev.innerHTML = `Usando <strong style="color:var(--gold)">${calManual} kcal</strong> (informado por você)`;
+        prev.style.display = 'block';
+      } else if (dur > 0) {
+        const cal = this._estimaCalorias(this.exercDraft.tipo, this.exercDraft.intensidade, dur);
+        prev.innerHTML = `≈ <strong style="color:var(--gold)">${cal} kcal</strong> estimadas`;
+        prev.style.display = 'block';
+      } else {
+        prev.style.display = 'none';
+      }
     }
   },
 
@@ -682,7 +719,7 @@ const VITALE_CORE = {
       return `<div class="med-item">
         <div class="med-info">
           <h4>${ex.icone} ${ex.nome}</h4>
-          <p>⏱ ${e.duracao_min} min · ${intLabel}${e.calorias ? ` · 🔥 ${e.calorias} kcal` : ''}</p>
+          <p>⏱ ${e.duracao_min} min${e.distancia_km ? ` · 📏 ${e.distancia_km} km` : ''} · ${intLabel}${e.calorias ? ` · 🔥 ${e.calorias} kcal` : ''}${e.fc_media ? ` · ❤️ ${e.fc_media} bpm` : ''}${e.distancia_km && e.duracao_min ? ` · 🏃 ${this._fmtPace(e.duracao_min, e.distancia_km)}` : ''}</p>
           <p style="font-size:11px;color:var(--textm)">${this.fmt(e.data)}${notaTxt}</p>
         </div>
         <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
@@ -1599,6 +1636,190 @@ const VITALE_CORE = {
   // =====================================================
   _LIMIAR_VARIACAO: 1.5,
 
+  _fmtPace(minutos, km) {
+    if (!minutos || !km || km <= 0) return '';
+    const paceMin = minutos / km;
+    const min = Math.floor(paceMin);
+    const seg = Math.round((paceMin - min) * 60);
+    return `${min}'${String(seg).padStart(2, '0')}"/km`;
+  },
+
+  // =====================================================
+  // ETAPA 5 — Repositório de Exames Laboratoriais
+  // Marcadores curados (os mais relevantes p/ metabolismo e GLP-1).
+  // =====================================================
+  _marcadoresLab: [
+    { id: 'glicose', nome: 'Glicose (jejum)', unidade: 'mg/dL', ref_min: 70, ref_max: 99, grupo: 'Metabolismo' },
+    { id: 'hba1c', nome: 'Hemoglobina Glicada (HbA1c)', unidade: '%', ref_min: null, ref_max: 5.7, grupo: 'Metabolismo' },
+    { id: 'insulina', nome: 'Insulina Basal', unidade: 'µUI/mL', ref_min: 2.5, ref_max: 13.1, grupo: 'Metabolismo' },
+    { id: 'homa_ir', nome: 'HOMA-IR (resist. insulínica)', unidade: '', ref_min: null, ref_max: 2.7, grupo: 'Metabolismo' },
+    { id: 'colesterol_total', nome: 'Colesterol Total', unidade: 'mg/dL', ref_min: null, ref_max: 190, grupo: 'Lipídios' },
+    { id: 'ldl', nome: 'LDL', unidade: 'mg/dL', ref_min: null, ref_max: 100, grupo: 'Lipídios' },
+    { id: 'hdl', nome: 'HDL', unidade: 'mg/dL', ref_min: 40, ref_max: null, grupo: 'Lipídios' },
+    { id: 'triglicerides', nome: 'Triglicérides', unidade: 'mg/dL', ref_min: null, ref_max: 150, grupo: 'Lipídios' },
+    { id: 'tgo', nome: 'TGO (AST)', unidade: 'U/L', ref_min: null, ref_max: 34, grupo: 'Fígado' },
+    { id: 'tgp', nome: 'TGP (ALT)', unidade: 'U/L', ref_min: 10, ref_max: 49, grupo: 'Fígado' },
+    { id: 'ggt', nome: 'Gama-GT', unidade: 'U/L', ref_min: null, ref_max: 73, grupo: 'Fígado' },
+    { id: 'creatinina', nome: 'Creatinina', unidade: 'mg/dL', ref_min: 0.7, ref_max: 1.3, grupo: 'Rim' },
+    { id: 'ureia', nome: 'Ureia', unidade: 'mg/dL', ref_min: 19, ref_max: 49, grupo: 'Rim' },
+    { id: 'acido_urico', nome: 'Ácido Úrico', unidade: 'mg/dL', ref_min: 3.8, ref_max: 8.6, grupo: 'Rim' },
+    { id: 'tsh', nome: 'TSH', unidade: 'µUI/mL', ref_min: 0.4, ref_max: 4.3, grupo: 'Tireoide' },
+    { id: 't4_livre', nome: 'T4 Livre', unidade: 'ng/dL', ref_min: 0.89, ref_max: 1.76, grupo: 'Tireoide' },
+    { id: 'testosterona_total', nome: 'Testosterona Total', unidade: 'ng/dL', ref_min: 164, ref_max: 753, grupo: 'Hormônios' },
+    { id: 'vitamina_d', nome: 'Vitamina D (25-OH)', unidade: 'ng/mL', ref_min: 30, ref_max: 100, grupo: 'Vitaminas' },
+    { id: 'vitamina_b12', nome: 'Vitamina B12', unidade: 'pg/mL', ref_min: 223, ref_max: 672, grupo: 'Vitaminas' },
+    { id: 'pcr', nome: 'PCR Ultrassensível', unidade: 'mg/dL', ref_min: null, ref_max: 0.3, grupo: 'Inflamação' },
+    { id: 'ferritina', nome: 'Ferritina', unidade: 'ng/mL', ref_min: 22, ref_max: 322, grupo: 'Outros' }
+  ],
+
+  async loadExames() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('exames_lab')
+      .select('id, data, marcador, valor, unidade, ref_min, ref_max, nota')
+      .eq('user_id', user.id)
+      .order('data', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  _marcInfo(id) { return this._marcadoresLab.find(m => m.id === id) || { id, nome: id, unidade: '', ref_min: null, ref_max: null, grupo: 'Outros' }; },
+
+  _statusMarcador(valor, refMin, refMax) {
+    if (refMax != null && valor > refMax) return 'alto';
+    if (refMin != null && valor < refMin) return 'baixo';
+    return 'ok';
+  },
+
+  renderExamesForm() {
+    const sel = document.getElementById('exameMarcador');
+    if (sel && !sel._preenchido) {
+      const grupos = {};
+      this._marcadoresLab.forEach(m => { (grupos[m.grupo] = grupos[m.grupo] || []).push(m); });
+      sel.innerHTML = Object.entries(grupos).map(([g, ms]) =>
+        `<optgroup label="${g}">${ms.map(m => `<option value="${m.id}">${m.nome}</option>`).join('')}</optgroup>`
+      ).join('');
+      sel._preenchido = true;
+      this._onMarcadorChange();
+    }
+  },
+
+  _onMarcadorChange() {
+    const id = document.getElementById('exameMarcador')?.value;
+    const info = this._marcInfo(id);
+    const u = document.getElementById('exameUnidade');
+    if (u) u.textContent = info.unidade || '';
+    const ref = document.getElementById('exameRefHint');
+    if (ref) {
+      const partes = [];
+      if (info.ref_min != null) partes.push(`mín ${info.ref_min}`);
+      if (info.ref_max != null) partes.push(`máx ${info.ref_max}`);
+      ref.textContent = partes.length ? `Referência: ${partes.join(' · ')} ${info.unidade}` : '';
+    }
+  },
+
+  async salvarExame() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue.');
+    const marcador = document.getElementById('exameMarcador')?.value;
+    const valor = parseFloat((document.getElementById('exameValor')?.value || '').replace(',', '.'));
+    const data = document.getElementById('exameData')?.value;
+    if (!marcador) return this.showAlert('error', 'Escolha o marcador.');
+    if (isNaN(valor)) return this.showAlert('error', 'Informe o valor do exame.');
+    if (!data) return this.showAlert('error', 'Informe a data da coleta.');
+    const info = this._marcInfo(marcador);
+    try {
+      const { data: novo, error } = await window.sb.from('exames_lab').insert({
+        user_id: user.id, data, marcador, valor,
+        unidade: info.unidade || null, ref_min: info.ref_min, ref_max: info.ref_max
+      }).select().single();
+      if (error) throw error;
+      this.state.exames.unshift(novo);
+      document.getElementById('exameValor').value = '';
+      this.renderExames();
+      this._invalidateCoachCache();
+      const st = this._statusMarcador(valor, info.ref_min, info.ref_max);
+      const aviso = st === 'ok' ? '✅ dentro da referência' : (st === 'alto' ? '⚠️ acima da referência' : '⚠️ abaixo da referência');
+      this.showAlert('success', `Exame salvo — ${info.nome}: ${valor} ${info.unidade} (${aviso})`);
+    } catch (e) {
+      this.showAlert('error', '❌ ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('salvar_exame', e);
+    }
+  },
+
+  async removerExame(id) {
+    if (!confirm('Remover este registro de exame?')) return;
+    const { error } = await window.sb.from('exames_lab').delete().eq('id', id);
+    if (error) return this.showAlert('error', 'Erro: ' + error.message);
+    this.state.exames = this.state.exames.filter(e => e.id !== id);
+    this.renderExames();
+    this._invalidateCoachCache();
+  },
+
+  renderExames() {
+    this.renderExamesForm();
+    const el = document.getElementById('examesLista');
+    if (!el) return;
+    const exames = this.state.exames || [];
+    if (!exames.length) {
+      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:20px 0">Nenhum exame registrado ainda. Adicione os marcadores do seu último laboratório.</p>';
+      this._renderExamesGraficos();
+      return;
+    }
+    const porMarcador = {};
+    exames.forEach(e => { (porMarcador[e.marcador] = porMarcador[e.marcador] || []).push(e); });
+    el.innerHTML = Object.entries(porMarcador).map(([mid, regs]) => {
+      const info = this._marcInfo(mid);
+      const ord = [...regs].sort((a, b) => new Date(a.data) - new Date(b.data));
+      const ult = ord[ord.length - 1];
+      const st = this._statusMarcador(ult.valor, ult.ref_min, ult.ref_max);
+      const cor = st === 'ok' ? 'var(--em)' : (st === 'alto' ? 'var(--orange)' : 'var(--cyan)');
+      const seta = ord.length > 1 ? (ult.valor > ord[ord.length - 2].valor ? '↑' : (ult.valor < ord[ord.length - 2].valor ? '↓' : '→')) : '';
+      return `<div class="med-item">
+        <div class="med-info">
+          <h4 style="font-size:14px">${info.nome}</h4>
+          <p style="margin-top:3px;font-size:13px"><strong style="color:${cor}">${ult.valor} ${info.unidade}</strong> ${seta} <span style="color:var(--textm);font-size:11px">· ${this.fmt(ult.data)} · ${regs.length} registro(s)</span></p>
+        </div>
+        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExame(${ult.id})">🗑️</button>
+      </div>`;
+    }).join('');
+    this._renderExamesGraficos();
+  },
+
+  _renderExamesGraficos() {
+    const cont = document.getElementById('examesGraficos');
+    if (!cont) return;
+    const exames = this.state.exames || [];
+    const porMarcador = {};
+    exames.forEach(e => { (porMarcador[e.marcador] = porMarcador[e.marcador] || []).push(e); });
+    const comHistorico = Object.entries(porMarcador).filter(([, r]) => r.length >= 2);
+    if (!comHistorico.length) { cont.innerHTML = '<p style="color:var(--textm);font-size:12px;text-align:center;padding:10px 0">Registre o mesmo marcador em 2+ datas para ver a tendência em gráfico.</p>'; return; }
+    cont.innerHTML = comHistorico.map(([mid]) => {
+      const info = this._marcInfo(mid);
+      return `<div style="margin-bottom:18px"><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${info.nome}</div><canvas id="examChart_${mid}" height="120"></canvas></div>`;
+    }).join('');
+    comHistorico.forEach(([mid, regs]) => {
+      const info = this._marcInfo(mid);
+      const ord = [...regs].sort((a, b) => new Date(a.data) - new Date(b.data));
+      const ctx = document.getElementById(`examChart_${mid}`);
+      if (!ctx) return;
+      this._examChartInstances = this._examChartInstances || {};
+      if (this._examChartInstances[mid]) this._examChartInstances[mid].destroy();
+      const datasets = [{
+        label: info.nome, data: ord.map(r => r.valor),
+        borderColor: '#d4a843', backgroundColor: 'rgba(212,168,67,0.1)', tension: 0.3, fill: true, pointRadius: 4
+      }];
+      if (info.ref_max != null) datasets.push({ label: 'máx', data: ord.map(() => info.ref_max), borderColor: 'rgba(232,80,74,0.5)', borderDash: [5, 5], pointRadius: 0, fill: false });
+      if (info.ref_min != null) datasets.push({ label: 'mín', data: ord.map(() => info.ref_min), borderColor: 'rgba(39,196,125,0.5)', borderDash: [5, 5], pointRadius: 0, fill: false });
+      this._examChartInstances[mid] = new Chart(ctx, {
+        type: 'line',
+        data: { labels: ord.map(r => this.fmt(r.data)), datasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 9 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+      });
+    });
+  },
+
   _checarVariacaoPeso(pesoNovo, dataNovo) {
     const sorted = this.getSorted();
     if (sorted.length < 2) return;
@@ -1730,6 +1951,27 @@ const VITALE_CORE = {
     // MEMÓRIA do usuário — o que a IA já aprendeu sobre a pessoa
     const memoria = (this.state.memoria || []).slice(0, 12).map(m => m.conteudo);
 
+    // EXAMES laboratoriais — últimos valores por marcador + tendência + status
+    let examesCtx = null;
+    const exames = this.state.exames || [];
+    if (exames.length) {
+      const porMarc = {};
+      exames.forEach(e => { (porMarc[e.marcador] = porMarc[e.marcador] || []).push(e); });
+      examesCtx = Object.entries(porMarc).map(([mid, regs]) => {
+        const info = this._marcInfo(mid);
+        const ord = [...regs].sort((a, b) => new Date(a.data) - new Date(b.data));
+        const ult = ord[ord.length - 1];
+        const ant = ord.length > 1 ? ord[ord.length - 2] : null;
+        const st = this._statusMarcador(ult.valor, ult.ref_min, ult.ref_max);
+        return {
+          marcador: info.nome, valor: ult.valor, unidade: info.unidade, data: ult.data,
+          status: st, ref_min: ult.ref_min, ref_max: ult.ref_max,
+          tendencia: ant ? (ult.valor > ant.valor ? 'subindo' : (ult.valor < ant.valor ? 'descendo' : 'estável')) : null,
+          valor_anterior: ant ? ant.valor : null
+        };
+      });
+    }
+
     const ctx = {
       nome: this.state.profile?.nome || null,
       altura: this.altura,
@@ -1749,7 +1991,8 @@ const VITALE_CORE = {
       doses_glp1: doses.length ? doses : null,
       efeitos_colaterais: efeitos.length ? efeitos : null,
       dados_clinicos: clinico,
-      memoria_usuario: memoria.length ? memoria : null
+      memoria_usuario: memoria.length ? memoria : null,
+      exames_laboratoriais: examesCtx
     };
     return ctx;
   },
@@ -4239,6 +4482,14 @@ const VITALE_CORE = {
     // Ao abrir Medicações, renderiza os forms e listas GLP-1
     if (tabName === 'medic') {
       try { this.renderGlp1Forms(); this.renderDosesList(); this.renderEfeitosList(); } catch (err) { console.warn('glp1', err); }
+    }
+    // Ao abrir Exames, renderiza forms, lista e gráficos; preenche data com hoje
+    if (tabName === 'exames') {
+      try {
+        this.renderExames();
+        const ed = document.getElementById('exameData');
+        if (ed && !ed.value) ed.value = this._hojeSP();
+      } catch (err) { console.warn('exames', err); }
     }
   },
 
