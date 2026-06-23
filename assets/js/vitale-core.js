@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.6 · Bloco Exames-Fix · 2026-06-21';
+const VITALE_VERSION = 'v4.7 · Bloco Importacoes · 2026-06-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -69,11 +69,12 @@ const VITALE_CORE = {
         this.loadDoses(),
         this.loadEfeitos(),
         this.loadMemoria(),
-        this.loadExames()
+        this.loadExames(),
+        this.loadExameArquivos()
       ]);
 
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos', 'memoria', 'exames'];
-      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], [], [], []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos', 'memoria', 'exames', 'exameArquivos'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], [], [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -99,6 +100,7 @@ const VITALE_CORE = {
       this.state.efeitos = val[13] || [];
       this.state.memoria = val[14] || [];
       this.state.exames = val[15] || [];
+      this.state.exameArquivos = val[16] || [];
 
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -1682,6 +1684,99 @@ const VITALE_CORE = {
       .order('data', { ascending: false });
     if (error) throw error;
     return data || [];
+  },
+
+  // --- Arquivos de exame (PDFs inteiros) ---
+  async loadExameArquivos() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb
+      .from('exames_arquivos')
+      .select('id, data, nome, storage_path, tamanho')
+      .eq('user_id', user.id)
+      .order('data', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  },
+
+  async uploadExameArquivo(fileInput) {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada. Recarregue.');
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    // Limites de sanidade
+    if (file.size > 15 * 1024 * 1024) return this.showAlert('error', 'Arquivo muito grande (máx 15MB).');
+    const okTipos = ['application/pdf', 'image/jpeg', 'image/png'];
+    if (!okTipos.includes(file.type)) return this.showAlert('error', 'Envie PDF, JPG ou PNG.');
+
+    const data = document.getElementById('arqData')?.value || this._hojeSP();
+    const nomeAmigavel = (document.getElementById('arqNome')?.value || '').trim() || file.name;
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${user.id}/${Date.now()}_${safe}`;
+
+    this.showAlert('info', '⏳ Enviando arquivo...');
+    try {
+      const { error: upErr } = await window.sb.storage.from('exames').upload(path, file, { upsert: false });
+      if (upErr) throw upErr;
+      const { data: novo, error } = await window.sb.from('exames_arquivos').insert({
+        user_id: user.id, data, nome: nomeAmigavel, storage_path: path, tamanho: file.size
+      }).select().single();
+      if (error) throw error;
+      this.state.exameArquivos = this.state.exameArquivos || [];
+      this.state.exameArquivos.unshift(novo);
+      fileInput.value = '';
+      if (document.getElementById('arqNome')) document.getElementById('arqNome').value = '';
+      this.renderExameArquivos();
+      this.showAlert('success', '✅ Exame anexado! Disponível para download e para levar ao médico.');
+    } catch (e) {
+      this.showAlert('error', '❌ Falha no envio: ' + (e.message || 'erro') + '. Confira se o bucket "exames" foi criado.');
+      if (window.VitaleErr) window.VitaleErr.log('upload_exame_arquivo', e);
+    }
+  },
+
+  async baixarExameArquivo(path) {
+    try {
+      const { data, error } = await window.sb.storage.from('exames').createSignedUrl(path, 120);
+      if (error) throw error;
+      window.open(data.signedUrl, '_blank');
+    } catch (e) {
+      this.showAlert('error', '❌ Não consegui abrir o arquivo.');
+    }
+  },
+
+  async removerExameArquivo(id, path) {
+    if (!confirm('Remover este arquivo de exame?')) return;
+    try {
+      await window.sb.storage.from('exames').remove([path]);
+      await window.sb.from('exames_arquivos').delete().eq('id', id);
+      this.state.exameArquivos = (this.state.exameArquivos || []).filter(a => a.id !== id);
+      this.renderExameArquivos();
+    } catch (e) {
+      this.showAlert('error', '❌ Erro ao remover.');
+    }
+  },
+
+  renderExameArquivos() {
+    const el = document.getElementById('arquivosLista');
+    if (!el) return;
+    const arqs = this.state.exameArquivos || [];
+    if (!arqs.length) {
+      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:16px 0">Nenhum arquivo anexado. Suba o PDF do seu laboratório para guardar o exame completo.</p>';
+      return;
+    }
+    el.innerHTML = arqs.map(a => {
+      const kb = a.tamanho ? Math.round(a.tamanho / 1024) : null;
+      return `<div class="med-item">
+        <div class="med-info">
+          <h4 style="font-size:14px">📄 ${this._escapeHtml(a.nome)}</h4>
+          <p style="margin-top:3px;font-size:12px;color:var(--textm)">${this.fmt(a.data)}${kb ? ' · ' + kb + ' KB' : ''}</p>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.baixarExameArquivo('${a.storage_path}')">⬇️ Abrir</button>
+          <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExameArquivo(${a.id},'${a.storage_path}')">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
   },
 
   _marcInfo(id) { return this._marcadoresLab.find(m => m.id === id) || { id, nome: id, unidade: '', ref_min: null, ref_max: null, grupo: 'Outros' }; },
@@ -3619,6 +3714,55 @@ const VITALE_CORE = {
       const meds = this.state.medicacoes.length ? this.state.medicacoes.map(m => `<li><strong>${m.nome}</strong> — ${m.dose}</li>`).join('') : '<li>Nenhuma</li>';
       const subs = this.state.submetas.length ? this.state.submetas.map(s => `<li>${s.icone} <strong>${s.nome}</strong>: ${s.pesoAlvo.toFixed(1)} kg${s.dataAlvo ? ' até ' + this.fmtStr(s.dataAlvo) : ''}</li>`).join('') : '<li>Nenhuma</li>';
       const nome = this.state.profile?.nome || '';
+
+      // Composição corporal (mais recente)
+      const comp = (this.state.composicao || [])[0];
+      const compHtml = comp ? `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Composição Corporal (${this.fmt(comp.data)})</h2>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <tr style="background:#f5f5f5"><td style="padding:10px;border:1px solid #ccc"><b>Massa muscular</b></td><td style="padding:10px;border:1px solid #ccc">${comp.massa_muscular ?? '—'} kg</td><td style="padding:10px;border:1px solid #ccc"><b>Massa de gordura</b></td><td style="padding:10px;border:1px solid #ccc">${comp.massa_gordura ?? '—'} kg</td></tr>
+          <tr><td style="padding:10px;border:1px solid #ccc"><b>% Gordura</b></td><td style="padding:10px;border:1px solid #ccc">${comp.gordura_pct ?? '—'}%</td><td style="padding:10px;border:1px solid #ccc"><b>Fonte</b></td><td style="padding:10px;border:1px solid #ccc">${comp.fonte || '—'}</td></tr>
+        </table>` : '';
+
+      // Exames laboratoriais — último valor por marcador, marcando fora-da-faixa
+      let examesHtml = '';
+      const exames = this.state.exames || [];
+      if (exames.length) {
+        const porM = {};
+        exames.forEach(e => { (porM[e.marcador] = porM[e.marcador] || []).push(e); });
+        const linhas = Object.entries(porM).map(([mid, regs]) => {
+          const info = this._marcInfo(mid);
+          const ord = [...regs].sort((a, b) => new Date(a.data) - new Date(b.data));
+          const ult = ord[ord.length - 1];
+          const st = this._statusMarcador(ult.valor, ult.ref_min, ult.ref_max);
+          const cor = st === 'ok' ? '#1a7a3a' : '#b03020';
+          const ref = (ult.ref_min != null ? ult.ref_min + '–' : '') + (ult.ref_max != null ? ult.ref_max : '');
+          return `<tr><td style="padding:8px;border:1px solid #ccc">${info.nome}</td><td style="padding:8px;border:1px solid #ccc;text-align:center;color:${cor};font-weight:bold">${ult.valor} ${info.unidade}</td><td style="padding:8px;border:1px solid #ccc;text-align:center;color:#666">${ref} ${info.unidade}</td><td style="padding:8px;border:1px solid #ccc;text-align:center">${this.fmt(ult.data)}</td></tr>`;
+        }).join('');
+        examesHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Exames Laboratoriais</h2>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px">
+            <thead><tr style="background:#333;color:white"><th style="padding:8px;text-align:left">Marcador</th><th style="padding:8px">Resultado</th><th style="padding:8px">Referência</th><th style="padding:8px">Data</th></tr></thead>
+            <tbody>${linhas}</tbody>
+          </table>`;
+      }
+
+      // Exercício (resumo dos últimos 30 dias)
+      const ex30 = this.state.exercicios || [];
+      let exHtml = '';
+      if (ex30.length) {
+        const totMin = ex30.reduce((s, e) => s + (e.duracao_min || 0), 0);
+        const totKcal = ex30.reduce((s, e) => s + (e.calorias || 0), 0);
+        exHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Atividade Física (registros recentes)</h2>
+          <p style="margin:12px 0">${ex30.length} sessões · ${totMin} min totais · ${totKcal} kcal estimadas.</p>`;
+      }
+
+      // Humor/sono (média dos registros)
+      const moods = this.state.moodHistorico || [];
+      let moodHtml = '';
+      if (moods.length) {
+        const med = (campo) => { const vs = moods.map(m => m[campo]).filter(v => v); return vs.length ? (vs.reduce((a, b) => a + b, 0) / vs.length).toFixed(1) : '—'; };
+        moodHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Bem-estar (médias)</h2>
+          <p style="margin:12px 0">Humor: ${med('humor')}/5 · Energia: ${med('energia')}/5 · Sono: ${med('sono')}/5 (${moods.length} registros)</p>`;
+      }
       const html = `<div style="font-family:serif;padding:40px;max-width:800px;color:#111">
         <h1 style="text-align:center;border-bottom:2px solid #333;padding-bottom:20px;letter-spacing:2px">VITALE — RELATÓRIO DE SAÚDE</h1>
         <p style="text-align:center;color:#666;font-style:italic">${nome ? nome + ' • ' : ''}Confidencial • ${new Date().toLocaleDateString('pt-BR')}</p>
@@ -3633,8 +3777,13 @@ const VITALE_CORE = {
           <tbody>${sorted.map(w => `<tr><td style="padding:10px;border:1px solid #ccc">${this.fmt(w.date)}</td><td style="padding:10px;border:1px solid #ccc;text-align:center">${w.peso.toFixed(1)}</td><td style="padding:10px;border:1px solid #ccc;text-align:center">${this.calcIMC(w.peso, this.altura)}</td></tr>`).join('')}</tbody>
         </table>
         <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Submetas</h2><ul style="margin:16px 0;line-height:2">${subs}</ul>
+        ${compHtml}
+        ${examesHtml}
+        ${exHtml}
+        ${moodHtml}
         <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Medicações</h2><ul style="margin:16px 0;line-height:2">${meds}</ul>
-        <p style="margin-top:40px;border-top:1px solid #ccc;padding-top:16px;font-size:11px;color:#666">VITALE v4 — ${new Date().toLocaleDateString('pt-BR')}</p>
+        <p style="margin-top:24px;font-size:11px;color:#888;font-style:italic">Este relatório reúne dados auto-registrados pelo paciente no app VITALE. Não substitui avaliação médica.</p>
+        <p style="margin-top:8px;border-top:1px solid #ccc;padding-top:16px;font-size:11px;color:#666">VITALE — ${new Date().toLocaleDateString('pt-BR')}</p>
       </div>`;
       html2pdf().set({
         margin: 10,
@@ -4487,8 +4636,11 @@ const VITALE_CORE = {
     if (tabName === 'exames') {
       try {
         this.renderExames();
+        this.renderExameArquivos();
         const ed = document.getElementById('exameData');
         if (ed && !ed.value) ed.value = this._hojeSP();
+        const ad = document.getElementById('arqData');
+        if (ad && !ad.value) ad.value = this._hojeSP();
       } catch (err) { console.warn('exames', err); }
     }
   },
