@@ -98,14 +98,22 @@ header::after{
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ===== TABS ===== */
+.tabs-wrap{position:relative;margin-bottom:28px}
+.tabs-wrap::after{
+  content:'';position:absolute;top:0;right:0;bottom:8px;width:36px;pointer-events:none;
+  background:linear-gradient(to right,transparent,var(--bg));z-index:2;
+}
 .tabs{
   display:flex;gap:0;border-bottom:1px solid var(--border);
-  flex-wrap:nowrap;margin-bottom:28px;overflow-x:auto;scrollbar-width:none;
+  flex-wrap:nowrap;margin-bottom:0;overflow-x:auto;scrollbar-width:thin;
+  scroll-behavior:smooth;-webkit-overflow-scrolling:touch;
 }
-.tabs::-webkit-scrollbar{display:none}
+.tabs::-webkit-scrollbar{height:4px}
+.tabs::-webkit-scrollbar-thumb{background:rgba(212,168,67,0.3);border-radius:2px}
+.tabs::-webkit-scrollbar-track{background:transparent}
 
 .tab-btn{
-  padding:14px 20px;background:transparent;border:none;color:var(--textm);
+  padding:14px 18px;background:transparent;border:none;color:var(--textm);
   cursor:pointer;font-size:11px;font-weight:600;letter-spacing:1.2px;
   border-bottom:2px solid transparent;transition:all .25s;white-space:nowrap;
   position:relative;font-family:'DM Sans',sans-serif;
