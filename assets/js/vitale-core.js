@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.7 · Bloco Importacoes · 2026-06-21';
+const VITALE_VERSION = 'v4.8 · Bloco UX-Polish · 2026-06-23';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -500,17 +500,19 @@ const VITALE_CORE = {
     const ganhos = this.state.conquistas.length;
     const total = this._badges.length;
     const { atual } = this.calcStreak();
-    // Mostra os 3 badges mais recentes desbloqueados
+    // Mostra os 3 badges mais recentes desbloqueados, com nome (não só emoji)
     const recentes = [...this.state.conquistas]
       .sort((a, b) => new Date(b.desbloqueada_em) - new Date(a.desbloqueada_em))
       .slice(0, 3)
-      .map(c => this._badges.find(b => b.id === c.badge_id)?.icone)
-      .filter(Boolean).join(' ');
+      .map(c => this._badges.find(b => b.id === c.badge_id))
+      .filter(Boolean)
+      .map(b => `<span title="${this._escapeHtml(b.desc)}" style="display:inline-flex;align-items:center;gap:5px;background:rgba(212,168,67,0.08);border:1px solid rgba(212,168,67,0.2);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--text)">${b.icone} ${this._escapeHtml(b.nome)}</span>`)
+      .join('');
     el.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap">
-        ${atual > 0 ? `<span style="font-size:14px"><strong style="color:var(--gold)">🔥 ${atual}</strong> <span style="color:var(--textm);font-size:12px">dias</span></span>` : ''}
+      <div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap">
+        ${atual > 0 ? `<span style="font-size:14px"><strong style="color:var(--gold)">🔥 ${atual}</strong> <span style="color:var(--textm);font-size:12px">dias seguidos</span></span>` : ''}
         <span style="font-size:14px"><strong style="color:var(--gold)">🏆 ${ganhos}/${total}</strong> <span style="color:var(--textm);font-size:12px">conquistas</span></span>
-        ${recentes ? `<span style="font-size:18px">${recentes}</span>` : ''}
+        ${recentes ? `<span style="display:inline-flex;gap:6px;flex-wrap:wrap;align-items:center"><span style="color:var(--textm);font-size:11px">Recentes:</span>${recentes}</span>` : ''}
       </div>`;
   },
 
@@ -1761,7 +1763,7 @@ const VITALE_CORE = {
     if (!el) return;
     const arqs = this.state.exameArquivos || [];
     if (!arqs.length) {
-      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:16px 0">Nenhum arquivo anexado. Suba o PDF do seu laboratório para guardar o exame completo.</p>';
+      el.innerHTML = '<div style="text-align:center;padding:20px 16px;border:1px dashed var(--border2);border-radius:12px"><div style="font-size:24px;margin-bottom:6px">📄</div><p style="color:var(--textm);font-size:12.5px">Nenhum arquivo ainda. Suba o PDF do laboratório acima — ele fica guardado aqui para você abrir na consulta médica.</p></div>';
       return;
     }
     el.innerHTML = arqs.map(a => {
@@ -1836,7 +1838,14 @@ const VITALE_CORE = {
       this._invalidateCoachCache();
       const st = this._statusMarcador(valor, info.ref_min, info.ref_max);
       const aviso = st === 'ok' ? '✅ dentro da referência' : (st === 'alto' ? '⚠️ acima da referência' : '⚠️ abaixo da referência');
-      this.showAlert('success', `Exame salvo — ${info.nome}: ${valor} ${info.unidade} (${aviso})`);
+      // Fluxo de lançamento em série: registra na sessão e prepara o próximo
+      this._sessaoExames = this._sessaoExames || [];
+      this._sessaoExames.push(`${info.nome}: ${valor}`);
+      const sess = document.getElementById('exameSessao');
+      if (sess) sess.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.2);border-radius:10px;padding:10px 14px;margin-top:12px;font-size:12px"><strong style="color:var(--em)">✅ ${this._sessaoExames.length} lançado(s) nesta sessão:</strong><br><span style="color:var(--textm)">${this._sessaoExames.join(' · ')}</span><br><span style="color:var(--textm);font-size:11px;margin-top:4px;display:inline-block">A data foi mantida — escolha o próximo marcador e continue.</span></div>`;
+      const selM = document.getElementById('exameMarcador');
+      if (selM && selM.focus) selM.focus();
+      this.showAlert('success', `${info.nome}: ${valor} ${info.unidade} (${aviso})`);
     } catch (e) {
       this.showAlert('error', '❌ ' + e.message);
       if (window.VitaleErr) window.VitaleErr.log('salvar_exame', e);
@@ -1858,7 +1867,7 @@ const VITALE_CORE = {
     if (!el) return;
     const exames = this.state.exames || [];
     if (!exames.length) {
-      el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center;padding:20px 0">Nenhum exame registrado ainda. Adicione os marcadores do seu último laboratório.</p>';
+      el.innerHTML = '<div style="text-align:center;padding:24px 16px;border:1px dashed var(--border2);border-radius:12px"><div style="font-size:28px;margin-bottom:8px">🔬</div><p style="color:var(--text);font-size:14px;margin-bottom:4px"><strong>Comece pelo seu último laudo</strong></p><p style="color:var(--textm);font-size:12.5px">Pegue o exame de sangue mais recente e lance os marcadores acima, um a um — a data fica mantida entre os lançamentos. Com 2 datas, os gráficos de tendência aparecem.</p></div>';
       this._renderExamesGraficos();
       return;
     }
