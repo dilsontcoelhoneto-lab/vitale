@@ -99,26 +99,18 @@ header::after{
 
 /* ===== TABS ===== */
 .tabs-wrap{position:relative;margin-bottom:28px}
-.tabs-wrap::after{
-  content:'';position:absolute;top:0;right:0;bottom:8px;width:36px;pointer-events:none;
-  background:linear-gradient(to right,transparent,var(--bg));z-index:2;
-}
 .tabs{
-  display:flex;gap:0;border-bottom:1px solid var(--border);
-  flex-wrap:nowrap;margin-bottom:0;overflow-x:auto;scrollbar-width:thin;
-  scroll-behavior:smooth;-webkit-overflow-scrolling:touch;
+  display:flex;flex-wrap:wrap;gap:2px 4px;
+  border-bottom:1px solid var(--border);margin-bottom:0;padding-bottom:2px;
 }
-.tabs::-webkit-scrollbar{height:4px}
-.tabs::-webkit-scrollbar-thumb{background:rgba(212,168,67,0.3);border-radius:2px}
-.tabs::-webkit-scrollbar-track{background:transparent}
 
 .tab-btn{
-  padding:14px 18px;background:transparent;border:none;color:var(--textm);
+  padding:12px 16px;background:transparent;border:none;color:var(--textm);
   cursor:pointer;font-size:11px;font-weight:600;letter-spacing:1.2px;
   border-bottom:2px solid transparent;transition:all .25s;white-space:nowrap;
-  position:relative;font-family:'DM Sans',sans-serif;
+  position:relative;font-family:'DM Sans',sans-serif;border-radius:8px 8px 0 0;
 }
-.tab-btn:hover{color:var(--text)}
+.tab-btn:hover{color:var(--text);background:rgba(212,168,67,0.04)}
 .tab-btn.active{color:var(--gold);border-bottom-color:var(--gold)}
 .tab-btn.active::before{
   content:'';position:absolute;bottom:-1px;left:0;right:0;height:2px;
@@ -571,9 +563,14 @@ table tr:hover td{background:rgba(255,255,255,0.02)}
   .header-stat-val{font-size:14px}
   .logo h1{font-size:20px;letter-spacing:3px}
   .imc-value{font-size:48px}
-  .tab-btn{padding:12px 14px;font-size:10px}
+  .tabs{gap:2px;justify-content:flex-start}
+  .tab-btn{padding:12px 12px;font-size:10px;letter-spacing:0.8px;flex:0 0 auto;min-height:44px}
   .container{padding:16px 14px}
   .modal-content{padding:20px}
+  /* Toque confortável (44px) e fonte 16px evita o zoom automático do iOS ao focar */
+  input,select,textarea{font-size:16px !important;min-height:44px}
+  .btn{min-height:44px}
+  .btn-small{min-height:38px}
 }
 /* ============================================
    VITALE BLOCO A — Adições
