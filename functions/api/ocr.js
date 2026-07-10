@@ -84,6 +84,7 @@ Se não der pra estimar (texto não é comida), responda {"alimento":null}.`;
     const isBio = modo === 'bioimpedancia';
     const isFood = modo === 'alimento';
     const isExerc = modo === 'exercicio';
+    const isAuto = modo === 'auto';
     const pesoG = body.peso_g || null;
 
     // 3) Tamanho máximo (~10 MB de base64 ≈ 7.5 MB de imagem)
@@ -166,6 +167,30 @@ Responda APENAS com JSON puro, sem markdown:
 
 Se não for um app de exercício, responda {"exercicio":null}.`;
 
+    // Modo AUTO — classifica a imagem e extrai conforme a categoria detectada
+    const promptAuto = `Você receberá uma imagem enviada por um usuário de app de saúde. Primeiro CLASSIFIQUE o que ela é, depois EXTRAIA os dados daquela categoria.
+
+CATEGORIAS possíveis:
+- "exercicio": print de app de treino (Strava, Apple Saúde, Garmin, Nike etc.)
+- "alimento": foto de comida/prato/refeição
+- "composicao": relatório de bioimpedância (InBody, balança Xiaomi/Mi, similar)
+- "peso": screenshot de histórico/registro de peso corporal
+- "exame_lab": foto ou print de exame de sangue/laudo laboratorial
+- "desconhecido": nada acima
+
+REGRA CRÍTICA: extraia SOMENTE o que aparece EXPLICITAMENTE. NUNCA invente valores. Campos ausentes = null.
+
+Extração por categoria:
+- exercicio: {"tipo":"caminhada|corrida|bicicleta|musculacao|natacao|funcional|yoga|esporte|outro","duracao_min":null,"calorias":null,"distancia_km":null,"intensidade":"leve|moderada|intensa"}
+- alimento: {"descricao":"...","calorias":0,"peso_g":0} (estimativa realista)
+- composicao: {"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null,"fonte":"inbody|xiaomi|outro"}
+- peso: {"registros":[{"date":"YYYY-MM-DD","peso":123.4}]} (converta lbs→kg; "ontem/hoje" pela data atual)
+- exame_lab: {"data_coleta":"YYYY-MM-DD ou null","itens":[{"nome":"nome do marcador como aparece","valor":0,"unidade":"..."}]} — extraia até 25 marcadores numéricos visíveis
+
+Responda APENAS com JSON puro, sem markdown:
+{"categoria":"...","exercicio":null,"alimento":null,"composicao":null,"peso":null,"exame_lab":null}
+Preencha SOMENTE o campo da categoria detectada; os demais ficam null.`;
+
     // 6) Monta requisição para Claude API
     const claudePayload = {
       model: 'claude-haiku-4-5-20251001',
@@ -174,7 +199,7 @@ Se não for um app de exercício, responda {"exercicio":null}.`;
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-          { type: 'text', text: isBio ? promptBio : (isFood ? promptFood : (isExerc ? promptExerc : promptPeso)) }
+          { type: 'text', text: isAuto ? promptAuto : (isBio ? promptBio : (isFood ? promptFood : (isExerc ? promptExerc : promptPeso))) }
         ]
       }]
     };
@@ -220,6 +245,30 @@ Se não for um app de exercício, responda {"exercicio":null}.`;
     }
 
     // 9) Validação conforme o modo
+    if (isAuto) {
+      const cats = ['exercicio', 'alimento', 'composicao', 'peso', 'exame_lab', 'desconhecido'];
+      const cat = cats.includes(parsed.categoria) ? parsed.categoria : 'desconhecido';
+      // Sanitiza exames: só itens com nome e valor numérico
+      let exameLab = null;
+      if (cat === 'exame_lab' && parsed.exame_lab && Array.isArray(parsed.exame_lab.itens)) {
+        exameLab = {
+          data_coleta: parsed.exame_lab.data_coleta || null,
+          itens: parsed.exame_lab.itens
+            .filter(i => i && i.nome && typeof i.valor === 'number' && isFinite(i.valor))
+            .slice(0, 25)
+        };
+      }
+      return new Response(JSON.stringify({
+        auto: {
+          categoria: cat,
+          exercicio: cat === 'exercicio' ? (parsed.exercicio || null) : null,
+          alimento: cat === 'alimento' ? (parsed.alimento || null) : null,
+          composicao: cat === 'composicao' ? (parsed.composicao || null) : null,
+          peso: cat === 'peso' ? (parsed.peso || null) : null,
+          exame_lab: exameLab
+        }
+      }), { status: 200, headers: corsHeaders });
+    }
     if (isBio) {
       const m = parsed.medidas || parsed || {};
       const limpa = {};
