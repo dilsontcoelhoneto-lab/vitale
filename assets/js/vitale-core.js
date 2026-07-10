@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.8 · Bloco UX-Polish · 2026-06-23';
+const VITALE_VERSION = 'v4.9 · Bloco Relatorio-Pro · 2026-06-23';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -3713,8 +3713,24 @@ const VITALE_CORE = {
   // =====================================================
   // RELATÓRIO PDF
   // =====================================================
-  gerarRelatorioPDF() {
+  // Gera imagem de gráfico fora da tela para embutir no PDF (fundo branco/impressão)
+  _chartToImg(cfg, w = 700, h = 260) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const chart = new Chart(canvas, {
+        ...cfg,
+        options: { ...(cfg.options || {}), responsive: false, animation: false, devicePixelRatio: 2 }
+      });
+      const url = chart.toBase64Image();
+      chart.destroy();
+      return url;
+    } catch (e) { return null; }
+  },
+
+  gerarRelatorioPDF(modo = 'completo') {
     if (!this.state.weights.length) return this.showAlert('error', 'Sem dados para relatório!');
+    const completo = modo !== 'simples';
     try {
       if (typeof html2pdf === 'undefined') throw new Error('html2pdf não carregado');
       const sorted = this.getSorted();
@@ -3772,31 +3788,104 @@ const VITALE_CORE = {
         moodHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Bem-estar (médias)</h2>
           <p style="margin:12px 0">Humor: ${med('humor')}/5 · Energia: ${med('energia')}/5 · Sono: ${med('sono')}/5 (${moods.length} registros)</p>`;
       }
+
+      // ===== Seções exclusivas do modo COMPLETO =====
+      let pesoChartHtml = '', examChartsHtml = '', dosesHtml = '', efeitosHtml = '', anexoIAHtml = '';
+      if (completo) {
+        // Gráfico de evolução do peso (cores para impressão em fundo branco)
+        const dsPeso = [{ label: 'Peso (kg)', data: sorted.map(w => w.peso), borderColor: '#2a4d8f', backgroundColor: 'rgba(42,77,143,0.08)', tension: 0.3, fill: true, pointRadius: 2 }];
+        if (this.metaKg) dsPeso.push({ label: 'Meta', data: sorted.map(() => this.metaKg), borderColor: '#b03020', borderDash: [6, 4], pointRadius: 0, fill: false });
+        const pesoImg = this._chartToImg({ type: 'line', data: { labels: sorted.map(w => this.fmt(w.date)), datasets: dsPeso }, options: { plugins: { legend: { display: true, labels: { color: '#333', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#555', font: { size: 8 }, maxTicksLimit: 12 } }, y: { ticks: { color: '#555', font: { size: 9 } } } } } });
+        if (pesoImg) pesoChartHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Evolução do Peso</h2><img src="${pesoImg}" style="width:100%;max-width:700px;margin:12px 0" />`;
+
+        // Gráficos de tendência dos exames (até 6 marcadores com 2+ registros)
+        const porM2 = {};
+        exames.forEach(e => { (porM2[e.marcador] = porM2[e.marcador] || []).push(e); });
+        const comHist = Object.entries(porM2).filter(([, r]) => r.length >= 2).slice(0, 6);
+        if (comHist.length) {
+          const imgs = comHist.map(([mid, regs]) => {
+            const info = this._marcInfo(mid);
+            const ord = [...regs].sort((a, b) => new Date(a.data) - new Date(b.data));
+            const ds = [{ label: info.nome, data: ord.map(r => r.valor), borderColor: '#2a4d8f', tension: 0.3, fill: false, pointRadius: 3 }];
+            if (info.ref_max != null) ds.push({ label: 'ref máx', data: ord.map(() => info.ref_max), borderColor: '#b03020', borderDash: [5, 4], pointRadius: 0, fill: false });
+            if (info.ref_min != null) ds.push({ label: 'ref mín', data: ord.map(() => info.ref_min), borderColor: '#1a7a3a', borderDash: [5, 4], pointRadius: 0, fill: false });
+            const img = this._chartToImg({ type: 'line', data: { labels: ord.map(r => this.fmt(r.data)), datasets: ds }, options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#555', font: { size: 8 } } }, y: { ticks: { color: '#555', font: { size: 9 } } } } } }, 340, 180);
+            return img ? `<div style="display:inline-block;width:48%;margin:0 1% 14px 0;page-break-inside:avoid"><div style="font-size:11px;color:#333;font-weight:bold;margin-bottom:4px">${info.nome}</div><img src="${img}" style="width:100%" /></div>` : '';
+          }).filter(Boolean).join('');
+          if (imgs) examChartsHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Tendência dos Marcadores</h2><div>${imgs}</div>`;
+        }
+
+        // Doses GLP-1
+        const doses = this.state.doses || [];
+        if (doses.length) {
+          const ordD = [...doses].sort((a, b) => new Date(b.data) - new Date(a.data)).slice(0, 20);
+          dosesHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Doses de Medicação GLP-1</h2>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px">
+              <thead><tr style="background:#333;color:white"><th style="padding:8px;text-align:left">Data</th><th style="padding:8px">Medicamento</th><th style="padding:8px">Dose</th></tr></thead>
+              <tbody>${ordD.map(d => `<tr><td style="padding:8px;border:1px solid #ccc">${this.fmt(d.data)}</td><td style="padding:8px;border:1px solid #ccc;text-align:center">${d.medicamento || '—'}</td><td style="padding:8px;border:1px solid #ccc;text-align:center">${d.dose || '—'}</td></tr>`).join('')}</tbody>
+            </table>`;
+        }
+
+        // Efeitos colaterais
+        const efs = this.state.efeitos || [];
+        if (efs.length) {
+          const ordE = [...efs].sort((a, b) => new Date(b.data) - new Date(a.data)).slice(0, 20);
+          efeitosHtml = `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Efeitos Colaterais Relatados</h2>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0;font-size:13px">
+              <thead><tr style="background:#333;color:white"><th style="padding:8px;text-align:left">Data</th><th style="padding:8px">Efeito</th><th style="padding:8px">Intensidade</th></tr></thead>
+              <tbody>${ordE.map(e => `<tr><td style="padding:8px;border:1px solid #ccc">${this.fmt(e.data)}</td><td style="padding:8px;border:1px solid #ccc;text-align:center">${e.tipo || '—'}</td><td style="padding:8px;border:1px solid #ccc;text-align:center">${e.intensidade || '—'}</td></tr>`).join('')}</tbody>
+            </table>`;
+        }
+
+        // Anexo de dados estruturados — para análise por IA
+        const porM3 = {};
+        exames.forEach(e => { (porM3[e.marcador] = porM3[e.marcador] || []).push({ data: e.data, valor: e.valor, ref_min: e.ref_min, ref_max: e.ref_max }); });
+        const dadosIA = {
+          gerado_em: new Date().toISOString().slice(0, 10),
+          perfil: { altura_m: this.altura, peso_atual_kg: last.peso, imc: parseFloat(imc), meta_kg: this.metaKg || null },
+          pesos: sorted.slice(-60).map(w => ({ data: w.date, kg: w.peso })),
+          exames: porM3,
+          medicacoes: (this.state.medicacoes || []).map(m => ({ nome: m.nome, dose: m.dose })),
+          doses_glp1: (this.state.doses || []).slice(0, 20).map(d => ({ data: d.data, medicamento: d.medicamento, dose: d.dose })),
+          efeitos_colaterais: (this.state.efeitos || []).slice(0, 20).map(e => ({ data: e.data, tipo: e.tipo, intensidade: e.intensidade })),
+          composicao_corporal: comp ? { data: comp.data, massa_muscular: comp.massa_muscular, massa_gordura: comp.massa_gordura, gordura_pct: comp.gordura_pct } : null
+        };
+        anexoIAHtml = `<div style="page-break-before:always"></div>
+          <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Anexo — Dados Estruturados (para análise assistida por IA)</h2>
+          <p style="font-size:11px;color:#666;margin:8px 0">Copie o bloco abaixo e cole em qualquer assistente de IA para uma análise dos dados. Formato JSON.</p>
+          <pre style="font-size:7.5px;line-height:1.35;background:#f7f7f7;border:1px solid #ddd;padding:10px;white-space:pre-wrap;word-break:break-all">${this._escapeHtml(JSON.stringify(dadosIA, null, 1))}</pre>`;
+      }
+
       const html = `<div style="font-family:serif;padding:40px;max-width:800px;color:#111">
-        <h1 style="text-align:center;border-bottom:2px solid #333;padding-bottom:20px;letter-spacing:2px">VITALE — RELATÓRIO DE SAÚDE</h1>
+        <h1 style="text-align:center;border-bottom:2px solid #333;padding-bottom:20px;letter-spacing:2px">VITALE — RELATÓRIO DE SAÚDE${completo ? '' : ' (RESUMIDO)'}</h1>
         <p style="text-align:center;color:#666;font-style:italic">${nome ? nome + ' • ' : ''}Confidencial • ${new Date().toLocaleDateString('pt-BR')}</p>
         <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Resumo</h2>
         <table style="width:100%;border-collapse:collapse;margin:16px 0">
           <tr style="background:#f5f5f5"><td style="padding:10px;border:1px solid #ccc"><b>Peso Atual</b></td><td style="padding:10px;border:1px solid #ccc">${last.peso.toFixed(1)} kg</td><td style="padding:10px;border:1px solid #ccc"><b>IMC</b></td><td style="padding:10px;border:1px solid #ccc">${imc}</td></tr>
           <tr><td style="padding:10px;border:1px solid #ccc"><b>Peso Inicial</b></td><td style="padding:10px;border:1px solid #ccc">${sorted[0].peso.toFixed(1)} kg</td><td style="padding:10px;border:1px solid #ccc"><b>Perda Total</b></td><td style="padding:10px;border:1px solid #ccc"><b>${(sorted[0].peso - last.peso).toFixed(1)} kg (${((sorted[0].peso - last.peso) / sorted[0].peso * 100).toFixed(1)}%)</b></td></tr>
         </table>
-        <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Histórico de Peso</h2>
+        <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Medicações</h2><ul style="margin:16px 0;line-height:2">${meds}</ul>
+        ${examesHtml}
+        ${completo ? pesoChartHtml : ''}
+        ${completo ? `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Histórico de Peso</h2>
         <table style="width:100%;border-collapse:collapse;margin:16px 0">
           <thead><tr style="background:#333;color:white"><th style="padding:10px;text-align:left">Data</th><th style="padding:10px;text-align:center">Peso (kg)</th><th style="padding:10px;text-align:center">IMC</th></tr></thead>
           <tbody>${sorted.map(w => `<tr><td style="padding:10px;border:1px solid #ccc">${this.fmt(w.date)}</td><td style="padding:10px;border:1px solid #ccc;text-align:center">${w.peso.toFixed(1)}</td><td style="padding:10px;border:1px solid #ccc;text-align:center">${this.calcIMC(w.peso, this.altura)}</td></tr>`).join('')}</tbody>
-        </table>
-        <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Submetas</h2><ul style="margin:16px 0;line-height:2">${subs}</ul>
-        ${compHtml}
-        ${examesHtml}
-        ${exHtml}
-        ${moodHtml}
-        <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Medicações</h2><ul style="margin:16px 0;line-height:2">${meds}</ul>
+        </table>` : ''}
+        ${completo ? examChartsHtml : ''}
+        ${completo ? compHtml : ''}
+        ${completo ? dosesHtml : ''}
+        ${completo ? efeitosHtml : ''}
+        ${completo ? exHtml : ''}
+        ${completo ? moodHtml : ''}
+        ${completo ? `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Submetas</h2><ul style="margin:16px 0;line-height:2">${subs}</ul>` : ''}
+        ${completo ? anexoIAHtml : ''}
         <p style="margin-top:24px;font-size:11px;color:#888;font-style:italic">Este relatório reúne dados auto-registrados pelo paciente no app VITALE. Não substitui avaliação médica.</p>
         <p style="margin-top:8px;border-top:1px solid #ccc;padding-top:16px;font-size:11px;color:#666">VITALE — ${new Date().toLocaleDateString('pt-BR')}</p>
       </div>`;
       html2pdf().set({
         margin: 10,
-        filename: `VITALE_${new Date().toISOString().slice(0, 10)}.pdf`,
+        filename: `VITALE_${completo ? 'completo' : 'simples'}_${new Date().toISOString().slice(0, 10)}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2 },
         jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
