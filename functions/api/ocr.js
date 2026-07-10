@@ -74,6 +74,52 @@ Se não der pra estimar (texto não é comida), responda {"alimento":null}.`;
       return new Response(JSON.stringify({ alimento: Object.keys(out).length ? out : null }), { headers: corsHeaders });
     }
 
+    // Caminho especial: DIÁRIO LIVRE — o usuário conta o dia em texto e a IA estrutura
+    if (body.modo === 'diario') {
+      if (!env.ANTHROPIC_API_KEY) {
+        return new Response(JSON.stringify({ error: 'Servidor não configurado' }), { status: 500, headers: corsHeaders });
+      }
+      const textoD = (body.texto || '').slice(0, 1200);
+      const hoje = body.hoje || new Date().toISOString().slice(0, 10);
+      if (!textoD) return new Response(JSON.stringify({ error: 'Texto vazio' }), { status: 400, headers: corsHeaders });
+      const promptDiario = `Hoje é ${hoje}. Um usuário de app de saúde contou em texto livre o que fez/comeu. Estruture os dados.
+
+TEXTO DO USUÁRIO: "${textoD}"
+
+Extraia (use null/[] quando não houver; NUNCA invente):
+1. exercicios: cada atividade citada → {"tipo":"caminhada|corrida|bicicleta|musculacao|natacao|funcional|yoga|esporte|outro","duracao_min":num ou null,"intensidade":"leve|moderada|intensa","data":"YYYY-MM-DD"} — converta "ontem", "sábado", "fim de semana" usando a data de hoje; sem data explícita = hoje.
+2. refeicoes: cada refeição/comida citada → {"tipo":"cafe|almoco|jantar|lanche","descricao":"...","calorias":estimativa realista,"data":"YYYY-MM-DD"}
+3. eventos: contexto relevante para saúde (viagem, estresse, festa, comeu mal, dormiu pouco, doença) → {"descricao":"frase curta em 3ª pessoa","data":"YYYY-MM-DD ou null"}
+4. resposta: UMA resposta curta (máx 2 frases), acolhedora e direta, em pt-BR, como um coach — reconheça o que foi feito sem julgar excessos.
+
+Responda APENAS com JSON puro, sem markdown:
+{"resposta":"...","exercicios":[],"refeicoes":[],"eventos":[]}`;
+      const r2 = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 900, messages: [{ role: 'user', content: promptDiario }] })
+      });
+      if (!r2.ok) {
+        const e = await r2.text();
+        return new Response(JSON.stringify({ error: `IA (${r2.status})`, detail: e.slice(0, 150) }), { status: r2.status, headers: corsHeaders });
+      }
+      const rd2 = await r2.json();
+      const raw2 = (rd2.content || []).map(c => c.text || '').join('').replace(/```json|```/g, '').trim();
+      let p2; try { p2 = JSON.parse(raw2); } catch { const mm = raw2.match(/\{[\s\S]*\}/); p2 = mm ? JSON.parse(mm[0]) : null; }
+      if (!p2) return new Response(JSON.stringify({ error: 'Não consegui interpretar' }), { status: 502, headers: corsHeaders });
+      const tiposEx = ['caminhada', 'corrida', 'bicicleta', 'musculacao', 'natacao', 'funcional', 'yoga', 'esporte', 'outro'];
+      const diario = {
+        resposta: String(p2.resposta || 'Anotado!').slice(0, 300),
+        exercicios: (Array.isArray(p2.exercicios) ? p2.exercicios : []).filter(e => e && tiposEx.includes(e.tipo)).slice(0, 6)
+          .map(e => ({ tipo: e.tipo, duracao_min: (e.duracao_min > 0 && e.duracao_min <= 600) ? Math.round(e.duracao_min) : null, intensidade: ['leve', 'moderada', 'intensa'].includes(e.intensidade) ? e.intensidade : 'moderada', data: /^\d{4}-\d{2}-\d{2}$/.test(e.data || '') ? e.data : hoje })),
+        refeicoes: (Array.isArray(p2.refeicoes) ? p2.refeicoes : []).filter(r => r && r.descricao).slice(0, 8)
+          .map(r => ({ tipo: ['cafe', 'almoco', 'jantar', 'lanche'].includes(r.tipo) ? r.tipo : 'lanche', descricao: String(r.descricao).slice(0, 200), calorias: (r.calorias > 0 && r.calorias < 8000) ? Math.round(r.calorias) : null, data: /^\d{4}-\d{2}-\d{2}$/.test(r.data || '') ? r.data : hoje })),
+        eventos: (Array.isArray(p2.eventos) ? p2.eventos : []).filter(e => e && e.descricao).slice(0, 4)
+          .map(e => ({ descricao: String(e.descricao).slice(0, 240), data: /^\d{4}-\d{2}-\d{2}$/.test(e.data || '') ? e.data : null }))
+      };
+      return new Response(JSON.stringify({ diario }), { headers: corsHeaders });
+    }
+
     if (!body.image) {
       return new Response(JSON.stringify({ error: 'Payload inválido — esperado { image, mime }' }), {
         status: 400, headers: corsHeaders
