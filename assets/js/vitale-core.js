@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v4.9 · Bloco Relatorio-Pro · 2026-06-23';
+const VITALE_VERSION = 'v5.0 · Bloco Panorama-Auto · 2026-06-23';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1139,7 +1139,7 @@ const VITALE_CORE = {
 
     try {
       const reg = {
-        user_id: user.id, data: this._hojeSP(), tipo: this.refeicaoTipo,
+        user_id: user.id, data: (document.getElementById('ref_data')?.value || this._hojeSP()), tipo: this.refeicaoTipo,
         descricao: desc || null, calorias: isNaN(cal) ? null : cal, peso_g: peso,
         origem: this._refeicaoOrigem || 'manual'
       };
@@ -1782,6 +1782,250 @@ const VITALE_CORE = {
   },
 
   _marcInfo(id) { return this._marcadoresLab.find(m => m.id === id) || { id, nome: id, unidade: '', ref_min: null, ref_max: null, grupo: 'Outros' }; },
+
+  // Troca de aba programática (sem evento de clique)
+  _goTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const cont = document.getElementById(tabName);
+    if (cont) cont.classList.add('active');
+    const btn = [...document.querySelectorAll('.tab-btn')].find(b => (b.getAttribute('onclick') || '').includes(`'${tabName}'`));
+    if (btn) btn.classList.add('active');
+    this.switchTab({ currentTarget: btn || { classList: { add() {} } } }, tabName);
+  },
+
+  // TMB (Mifflin-St Jeor) — precisa de peso atual, altura, nascimento e sexo
+  _tmb() {
+    const hp = this.state.healthProfile || {};
+    const sorted = this.getSorted();
+    const peso = sorted.length ? sorted[sorted.length - 1].peso : null;
+    const alturaCm = this.altura ? this.altura * 100 : null;
+    if (!peso || !alturaCm || !hp.data_nascimento || !hp.sexo) return null;
+    const idade = Math.floor((Date.now() - new Date(hp.data_nascimento)) / (365.25 * 24 * 3600 * 1000));
+    if (!isFinite(idade) || idade < 10 || idade > 110) return null;
+    const s = String(hp.sexo).toLowerCase();
+    const base = 10 * peso + 6.25 * alturaCm - 5 * idade + (s.startsWith('m') ? 5 : -161);
+    return Math.round(base);
+  },
+
+  // =====================================================
+  // IMPORTAÇÃO INTELIGENTE — um botão, a IA classifica e roteia
+  // =====================================================
+  _sinonimosMarcador: {
+    glicose: ['glicose', 'glicemia'], hba1c: ['hba1c', 'glicada', 'hemoglobina glicada'],
+    insulina: ['insulina'], homa_ir: ['homa'], colesterol_total: ['colesterol total'],
+    ldl: ['ldl'], hdl: ['hdl'], triglicerides: ['triglic'], tgo: ['tgo', 'ast', 'oxalac'],
+    tgp: ['tgp', 'alt', 'piruv'], ggt: ['ggt', 'gama'], creatinina: ['creatinina'],
+    ureia: ['ureia', 'uréia'], acido_urico: ['úrico', 'urico'], tsh: ['tsh'],
+    t4_livre: ['t4'], testosterona_total: ['testosterona'], vitamina_d: ['vitamina d', '25-hidroxi', 'hidroxivitamina'],
+    vitamina_b12: ['b12', 'b-12'], pcr: ['pcr', 'proteína c'], ferritina: ['ferritina']
+  },
+
+  _matchMarcador(nomeLivre) {
+    const n = (nomeLivre || '').toLowerCase();
+    for (const [id, sins] of Object.entries(this._sinonimosMarcador)) {
+      if (sins.some(s => n.includes(s))) return id;
+    }
+    return null;
+  },
+
+  async importarAuto(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const res = document.getElementById('autoResult');
+    if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🪄 Analisando a imagem — identificando o que é...</p>';
+    try {
+      const dataUrl = await new Promise((ok, err) => {
+        const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = err; r.readAsDataURL(file);
+      });
+      const compressed = await this._compressImageForOCR(dataUrl);
+      const base64 = compressed.split(',')[1];
+      const resp = await fetch('/api/ocr', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, mime: 'image/jpeg', modo: 'auto' })
+      });
+      if (!resp.ok) { const ed = await resp.json().catch(() => ({})); throw new Error(ed.error || 'Falha na análise'); }
+      const data = await resp.json();
+      const auto = data.auto || {};
+      input.value = '';
+      this._rotearImportacao(auto);
+    } catch (e) {
+      if (res) res.innerHTML = `<p style="color:var(--red,#e8504a);font-size:13px">❌ ${this._escapeHtml(e.message || 'Erro na importação')}</p>`;
+    }
+  },
+
+  _rotearImportacao(auto) {
+    const res = document.getElementById('autoResult');
+    const cat = auto.categoria;
+    if (cat === 'exercicio' && auto.exercicio) {
+      const ex = auto.exercicio;
+      if (ex.tipo && this._exercicios.some(e => e.id === ex.tipo)) this.exercDraft.tipo = ex.tipo;
+      if (ex.intensidade) this.exercDraft.intensidade = ex.intensidade;
+      this._autoExercicio = ex;
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">🏃 <strong>Identifiquei um treino:</strong> ${this._escapeHtml(ex.tipo || '?')} · ${ex.duracao_min || '?'} min${ex.calorias ? ' · ' + ex.calorias + ' kcal' : ''}${ex.distancia_km ? ' · ' + ex.distancia_km + ' km' : ''}<br><button class="btn btn-gold btn-small" style="margin-top:8px" onclick="VITALE_CORE._goTab('exercicios');VITALE_CORE._prefillExercicio()">Confirmar na aba Exercícios →</button></div>`;
+    } else if (cat === 'alimento' && auto.alimento) {
+      const a = auto.alimento;
+      const setV = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+      setV('ref_desc', a.descricao); setV('ref_cal', a.calorias); setV('ref_peso', a.peso_g);
+      this._refeicaoOrigem = 'foto_auto';
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">🍽️ <strong>Identifiquei uma refeição:</strong> ${this._escapeHtml(a.descricao || '')} · ~${a.calorias || '?'} kcal<br><button class="btn btn-gold btn-small" style="margin-top:8px" onclick="VITALE_CORE._goTab('alimentacao')">Confirmar na aba Alimentação →</button></div>`;
+    } else if (cat === 'composicao' && auto.composicao) {
+      const c = auto.composicao;
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">⚖️ <strong>Identifiquei bioimpedância</strong> (${this._escapeHtml(c.fonte || 'balança')}): peso ${c.peso ?? '?'} kg · gordura ${c.gordura_pct ?? '?'}% · músculo ${c.massa_muscular ?? '?'} kg<br><span style="color:var(--textm);font-size:12px">Use a seção "Bioimpedância" logo abaixo com esta mesma foto para importar com validação completa.</span></div>`;
+    } else if (cat === 'peso' && auto.peso && (auto.peso.registros || []).length) {
+      const regs = auto.peso.registros;
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">⚖️ <strong>Identifiquei ${regs.length} registro(s) de peso.</strong><br><span style="color:var(--textm);font-size:12px">Use a seção "Peso (histórico de app)" logo abaixo com esta mesma imagem para importar todos com validação.</span></div>`;
+    } else if (cat === 'exame_lab' && auto.exame_lab && (auto.exame_lab.itens || []).length) {
+      const dataColeta = auto.exame_lab.data_coleta || this._hojeSP();
+      const reconhecidos = auto.exame_lab.itens
+        .map(i => ({ ...i, id: this._matchMarcador(i.nome) }))
+        .filter(i => i.id);
+      this._autoExames = { data: dataColeta, itens: reconhecidos };
+      if (!reconhecidos.length) {
+        if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🔬 Vi um exame, mas não reconheci marcadores do catálogo. Lance manualmente na aba Exames.</p>';
+        return;
+      }
+      const lista = reconhecidos.map(i => `<li>${this._escapeHtml(this._marcInfo(i.id).nome)}: <strong>${i.valor}</strong></li>`).join('');
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">🔬 <strong>Identifiquei um exame de sangue</strong> (${this.fmt(dataColeta)}) com ${reconhecidos.length} marcador(es) do catálogo:<ul style="margin:8px 0 8px 18px;line-height:1.8">${lista}</ul><button class="btn btn-gold btn-small" onclick="VITALE_CORE.lancarExamesDetectados()">✅ Lançar todos</button> <span style="color:var(--textm);font-size:11px">Confira os valores antes.</span></div>`;
+    } else {
+      if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🤔 Não consegui identificar essa imagem como treino, refeição, balança, peso ou exame. Tente uma foto mais nítida ou use as seções específicas abaixo.</p>';
+    }
+  },
+
+  _prefillExercicio() {
+    const ex = this._autoExercicio || {};
+    const setV = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+    setV('exercDuracao', ex.duracao_min); setV('exercCalManual', ex.calorias); setV('exercDistancia', ex.distancia_km);
+    try { this._renderExercForm(); } catch (e) {}
+  },
+
+  async lancarExamesDetectados() {
+    const pack = this._autoExames;
+    if (!pack || !pack.itens.length) return;
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada.');
+    let ok = 0, falhas = 0;
+    for (const item of pack.itens) {
+      const info = this._marcInfo(item.id);
+      try {
+        const { data: novo, error } = await window.sb.from('exames_lab').insert({
+          user_id: user.id, data: pack.data, marcador: item.id, valor: item.valor,
+          unidade: info.unidade || null, ref_min: info.ref_min, ref_max: info.ref_max
+        }).select().single();
+        if (error) throw error;
+        this.state.exames.unshift(novo);
+        ok++;
+      } catch (e) { falhas++; }
+    }
+    this._invalidateCoachCache();
+    this._autoExames = null;
+    const res = document.getElementById('autoResult');
+    if (res) res.innerHTML = `<p style="color:var(--em);font-size:13px">✅ ${ok} marcador(es) lançado(s)${falhas ? ` · ${falhas} falha(s)` : ''}. Veja os gráficos na aba Exames.</p>`;
+    this.showAlert('success', `✅ ${ok} exame(s) importado(s)!`);
+  },
+
+  // =====================================================
+  // PANORAMA — todos os gráficos em uma aba
+  // =====================================================
+  renderPanorama() {
+    this._panCharts = this._panCharts || {};
+    const destroy = (k) => { if (this._panCharts[k]) { this._panCharts[k].destroy(); delete this._panCharts[k]; } };
+    const dias14 = [...Array(14)].map((_, i) => {
+      const d = new Date(Date.now() - (13 - i) * 86400000);
+      return d.toISOString().slice(0, 10);
+    });
+
+    // 1) Balanço calórico: consumo (refeições) vs gasto (TMB×1.3 + exercício)
+    const ctxB = document.getElementById('panBalanco');
+    if (ctxB) {
+      destroy('bal');
+      const consumo = dias14.map(d => (this.state.refeicoes || []).filter(r => r.data === d).reduce((s, r) => s + (r.calorias || 0), 0));
+      const exercDia = dias14.map(d => (this.state.exercicios || []).filter(e => (e.data || '').slice(0, 10) === d).reduce((s, e) => s + (e.calorias || 0), 0));
+      const tmb = this._tmb();
+      const gasto = tmb ? exercDia.map(e => Math.round(tmb * 1.3 + e)) : null;
+      const nota = document.getElementById('panBalancoNota');
+      if (nota) nota.textContent = tmb
+        ? `Gasto estimado = metabolismo basal (~${tmb} kcal, Mifflin-St Jeor) × 1,3 (rotina leve) + exercício do dia. Barras abaixo da linha = déficit calórico.`
+        : 'Complete data de nascimento e sexo no Perfil para eu estimar seu gasto basal — sem ele, mostro só o exercício.';
+      const datasets = [{ type: 'bar', label: 'Consumido (kcal)', data: consumo, backgroundColor: 'rgba(212,168,67,0.55)', borderRadius: 4 }];
+      if (gasto) datasets.push({ type: 'line', label: 'Gasto estimado (kcal)', data: gasto, borderColor: '#27c47d', pointRadius: 2, tension: 0.3, fill: false });
+      else datasets.push({ type: 'bar', label: 'Exercício (kcal)', data: exercDia, backgroundColor: 'rgba(39,196,125,0.5)', borderRadius: 4 });
+      this._panCharts.bal = new Chart(ctxB, {
+        data: { labels: dias14.map(d => this.fmt(d)), datasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8c8880', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 8 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+      });
+    }
+
+    // 2) Peso
+    const ctxP = document.getElementById('panPeso');
+    if (ctxP) {
+      destroy('peso');
+      const sorted = this.getSorted();
+      const ds = [{ label: 'Peso (kg)', data: sorted.map(w => w.peso), borderColor: '#d4a843', backgroundColor: 'rgba(212,168,67,0.08)', tension: 0.3, fill: true, pointRadius: 2 }];
+      if (this.metaKg) ds.push({ label: 'Meta', data: sorted.map(() => this.metaKg), borderColor: 'rgba(232,80,74,0.6)', borderDash: [6, 4], pointRadius: 0, fill: false });
+      this._panCharts.peso = new Chart(ctxP, {
+        type: 'line',
+        data: { labels: sorted.map(w => this.fmt(w.date)), datasets: ds },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 8 }, maxTicksLimit: 10 } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+      });
+    }
+
+    // 3) Exercício semanal (8 semanas) — o gráfico da motivação
+    const ctxE = document.getElementById('panExercicio');
+    if (ctxE) {
+      destroy('exerc');
+      const semanas = [...Array(8)].map((_, i) => {
+        const fim = new Date(Date.now() - (7 - i) * 7 * 86400000);
+        const ini = new Date(fim.getTime() - 6 * 86400000);
+        const min = (this.state.exercicios || []).filter(e => {
+          const d = new Date((e.data || '').slice(0, 10));
+          return d >= ini && d <= fim;
+        }).reduce((s, e) => s + (e.duracao_min || 0), 0);
+        return { label: `${ini.getDate()}/${ini.getMonth() + 1}`, min };
+      });
+      this._panCharts.exerc = new Chart(ctxE, {
+        type: 'bar',
+        data: { labels: semanas.map(s => s.label), datasets: [{ label: 'Minutos/semana', data: semanas.map(s => s.min), backgroundColor: semanas.map(s => s.min >= 150 ? 'rgba(39,196,125,0.7)' : 'rgba(212,168,67,0.45)'), borderRadius: 6 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 9 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+      });
+      const notaE = document.getElementById('panExercicioNota');
+      if (notaE) {
+        const ultSem = semanas[semanas.length - 1].min;
+        notaE.innerHTML = ultSem >= 150
+          ? `<strong style="color:var(--em)">✅ ${ultSem} min esta semana</strong> — você bateu a recomendação da OMS (150 min). Barras verdes = semanas no alvo.`
+          : `<strong style="color:var(--gold)">${ultSem} min esta semana</strong> — a OMS recomenda 150 min. Faltam ${150 - ultSem} min: uma caminhada de ${Math.min(150 - ultSem, 40)} min já muda a barra. 💪`;
+      }
+    }
+
+    // 4) Marcadores-chave (até 4 com 2+ registros, em ordem de prioridade)
+    const cont = document.getElementById('panMarcadores');
+    if (cont) {
+      const prioridade = ['ldl', 'hdl', 'colesterol_total', 'triglicerides', 'glicose', 'hba1c', 'homa_ir', 'testosterona_total', 'vitamina_d'];
+      const porM = {};
+      (this.state.exames || []).forEach(e => { (porM[e.marcador] = porM[e.marcador] || []).push(e); });
+      const escolhidos = prioridade.filter(id => (porM[id] || []).length >= 2).slice(0, 4);
+      if (!escolhidos.length) {
+        cont.innerHTML = '<p style="color:var(--textm);font-size:12.5px;text-align:center;padding:12px 0">Registre o mesmo marcador em 2+ datas na aba Exames para ver as tendências aqui.</p>';
+      } else {
+        cont.innerHTML = escolhidos.map(id => `<div style="margin-bottom:18px"><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${this._marcInfo(id).nome}</div><div style="height:130px"><canvas id="panMarc_${id}"></canvas></div></div>`).join('');
+        escolhidos.forEach(id => {
+          const info = this._marcInfo(id);
+          const ord = [...porM[id]].sort((a, b) => new Date(a.data) - new Date(b.data));
+          const ctx = document.getElementById(`panMarc_${id}`);
+          if (!ctx) return;
+          destroy('m_' + id);
+          const ds = [{ label: info.nome, data: ord.map(r => r.valor), borderColor: '#d4a843', tension: 0.3, fill: false, pointRadius: 3 }];
+          if (info.ref_max != null) ds.push({ data: ord.map(() => info.ref_max), borderColor: 'rgba(232,80,74,0.5)', borderDash: [5, 5], pointRadius: 0, fill: false });
+          if (info.ref_min != null) ds.push({ data: ord.map(() => info.ref_min), borderColor: 'rgba(39,196,125,0.5)', borderDash: [5, 5], pointRadius: 0, fill: false });
+          this._panCharts['m_' + id] = new Chart(ctx, {
+            type: 'line',
+            data: { labels: ord.map(r => this.fmt(r.data)), datasets: ds },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 8 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+          });
+        });
+      }
+    }
+  },
 
   _statusMarcador(valor, refMin, refMax) {
     if (refMax != null && valor > refMax) return 'alto';
@@ -4740,6 +4984,12 @@ const VITALE_CORE = {
         const ad = document.getElementById('arqData');
         if (ad && !ad.value) ad.value = this._hojeSP();
       } catch (err) { console.warn('exames', err); }
+    }
+    if (tabName === 'panorama') {
+      try { this.renderPanorama(); } catch (err) { console.warn('panorama', err); }
+    }
+    if (tabName === 'alimentacao') {
+      try { const rd = document.getElementById('ref_data'); if (rd && !rd.value) rd.value = this._hojeSP(); } catch (err) {}
     }
   },
 
