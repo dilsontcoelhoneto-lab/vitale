@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.0 · Bloco Panorama-Auto · 2026-06-23';
+const VITALE_VERSION = 'v5.1 · Bloco Diario-Vivo · 2026-06-23';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1890,6 +1890,89 @@ const VITALE_CORE = {
     } else {
       if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🤔 Não consegui identificar essa imagem como treino, refeição, balança, peso ou exame. Tente uma foto mais nítida ou use as seções específicas abaixo.</p>';
     }
+  },
+
+  // =====================================================
+  // DIÁRIO LIVRE — conte pro app o que fez/comeu; IA estrutura e salva
+  // =====================================================
+  async diarioProcessar() {
+    const txt = (document.getElementById('diarioTexto')?.value || '').trim();
+    if (!txt) return this.showAlert('error', 'Escreva o que você fez ou comeu.');
+    const res = document.getElementById('diarioResult');
+    if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">💬 Entendendo o que você contou...</p>';
+    try {
+      const resp = await fetch('/api/ocr', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modo: 'diario', texto: txt, hoje: this._hojeSP() })
+      });
+      if (!resp.ok) { const ed = await resp.json().catch(() => ({})); throw new Error(ed.error || 'Falha'); }
+      const data = await resp.json();
+      const d = data.diario || {};
+      this._diarioPend = d;
+      const chips = [];
+      (d.exercicios || []).forEach(e => chips.push(`🏃 ${e.tipo}${e.duracao_min ? ' ' + e.duracao_min + 'min' : ''} <span style="color:var(--textm)">(${this.fmt(e.data)})</span>`));
+      (d.refeicoes || []).forEach(r => chips.push(`🍽️ ${this._escapeHtml(r.descricao)}${r.calorias ? ' ~' + r.calorias + ' kcal' : ''} <span style="color:var(--textm)">(${this.fmt(r.data)})</span>`));
+      (d.eventos || []).forEach(ev => chips.push(`📝 ${this._escapeHtml(ev.descricao)}`));
+      const temAlgo = chips.length > 0;
+      if (res) res.innerHTML = `<div style="background:rgba(212,168,67,0.05);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:14px 16px;font-size:13px">
+        <p style="margin-bottom:10px;color:var(--text)">${this._escapeHtml(d.resposta || '')}</p>
+        ${temAlgo ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">${chips.map(c => `<span style="background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:6px 10px">${c}</span>`).join('')}</div>
+        <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioConfirmar()">✅ Confirmar e salvar tudo</button>
+        <button class="btn btn-secondary btn-small" onclick="document.getElementById('diarioResult').innerHTML='';VITALE_CORE._diarioPend=null">Descartar</button>` : '<p style="color:var(--textm);font-size:12px">Não identifiquei registros para salvar — mas anotei o contexto se houver.</p>'}
+      </div>`;
+    } catch (e) {
+      if (res) res.innerHTML = `<p style="color:var(--red,#e8504a);font-size:13px">❌ ${this._escapeHtml(e.message || 'Erro')}</p>`;
+    }
+  },
+
+  async diarioConfirmar() {
+    const d = this._diarioPend;
+    if (!d) return;
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada.');
+    let ok = 0;
+    // Exercícios — calorias estimadas por MET quando houver duração
+    for (const e of (d.exercicios || [])) {
+      try {
+        const cal = e.duracao_min ? this._estimaCalorias(e.tipo, e.intensidade, e.duracao_min) : null;
+        const { data: novo, error } = await window.sb.from('exercicios').insert({
+          user_id: user.id, tipo: e.tipo, duracao_min: e.duracao_min, intensidade: e.intensidade,
+          calorias: cal, nota: 'via diário', data: e.data,
+          distancia_km: null, fc_media: null, calorias_manual: null
+        }).select().single();
+        if (error) throw error;
+        this.state.exercicios.unshift(novo); ok++;
+      } catch (err) { console.warn('diario exerc', err); }
+    }
+    // Refeições
+    for (const r of (d.refeicoes || [])) {
+      try {
+        const { data: novo, error } = await window.sb.from('refeicoes').insert({
+          user_id: user.id, data: r.data, tipo: r.tipo, descricao: r.descricao,
+          calorias: r.calorias, peso_g: null, origem: 'diario'
+        }).select().single();
+        if (error) throw error;
+        this.state.refeicoes.push(novo); ok++;
+      } catch (err) { console.warn('diario ref', err); }
+    }
+    // Eventos → memória da IA (entra na Análise Completa)
+    for (const ev of (d.eventos || [])) {
+      try {
+        const conteudo = ev.data ? `Em ${this.fmt(ev.data)}: ${ev.descricao}` : ev.descricao;
+        const { data: novo, error } = await window.sb.from('user_memory').insert({
+          user_id: user.id, tipo: 'evento', conteudo, relevancia: 4
+        }).select().single();
+        if (error) throw error;
+        (this.state.memoria = this.state.memoria || []).unshift(novo); ok++;
+      } catch (err) { console.warn('diario memo', err); }
+    }
+    this._diarioPend = null;
+    const dt = document.getElementById('diarioTexto'); if (dt) dt.value = '';
+    const res = document.getElementById('diarioResult');
+    if (res) res.innerHTML = `<p style="color:var(--em);font-size:13px">✅ ${ok} registro(s) salvo(s). Tudo isso entra na sua próxima Análise Completa.</p>`;
+    try { this.renderExercicios(); this.renderRefeicoes(); this.renderBalancoCalorico(); } catch (e) {}
+    this._invalidateCoachCache();
+    this.showAlert('success', `✅ Diário salvo — ${ok} registro(s)!`);
   },
 
   _prefillExercicio() {
@@ -4100,21 +4183,43 @@ const VITALE_CORE = {
           <pre style="font-size:7.5px;line-height:1.35;background:#f7f7f7;border:1px solid #ddd;padding:10px;white-space:pre-wrap;word-break:break-all">${this._escapeHtml(JSON.stringify(dadosIA, null, 1))}</pre>`;
       }
 
-      const html = `<div style="font-family:serif;padding:40px;max-width:800px;color:#111">
-        <h1 style="text-align:center;border-bottom:2px solid #333;padding-bottom:20px;letter-spacing:2px">VITALE — RELATÓRIO DE SAÚDE${completo ? '' : ' (RESUMIDO)'}</h1>
-        <p style="text-align:center;color:#666;font-style:italic">${nome ? nome + ' • ' : ''}Confidencial • ${new Date().toLocaleDateString('pt-BR')}</p>
-        <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Resumo</h2>
-        <table style="width:100%;border-collapse:collapse;margin:16px 0">
-          <tr style="background:#f5f5f5"><td style="padding:10px;border:1px solid #ccc"><b>Peso Atual</b></td><td style="padding:10px;border:1px solid #ccc">${last.peso.toFixed(1)} kg</td><td style="padding:10px;border:1px solid #ccc"><b>IMC</b></td><td style="padding:10px;border:1px solid #ccc">${imc}</td></tr>
-          <tr><td style="padding:10px;border:1px solid #ccc"><b>Peso Inicial</b></td><td style="padding:10px;border:1px solid #ccc">${sorted[0].peso.toFixed(1)} kg</td><td style="padding:10px;border:1px solid #ccc"><b>Perda Total</b></td><td style="padding:10px;border:1px solid #ccc"><b>${(sorted[0].peso - last.peso).toFixed(1)} kg (${((sorted[0].peso - last.peso) / sorted[0].peso * 100).toFixed(1)}%)</b></td></tr>
-        </table>
-        <h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Medicações</h2><ul style="margin:16px 0;line-height:2">${meds}</ul>
+      // Contexto relatado (eventos da memória — alimentados pelo diário)
+      let contextoHtml = '';
+      if (completo) {
+        const evs = (this.state.memoria || []).filter(m => m.tipo === 'evento').slice(0, 8);
+        if (evs.length) {
+          contextoHtml = `<h2 style="${'margin:28px 0 12px;font-size:15px;color:#1a2438;border-left:4px solid #d4a843;padding-left:10px;text-transform:uppercase;letter-spacing:1px'}">Contexto Relatado pelo Paciente</h2>
+            <ul style="margin:0 0 8px 18px;line-height:1.9;font-size:12.5px;color:#333">${evs.map(e => `<li>${this._escapeHtml(e.conteudo)}</li>`).join('')}</ul>`;
+        }
+      }
+
+      const S = {
+        h2: 'margin:28px 0 12px;font-size:15px;color:#1a2438;border-left:4px solid #d4a843;padding-left:10px;text-transform:uppercase;letter-spacing:1px',
+        th: 'padding:9px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#fff;background:#1a2438',
+        td: 'padding:9px 10px;border-bottom:1px solid #e8e8e8;font-size:12.5px;color:#333',
+        kpi: 'flex:1;min-width:120px;background:#f7f5f0;border:1px solid #e5e0d5;border-radius:10px;padding:14px;text-align:center'
+      };
+      const perda = (sorted[0].peso - last.peso);
+      const html = `<div style="font-family:'Segoe UI',Helvetica,Arial,sans-serif;padding:0;max-width:800px;color:#222">
+        <div style="background:#1a2438;color:#fff;padding:28px 32px;border-bottom:4px solid #d4a843">
+          <div style="font-size:11px;letter-spacing:3px;color:#d4a843">VITALE</div>
+          <div style="font-size:24px;font-weight:600;margin-top:4px">Relatório de Saúde${completo ? '' : ' — Resumido'}</div>
+          <div style="font-size:12px;color:#aab;margin-top:6px">${nome ? nome + ' · ' : ''}${new Date().toLocaleDateString('pt-BR')} · Confidencial</div>
+        </div>
+        <div style="padding:24px 32px">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+          <div style="${S.kpi}"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">Peso atual</div><div style="font-size:26px;font-weight:700;color:#1a2438;margin-top:4px">${last.peso.toFixed(1)}<span style="font-size:13px;font-weight:400"> kg</span></div></div>
+          <div style="${S.kpi}"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">${perda >= 0 ? 'Perda total' : 'Ganho'}</div><div style="font-size:26px;font-weight:700;color:${perda >= 0 ? '#1a7a3a' : '#b03020'};margin-top:4px">${Math.abs(perda).toFixed(1)}<span style="font-size:13px;font-weight:400"> kg (${Math.abs(perda / sorted[0].peso * 100).toFixed(1)}%)</span></div></div>
+          <div style="${S.kpi}"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">IMC</div><div style="font-size:26px;font-weight:700;color:#1a2438;margin-top:4px">${imc}</div></div>
+          <div style="${S.kpi}"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">Período</div><div style="font-size:14px;font-weight:600;color:#1a2438;margin-top:10px">${this.fmt(sorted[0].date)} –<br>${this.fmt(last.date)}</div></div>
+        </div>
+        <h2 style="${S.h2}">Medicações em Uso</h2><ul style="margin:0 0 8px 18px;line-height:1.9;font-size:12.5px;color:#333">${meds}</ul>
         ${examesHtml}
         ${completo ? pesoChartHtml : ''}
-        ${completo ? `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Histórico de Peso</h2>
-        <table style="width:100%;border-collapse:collapse;margin:16px 0">
-          <thead><tr style="background:#333;color:white"><th style="padding:10px;text-align:left">Data</th><th style="padding:10px;text-align:center">Peso (kg)</th><th style="padding:10px;text-align:center">IMC</th></tr></thead>
-          <tbody>${sorted.map(w => `<tr><td style="padding:10px;border:1px solid #ccc">${this.fmt(w.date)}</td><td style="padding:10px;border:1px solid #ccc;text-align:center">${w.peso.toFixed(1)}</td><td style="padding:10px;border:1px solid #ccc;text-align:center">${this.calcIMC(w.peso, this.altura)}</td></tr>`).join('')}</tbody>
+        ${completo ? `<h2 style="${S.h2}">Histórico de Peso</h2>
+        <table style="width:100%;border-collapse:collapse;margin:10px 0;border-radius:8px;overflow:hidden">
+          <thead><tr><th style="${S.th}">Data</th><th style="${S.th};text-align:center">Peso (kg)</th><th style="${S.th};text-align:center">IMC</th></tr></thead>
+          <tbody>${sorted.map((w, i) => `<tr style="background:${i % 2 ? '#faf9f6' : '#fff'}"><td style="${S.td}">${this.fmt(w.date)}</td><td style="${S.td};text-align:center">${w.peso.toFixed(1)}</td><td style="${S.td};text-align:center">${this.calcIMC(w.peso, this.altura)}</td></tr>`).join('')}</tbody>
         </table>` : ''}
         ${completo ? examChartsHtml : ''}
         ${completo ? compHtml : ''}
@@ -4122,10 +4227,12 @@ const VITALE_CORE = {
         ${completo ? efeitosHtml : ''}
         ${completo ? exHtml : ''}
         ${completo ? moodHtml : ''}
-        ${completo ? `<h2 style="margin-top:32px;border-bottom:1px solid #ccc;padding-bottom:8px">Submetas</h2><ul style="margin:16px 0;line-height:2">${subs}</ul>` : ''}
+        ${contextoHtml}
+        ${completo ? `<h2 style="${S.h2}">Submetas</h2><ul style="margin:0 0 8px 18px;line-height:1.9;font-size:12.5px;color:#333">${subs}</ul>` : ''}
         ${completo ? anexoIAHtml : ''}
-        <p style="margin-top:24px;font-size:11px;color:#888;font-style:italic">Este relatório reúne dados auto-registrados pelo paciente no app VITALE. Não substitui avaliação médica.</p>
-        <p style="margin-top:8px;border-top:1px solid #ccc;padding-top:16px;font-size:11px;color:#666">VITALE — ${new Date().toLocaleDateString('pt-BR')}</p>
+        <p style="margin-top:24px;font-size:10.5px;color:#999;font-style:italic">Este relatório reúne dados auto-registrados pelo paciente no app VITALE. Não substitui avaliação médica.</p>
+        <p style="margin-top:6px;border-top:2px solid #d4a843;padding-top:12px;font-size:10.5px;color:#888">VITALE · vitale.acacianegocios.com.br · ${new Date().toLocaleDateString('pt-BR')}</p>
+        </div>
       </div>`;
       html2pdf().set({
         margin: 10,
