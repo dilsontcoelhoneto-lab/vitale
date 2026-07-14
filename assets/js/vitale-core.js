@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.1 · Bloco Diario-Vivo · 2026-06-23';
+const VITALE_VERSION = 'v5.2 · Bloco Auto-Fix · 2026-07-10';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1840,9 +1840,12 @@ const VITALE_CORE = {
       });
       const compressed = await this._compressImageForOCR(dataUrl);
       const base64 = compressed.split(',')[1];
+      const nota = (document.getElementById('autoTexto')?.value || '').trim().slice(0, 300);
+      const session = await window.sb.auth.getSession();
+      const token = session?.data?.session?.access_token;
       const resp = await fetch('/api/ocr', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64, mime: 'image/jpeg', modo: 'auto' })
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ image: base64, mime: 'image/jpeg', modo: 'auto', nota: nota || undefined, hoje: this._hojeSP() })
       });
       if (!resp.ok) { const ed = await resp.json().catch(() => ({})); throw new Error(ed.error || 'Falha na análise'); }
       const data = await resp.json();
@@ -1901,8 +1904,10 @@ const VITALE_CORE = {
     const res = document.getElementById('diarioResult');
     if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">💬 Entendendo o que você contou...</p>';
     try {
+      const session = await window.sb.auth.getSession();
+      const token = session?.data?.session?.access_token;
       const resp = await fetch('/api/ocr', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
         body: JSON.stringify({ modo: 'diario', texto: txt, hoje: this._hojeSP() })
       });
       if (!resp.ok) { const ed = await resp.json().catch(() => ({})); throw new Error(ed.error || 'Falha'); }
