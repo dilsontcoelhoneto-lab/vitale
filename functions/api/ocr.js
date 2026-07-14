@@ -214,7 +214,10 @@ Responda APENAS com JSON puro, sem markdown:
 Se não for um app de exercício, responda {"exercicio":null}.`;
 
     // Modo AUTO — classifica a imagem e extrai conforme a categoria detectada
-    const promptAuto = `Você receberá uma imagem enviada por um usuário de app de saúde. Primeiro CLASSIFIQUE o que ela é, depois EXTRAIA os dados daquela categoria.
+    const notaUser = (body.nota || '').slice(0, 300);
+    const hojeAuto = body.hoje || new Date().toISOString().slice(0, 10);
+    const promptAuto = `Você receberá uma imagem enviada por um usuário de app de saúde. Hoje é ${hojeAuto}. Primeiro CLASSIFIQUE o que ela é, depois EXTRAIA os dados daquela categoria.
+${notaUser ? `\nOBSERVAÇÃO DO USUÁRIO (use para calibrar porção, quantidade ou data — tem prioridade sobre sua estimativa visual): "${notaUser}"\n` : ''}
 
 CATEGORIAS possíveis:
 - "exercicio": print de app de treino (Strava, Apple Saúde, Garmin, Nike etc.)
