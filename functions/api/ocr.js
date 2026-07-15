@@ -8,6 +8,65 @@
 //   - modo 'peso' (padrão):        { registros: [...] }
 //   - modo 'bioimpedancia':        { medidas: {...} }
 // A chave da API NUNCA sai do servidor.
+//
+// v2 (2026-07-14):
+//   - Bioimpedância agora extrai a DATA do relatório (com regra
+//     explícita pro formato americano MM/DD/YYYY dos apps Xiaomi/EN)
+//   - Modo AUTO passou a sanitizar composicao e peso (antes devolvia
+//     o JSON da IA sem validação de faixas — risco de alucinação)
+
+// ---- Helpers de sanitização (compartilhados entre modos) ----
+
+// Faixas sãs por campo — descarta lixo/alucinação
+const FAIXAS_COMPOSICAO = {
+  peso: [20, 500], gordura_pct: [1, 70], massa_gordura: [1, 300],
+  massa_muscular: [5, 150], agua_corporal: [10, 100],
+  gordura_visceral: [1, 60], tmb: [500, 6000], imc: [8, 90]
+};
+
+// Valida "YYYY-MM-DD": data real, não-futura (tolerância 1 dia por fuso),
+// não mais antiga que 3 anos. Devolve a string ou null.
+function sanitizaData(d) {
+  if (typeof d !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  const dt = new Date(d + 'T12:00:00Z');
+  if (isNaN(dt.getTime())) return null;
+  const agora = Date.now();
+  if (dt.getTime() > agora + 86400000) return null;            // futura
+  if (dt.getTime() < agora - 3 * 365 * 86400000) return null;  // > 3 anos
+  return d;
+}
+
+// Sanitiza o objeto de composição corporal vindo da IA
+function sanitizaComposicao(m) {
+  if (!m || typeof m !== 'object') return null;
+  const limpa = {};
+  Object.keys(FAIXAS_COMPOSICAO).forEach(k => {
+    const v = parseFloat(m[k]);
+    if (!isNaN(v) && v >= FAIXAS_COMPOSICAO[k][0] && v <= FAIXAS_COMPOSICAO[k][1]) {
+      limpa[k] = k === 'tmb' ? Math.round(v) : v;
+    }
+  });
+  if (['inbody', 'xiaomi', 'outro'].includes(m.fonte)) limpa.fonte = m.fonte;
+  const dataOk = sanitizaData(m.data);
+  if (dataOk) limpa.data = dataOk;
+  return Object.keys(limpa).length ? limpa : null;
+}
+
+// Sanitiza registros de peso vindos da IA
+function sanitizaRegistrosPeso(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(r =>
+    r && typeof r.date === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
+    typeof r.peso === 'number' &&
+    r.peso > 20 && r.peso < 500
+  ).slice(0, 60);
+}
+
+// Instrução de data compartilhada (bioimpedância). Ponto crítico: apps em
+// inglês usam MM/DD/YYYY — "07/06/2026" no Mi Fitness EN é 6 de julho, não
+// 7 de junho. Datas ambíguas (dia ≤ 12) só se resolvem pelo idioma da UI.
+const INSTRUCAO_DATA_BIO = `- data: data do relatório/pesagem se estiver visível na imagem (ex: perto do nome do usuário ou no topo). ATENÇÃO CRÍTICA: apps em inglês (Xiaomi/Mi Fitness, Zepp, InBody EN) usam formato americano MM/DD/YYYY — "07/14/2026 07:24" significa 14 de julho de 2026. Apps em português usam DD/MM/YYYY. Decida pelo idioma da interface na imagem. Converta SEMPRE para "YYYY-MM-DD". Se não houver data visível, use null — NUNCA chute.`;
 
 export async function onRequestPost(context) {
   const { request, env } = context;
@@ -132,6 +191,7 @@ Responda APENAS com JSON puro, sem markdown:
     const isExerc = modo === 'exercicio';
     const isAuto = modo === 'auto';
     const pesoG = body.peso_g || null;
+    const hojeRef = body.hoje || new Date().toISOString().slice(0, 10);
 
     // 3) Tamanho máximo (~10 MB de base64 ≈ 7.5 MB de imagem)
     if (image.length > 14 * 1024 * 1024) {
@@ -153,8 +213,9 @@ Responda APENAS com JSON puro, sem markdown:
 Sua tarefa:
 1. Identifique TODOS os registros de peso visíveis na imagem
 2. Para cada registro extraia: data (YYYY-MM-DD) e peso em kg (decimal)
-3. Se data estiver no formato "ontem", "hoje", "há 2 dias", converta usando a data atual como referência
+3. Se data estiver no formato "ontem", "hoje", "há 2 dias", converta usando a data atual como referência (hoje é ${hojeRef})
 4. Se o peso estiver em libras (lbs), converta para kg (1 lb = 0.453592 kg)
+5. ATENÇÃO a datas numéricas: apps em INGLÊS usam MM/DD/YYYY (americano); apps em PORTUGUÊS usam DD/MM/YYYY. Decida pelo idioma da interface.
 
 Responda APENAS com JSON puro, sem markdown, sem explicações, no formato exato:
 {"registros":[{"date":"YYYY-MM-DD","peso":123.4}]}
@@ -165,29 +226,30 @@ Se a imagem NÃO contém dados de peso, responda:
 Se a imagem for ilegível ou irrelevante:
 {"registros":[],"erro":"motivo curto"}`;
 
-    const promptBio = `Esta imagem é um exame de bioimpedância. Pode ser de uma balança InBody (relatório profissional, fundo branco/cinza, marca "InBody"), de uma balança Xiaomi/Mi (app azul claro, "Relatório de peso"), ou de outra balança smart.
+    const promptBio = `Esta imagem é um exame de bioimpedância. Pode ser de uma balança InBody (relatório profissional, fundo branco/cinza, marca "InBody"), de uma balança Xiaomi/Mi (app azul claro, "Relatório de peso" / "Weight report"), ou de outra balança smart. Hoje é ${hojeRef}.
 
 REGRA CRÍTICA: extraia SOMENTE valores que aparecem EXPLICITAMENTE na imagem. NUNCA invente, estime ou calcule valores ausentes. Se um campo não aparece, use null.
 
 Aparelhos usam nomes diferentes para a mesma coisa — mapeie todos para os campos abaixo:
-- peso: "Peso" / peso corporal (kg)
-- gordura_pct: "PGC" / "Porcentagem de gordura corporal" / "% gordura" (%)
-- massa_gordura: "Massa de Gordura" / "Massa gorda" (kg)
-- massa_muscular: "Massa Muscular Esquelética" / "Massa de músculo esquelético" / "Massa muscular" (kg) — prefira a ESQUELÉTICA quando houver as duas
-- agua_corporal: "Água Corporal Total" / "Massa de água corporal" / "Água corporal" (L ou kg)
-- gordura_visceral: "Nível de Gordura Visceral" / "Classificação de gordura visceral" (número)
-- tmb: "Taxa Metabólica Basal" / "TMB" (kcal)
-- imc: "IMC" / "Índice de Massa Corporal"
+- peso: "Peso" / "Weight" / peso corporal (kg)
+- gordura_pct: "PGC" / "Porcentagem de gordura corporal" / "Body fat percentage" / "% gordura" (%)
+- massa_gordura: "Massa de Gordura" / "Fat mass" / "Massa gorda" (kg)
+- massa_muscular: "Massa Muscular Esquelética" / "Massa de músculo esquelético" / "Muscle mass" / "Massa muscular" (kg) — prefira a ESQUELÉTICA quando houver as duas
+- agua_corporal: "Água Corporal Total" / "Body water mass" / "Água corporal" (L ou kg)
+- gordura_visceral: "Nível de Gordura Visceral" / "Visceral fat" (número)
+- tmb: "Taxa Metabólica Basal" / "TMB" / "BMR" (kcal)
+- imc: "IMC" / "BMI" / "Índice de Massa Corporal"
+${INSTRUCAO_DATA_BIO}
 
 Também identifique a FONTE do aparelho:
 - "inbody" se vir a marca InBody
-- "xiaomi" se for app Xiaomi/Mi (tela azul clara, "Relatório de peso", "Pontuação corporal")
+- "xiaomi" se for app Xiaomi/Mi (tela azul clara, "Relatório de peso" / "Weight report", "Pontuação corporal" / "Body score")
 - "outro" se não conseguir identificar
 
 NÃO extraia circunferências (cintura/quadril) — bioimpedância não mede isso com fita.
 
 Responda APENAS com JSON puro, sem markdown:
-{"medidas":{"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null,"fonte":"inbody|xiaomi|outro"}}`;
+{"medidas":{"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null,"data":null,"fonte":"inbody|xiaomi|outro"}}`;
 
     const promptFood = `Esta imagem é uma foto de um prato de comida / refeição.
 
@@ -215,8 +277,7 @@ Se não for um app de exercício, responda {"exercicio":null}.`;
 
     // Modo AUTO — classifica a imagem e extrai conforme a categoria detectada
     const notaUser = (body.nota || '').slice(0, 300);
-    const hojeAuto = body.hoje || new Date().toISOString().slice(0, 10);
-    const promptAuto = `Você receberá uma imagem enviada por um usuário de app de saúde. Hoje é ${hojeAuto}. Primeiro CLASSIFIQUE o que ela é, depois EXTRAIA os dados daquela categoria.
+    const promptAuto = `Você receberá uma imagem enviada por um usuário de app de saúde. Hoje é ${hojeRef}. Primeiro CLASSIFIQUE o que ela é, depois EXTRAIA os dados daquela categoria.
 ${notaUser ? `\nOBSERVAÇÃO DO USUÁRIO (use para calibrar porção, quantidade ou data — tem prioridade sobre sua estimativa visual): "${notaUser}"\n` : ''}
 
 CATEGORIAS possíveis:
@@ -229,10 +290,12 @@ CATEGORIAS possíveis:
 
 REGRA CRÍTICA: extraia SOMENTE o que aparece EXPLICITAMENTE. NUNCA invente valores. Campos ausentes = null.
 
+REGRA DE DATAS: apps em INGLÊS usam formato americano MM/DD/YYYY ("07/14/2026" = 14 de julho); apps em PORTUGUÊS usam DD/MM/YYYY. Decida pelo idioma da interface na imagem. Converta sempre para YYYY-MM-DD; sem data visível = null.
+
 Extração por categoria:
 - exercicio: {"tipo":"caminhada|corrida|bicicleta|musculacao|natacao|funcional|yoga|esporte|outro","duracao_min":null,"calorias":null,"distancia_km":null,"intensidade":"leve|moderada|intensa"}
 - alimento: {"descricao":"...","calorias":0,"peso_g":0} (estimativa realista)
-- composicao: {"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null,"fonte":"inbody|xiaomi|outro"}
+- composicao: {"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null,"data":null,"fonte":"inbody|xiaomi|outro"} — "data" é a data do relatório se visível (aplique a REGRA DE DATAS)
 - peso: {"registros":[{"date":"YYYY-MM-DD","peso":123.4}]} (converta lbs→kg; "ontem/hoje" pela data atual)
 - exame_lab: {"data_coleta":"YYYY-MM-DD ou null","itens":[{"nome":"nome do marcador como aparece","valor":0,"unidade":"..."}]} — extraia até 25 marcadores numéricos visíveis
 
@@ -301,40 +364,32 @@ Preencha SOMENTE o campo da categoria detectada; os demais ficam null.`;
       let exameLab = null;
       if (cat === 'exame_lab' && parsed.exame_lab && Array.isArray(parsed.exame_lab.itens)) {
         exameLab = {
-          data_coleta: parsed.exame_lab.data_coleta || null,
+          data_coleta: sanitizaData(parsed.exame_lab.data_coleta),
           itens: parsed.exame_lab.itens
             .filter(i => i && i.nome && typeof i.valor === 'number' && isFinite(i.valor))
             .slice(0, 25)
         };
+      }
+      // Sanitiza composicao e peso — ANTES saíam crus da IA (v2)
+      let pesoAuto = null;
+      if (cat === 'peso' && parsed.peso) {
+        const regs = sanitizaRegistrosPeso(parsed.peso.registros);
+        pesoAuto = regs.length ? { registros: regs } : null;
       }
       return new Response(JSON.stringify({
         auto: {
           categoria: cat,
           exercicio: cat === 'exercicio' ? (parsed.exercicio || null) : null,
           alimento: cat === 'alimento' ? (parsed.alimento || null) : null,
-          composicao: cat === 'composicao' ? (parsed.composicao || null) : null,
-          peso: cat === 'peso' ? (parsed.peso || null) : null,
+          composicao: cat === 'composicao' ? sanitizaComposicao(parsed.composicao) : null,
+          peso: pesoAuto,
           exame_lab: exameLab
         }
       }), { status: 200, headers: corsHeaders });
     }
     if (isBio) {
       const m = parsed.medidas || parsed || {};
-      const limpa = {};
-      // Faixas sãs por campo — descarta lixo/alucinação
-      const faixas = {
-        peso: [20, 500], gordura_pct: [1, 70], massa_gordura: [1, 300],
-        massa_muscular: [5, 150], agua_corporal: [10, 100],
-        gordura_visceral: [1, 60], tmb: [500, 6000], imc: [8, 90]
-      };
-      Object.keys(faixas).forEach(k => {
-        const v = parseFloat(m[k]);
-        if (!isNaN(v) && v >= faixas[k][0] && v <= faixas[k][1]) {
-          limpa[k] = k === 'tmb' ? Math.round(v) : v;
-        }
-      });
-      // Repassa a fonte detectada (inbody/xiaomi/outro) — validada contra lista
-      if (['inbody', 'xiaomi', 'outro'].includes(m.fonte)) limpa.fonte = m.fonte;
+      const limpa = sanitizaComposicao(m) || {};
       return new Response(JSON.stringify({ medidas: limpa }), { headers: corsHeaders });
     }
 
@@ -363,15 +418,7 @@ Preencha SOMENTE o campo da categoria detectada; os demais ficam null.`;
     }
 
     // modo peso (padrão) — preserva tua validação original
-    if (!parsed.registros || !Array.isArray(parsed.registros)) {
-      parsed.registros = [];
-    }
-    parsed.registros = parsed.registros.filter(r =>
-      r && typeof r.date === 'string' &&
-      /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
-      typeof r.peso === 'number' &&
-      r.peso > 20 && r.peso < 500
-    );
+    parsed.registros = sanitizaRegistrosPeso(parsed.registros);
 
     return new Response(JSON.stringify(parsed), { headers: corsHeaders });
 
