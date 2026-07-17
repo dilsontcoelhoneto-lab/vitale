@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.2 · Bloco Auto-Fix · 2026-07-10';
+const VITALE_VERSION = 'v5.3 · Bloco 1 — Objetivo+Composição · 2026-07-15';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -171,10 +171,22 @@ const VITALE_CORE = {
   // existem naquele dia. Os registros individuais ficam em
   // state.weightsRaw, carregados sob demanda no Histórico.
   async loadWeights() {
-    const { data, error } = await window.sb
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    // Defesa em profundidade: filtra por user_id ALÉM do RLS/security_invoker.
+    // Fallback: se a view não expuser user_id, refaz sem filtro (o invoker protege).
+    let res = await window.sb
       .from('weight_daily')
       .select('data, peso, registros_dia')
+      .eq('user_id', user.id)
       .order('data', { ascending: true });
+    if (res.error && /user_id/i.test(res.error.message || '')) {
+      res = await window.sb
+        .from('weight_daily')
+        .select('data, peso, registros_dia')
+        .order('data', { ascending: true });
+    }
+    const { data, error } = res;
     if (error) throw error;
     return (data || []).map(w => ({
       date: w.data,
@@ -185,9 +197,12 @@ const VITALE_CORE = {
 
   // Carrega registros individuais (todas as pesagens, mesmo do mesmo dia)
   async loadWeightsRaw() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
     const { data, error } = await window.sb
       .from('weights')
       .select('id, data, hora, peso, origem, created_at')
+      .eq('user_id', user.id)
       .order('data', { ascending: false })
       .order('hora', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false });
@@ -203,9 +218,12 @@ const VITALE_CORE = {
   },
 
   async loadMedicacoes() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
     const { data, error } = await window.sb
       .from('medicacoes')
       .select('*')
+      .eq('user_id', user.id)
       .eq('ativo', true)
       .order('created_at', { ascending: false });
     if (error) throw error;
@@ -213,9 +231,12 @@ const VITALE_CORE = {
   },
 
   async loadSubmetas() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
     const { data, error } = await window.sb
       .from('submetas')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return (data || []).map(s => ({
@@ -269,7 +290,34 @@ const VITALE_CORE = {
   getSorted() { return [...this.state.weights].sort((a, b) => new Date(a.date) - new Date(b.date)); },
 
   get altura() { return this.state.profile?.altura || 1.70; },
-  get metaKg() { return 30 * this.altura * this.altura; },
+
+  // ===== BLOCO 1 — MODO OBJETIVO =====
+  // O objetivo vem do health_profile (emagrecimento é o default histórico).
+  get objetivo() { return this.state.healthProfile?.objetivo || 'emagrecimento'; },
+  // Meta de PERDA (IMC 30) só faz sentido nestes objetivos:
+  get isModoPerda() { const o = this.objetivo; return o === 'emagrecimento' || o === 'outro'; },
+  // metaKg agora pode ser NULL (sem meta de perda ativa). Vira null quando:
+  //  a) objetivo não é de perda (recomposição/hipertrofia/manutenção/saúde), ou
+  //  b) o usuário JÁ está com peso <= alvo IMC 30 (meta cumprida — caso de
+  //     quem emagreceu e ainda está com objetivo antigo no perfil).
+  // Todos os consumidores tratam null.
+  get metaKg() {
+    if (!this.isModoPerda) return null;
+    const alvo = 30 * this.altura * this.altura;
+    const sorted = this.getSorted();
+    const last = sorted[sorted.length - 1];
+    if (last && last.peso <= alvo) return null;
+    return alvo;
+  },
+  // Texto neutro exibido no lugar de "faltam X kg" quando não há meta de perda
+  _metaTextoObjetivo() {
+    const o = this.objetivo;
+    if (o === 'recomposicao') return '💪 Modo recomposição — acompanhe músculo vs gordura no Panorama.';
+    if (o === 'hipertrofia') return '🏋️ Modo hipertrofia — foco em ganhar massa muscular com consistência.';
+    if (o === 'manutencao') return '🧘 Modo manutenção — o objetivo agora é estabilidade.';
+    if (o === 'saude') return '❤️ Modo saúde geral — acompanhe exames e hábitos.';
+    return '🏆 Meta IMC < 30 atingida — agora é manter!';
+  },
 
   // =====================================================
   // HEADER
@@ -405,7 +453,7 @@ const VITALE_CORE = {
       streakRecorde: this.calcStreak().recorde,
       perdaTotal: sorted.length >= 2 ? (sorted[0].peso - sorted[sorted.length - 1].peso) : 0,
       pesoAtual: sorted.length ? sorted[sorted.length - 1].peso : null,
-      metaKg: this.metaKg,
+      metaKg: 30 * this.altura * this.altura, // alvo bruto: badge meta_batida precisa disparar mesmo com metaKg null
       imcInicial: sorted.length ? parseFloat(this.calcIMC(sorted[0].peso, this.altura)) : 0,
       imcAtual: sorted.length ? parseFloat(this.calcIMC(sorted[sorted.length - 1].peso, this.altura)) : null,
       temMood: !!this.state.moodHoje,
@@ -992,12 +1040,34 @@ const VITALE_CORE = {
       this.renderComposicao();
       this.buildComposicaoChart();
       this._invalidateCoachCache();
+
+      // BLOCO 1: peso da bioimpedância vira pesagem do dia — SE não houver
+      // pesagem naquele dia. IMC do header é SEMPRE calculado pelo app
+      // (peso ÷ altura²); o IMC do aparelho fica só como referência no registro.
+      this._compPesoIntegrado = false;
+      if (reg.peso) {
+        try {
+          const { data: existentes, error: qErr } = await window.sb
+            .from('weights').select('id')
+            .eq('user_id', user.id).eq('data', reg.data).limit(1);
+          if (!qErr && (!existentes || !existentes.length)) {
+            const { error: wErr } = await window.sb.from('weights')
+              .insert({ user_id: user.id, data: reg.data, peso: reg.peso, origem: 'bioimpedancia' });
+            if (!wErr) this._compPesoIntegrado = true;
+          }
+        } catch (eInt) { console.warn('integração peso-bioimpedância', eInt); }
+      }
+      // Refresh completo: header, IMC e gráficos reagem na hora
+      try {
+        this.state.weights = await this.loadWeights();
+        this.updateDashboard();
+      } catch (eRef) { console.warn('refresh pós-composição', eRef); }
       this._composicaoCampos.forEach(c => { const el = document.getElementById('comp_' + c.id); if (el) el.value = ''; });
       const n = document.getElementById('comp_nota'); if (n) n.value = '';
       const d = document.getElementById('comp_data'); if (d) d.value = '';
       const f = document.getElementById('comp_fonte'); if (f) f.value = 'manual';
       const ocrR = document.getElementById('ocrResult'); if (ocrR) ocrR.innerHTML = '';
-      this.showAlert('success', '✅ Composição salva! Veja na lista abaixo ou no Histórico.');
+      this.showAlert('success', this._compPesoIntegrado ? '✅ Composição salva! Peso do dia registrado e painel atualizado.' : '✅ Composição salva! Painel atualizado.');
       this.checkConquistas();
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('composicao_salva');
     } catch (e) {
@@ -1540,7 +1610,8 @@ const VITALE_CORE = {
       const perda = (first.peso - last.peso).toFixed(1);
       const pct = ((first.peso - last.peso) / first.peso * 100).toFixed(1);
       const dias = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
-      const progress = Math.min(Math.max(((first.peso - last.peso) / (first.peso - this.metaKg)) * 100, 0), 100);
+      const temMeta = this.metaKg != null && first.peso > this.metaKg;
+      const progress = temMeta ? Math.min(Math.max(((first.peso - last.peso) / (first.peso - this.metaKg)) * 100, 0), 100) : 100;
 
       document.getElementById('hdrPerda').textContent = perda + ' kg';
       const pTotal = document.getElementById('perdaTotal');
@@ -1552,9 +1623,11 @@ const VITALE_CORE = {
       if (pTotal) pTotal.textContent = pct + '%';
       if (dRastro) dRastro.textContent = dias;
       if (mInicio) mInicio.textContent = first.peso.toFixed(1);
-      if (mLabel) mLabel.textContent = this.metaKg.toFixed(1);
-      if (mProg) mProg.style.width = progress.toFixed(1) + '%';
-      if (mTxt) mTxt.textContent = `Faltam ${Math.max(last.peso - this.metaKg, 0).toFixed(1)} kg para IMC < 30 — ${progress.toFixed(0)}% concluído`;
+      if (mLabel) mLabel.textContent = temMeta ? this.metaKg.toFixed(1) : '—';
+      if (mProg) mProg.style.width = (temMeta ? progress.toFixed(1) : '100') + '%';
+      if (mTxt) mTxt.textContent = temMeta
+        ? `Faltam ${Math.max(last.peso - this.metaKg, 0).toFixed(1)} kg para IMC < 30 — ${progress.toFixed(0)}% concluído`
+        : this._metaTextoObjetivo();
 
       this.buildWeightChart();
       this.buildIMCChart();
@@ -1590,8 +1663,9 @@ const VITALE_CORE = {
     const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
     const velDiaria = diasTotal > 0 ? totalPerdido / diasTotal : 0;
     const velSemanal = (velDiaria * 7).toFixed(2);
-    const kgFalta = Math.max(last.peso - this.metaKg, 0).toFixed(1);
-    const diasParaMeta = velDiaria > 0 ? Math.ceil((last.peso - this.metaKg) / velDiaria) : null;
+    const temMeta = this.metaKg != null;
+    const kgFalta = temMeta ? Math.max(last.peso - this.metaKg, 0).toFixed(1) : null;
+    const diasParaMeta = (temMeta && velDiaria > 0) ? Math.ceil((last.peso - this.metaKg) / velDiaria) : null;
     const dataMeta = diasParaMeta ? (() => { const d = new Date(); d.setDate(d.getDate() + diasParaMeta); return d; })() : null;
 
     let tendencia4w = '';
@@ -1614,7 +1688,9 @@ const VITALE_CORE = {
     if (velDiaria > 0 && diasParaMeta) {
       msg = `${nome ? 'Olá, ' + nome + '! ' : 'Olá! '}Sua jornada está impressionante 💪 Desde <strong>${this.fmt(first.date)}</strong>, você eliminou <strong class="hl">${totalPerdido.toFixed(1)} kg (${pctPerdido}%)</strong>.<br><br>No ritmo de <strong>${velSemanal} kg/semana</strong>, você atingirá <strong>${this.metaKg.toFixed(1)} kg</strong> em <strong style="color:var(--em2)">${this.fmtLong(dataMeta)}</strong> — só ${diasParaMeta} dias! Faltam <strong>${kgFalta} kg</strong>.${tendencia4w}`;
     } else {
-      msg = `Progresso: <strong>${totalPerdido.toFixed(1)} kg eliminados</strong> desde ${this.fmt(first.date)} 🔥<br>Peso atual: <strong>${last.peso.toFixed(1)} kg</strong> → Meta: <strong>${this.metaKg.toFixed(1)} kg</strong>. Faltam <strong>${kgFalta} kg</strong>.${tendencia4w}<br>Adicione mais registros recentes para calcular velocidade e projeção.`;
+      msg = temMeta
+        ? `Progresso: <strong>${totalPerdido.toFixed(1)} kg eliminados</strong> desde ${this.fmt(first.date)} 🔥<br>Peso atual: <strong>${last.peso.toFixed(1)} kg</strong> → Meta: <strong>${this.metaKg.toFixed(1)} kg</strong>. Faltam <strong>${kgFalta} kg</strong>.${tendencia4w}<br>Adicione mais registros recentes para calcular velocidade e projeção.`
+        : `Peso atual: <strong>${last.peso.toFixed(1)} kg</strong> · variação de <strong>${Math.abs(totalPerdido).toFixed(1)} kg</strong> desde ${this.fmt(first.date)}.${tendencia4w}<br>${this._metaTextoObjetivo()}`;
     }
     el.innerHTML = msg;
 
@@ -1874,7 +1950,17 @@ const VITALE_CORE = {
       if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">🍽️ <strong>Identifiquei uma refeição:</strong> ${this._escapeHtml(a.descricao || '')} · ~${a.calorias || '?'} kcal<br><button class="btn btn-gold btn-small" style="margin-top:8px" onclick="VITALE_CORE._goTab('alimentacao')">Confirmar na aba Alimentação →</button></div>`;
     } else if (cat === 'composicao' && auto.composicao) {
       const c = auto.composicao;
-      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">⚖️ <strong>Identifiquei bioimpedância</strong> (${this._escapeHtml(c.fonte || 'balança')}): peso ${c.peso ?? '?'} kg · gordura ${c.gordura_pct ?? '?'}% · músculo ${c.massa_muscular ?? '?'} kg<br><span style="color:var(--textm);font-size:12px">Use a seção "Bioimpedância" logo abaixo com esta mesma foto para importar com validação completa.</span></div>`;
+      // BLOCO 1: preenche direto o formulário de Composição Corporal —
+      // sem pedir a mesma foto de novo. Usuário confere e salva.
+      const setC = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+      setC('comp_peso', c.peso); setC('comp_gordura_pct', c.gordura_pct);
+      setC('comp_massa_gordura', c.massa_gordura); setC('comp_massa_muscular', c.massa_muscular);
+      setC('comp_agua_corporal', c.agua_corporal); setC('comp_gordura_visceral', c.gordura_visceral);
+      setC('comp_tmb', c.tmb); setC('comp_imc', c.imc);
+      setC('comp_data', c.data); // data extraída do print (OCR v2, YYYY-MM-DD validado)
+      const fonteSel = document.getElementById('comp_fonte');
+      if (fonteSel && c.fonte) fonteSel.value = c.fonte;
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">⚖️ <strong>Identifiquei bioimpedância</strong> (${this._escapeHtml(c.fonte || 'balança')}): peso ${c.peso ?? '?'} kg · gordura ${c.gordura_pct ?? '?'}% · músculo ${c.massa_muscular ?? '?'} kg${c.data ? ' · ' + this.fmt(c.data) : ''}<br><span style="color:var(--textm);font-size:12px">Já preenchi o formulário de Composição Corporal abaixo — confira os valores e a data antes de salvar.</span><br><button class="btn btn-gold btn-small" style="margin-top:8px" onclick="document.getElementById('comp_peso').scrollIntoView({behavior:'smooth',block:'center'})">Revisar e salvar →</button></div>`;
     } else if (cat === 'peso' && auto.peso && (auto.peso.registros || []).length) {
       const regs = auto.peso.registros;
       if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">⚖️ <strong>Identifiquei ${regs.length} registro(s) de peso.</strong><br><span style="color:var(--textm);font-size:12px">Use a seção "Peso (histórico de app)" logo abaixo com esta mesma imagem para importar todos com validação.</span></div>`;
@@ -2411,7 +2497,7 @@ const VITALE_CORE = {
     const ctx = {
       nome: this.state.profile?.nome || null,
       altura: this.altura,
-      meta_kg: this.metaKg.toFixed(1),
+      meta_kg: this.metaKg != null ? this.metaKg.toFixed(1) : null,
       peso_atual: pesoAtual, peso_inicial: pesoInicial,
       objetivo: hp.objetivo || null,
       urgencia: hp.urgencia || null,
@@ -2669,14 +2755,14 @@ const VITALE_CORE = {
     const allPesos = sorted.map(w => w.peso);
     const pesoMax = Math.max(...allPesos);
     const yMax = Math.ceil(pesoMax + 3);
-    const yMin = Math.floor(this.metaKg - 3);
+    const yMin = Math.floor(Math.min(this.metaKg ?? Infinity, Math.min(...allPesos)) - 3);
 
     const labels = sorted.map(w => this.fmt(w.date));
     const realData = sorted.map(w => w.peso);
     const projData = new Array(sorted.length - 1).fill(null);
     projData.push(last.peso);
 
-    if (velDiaria > 0 && projecaoAtiva) {
+    if (this.metaKg != null && velDiaria > 0 && projecaoAtiva) {
       const diasParaMeta = Math.ceil((last.peso - this.metaKg) / velDiaria);
       const projSteps = 4;
       for (let i = 1; i <= projSteps; i++) {
@@ -2697,7 +2783,7 @@ const VITALE_CORE = {
     if (velDiaria > 0 && projecaoAtiva && this.state.submetas?.length) {
       this.state.submetas.forEach(sm => {
         const alvo = sm.pesoAlvo;
-        if (alvo >= last.peso || alvo < this.metaKg) return; // já passou ou abaixo da meta final
+        if (alvo >= last.peso || (this.metaKg != null && alvo < this.metaKg)) return; // já passou ou abaixo da meta final
         const diasAteAlvo = Math.ceil((last.peso - alvo) / velDiaria);
         const dataAlvo = new Date(last.date + 'T12:00:00');
         dataAlvo.setDate(dataAlvo.getDate() + diasAteAlvo);
@@ -2811,13 +2897,13 @@ const VITALE_CORE = {
     const imcData = sorted.map(w => parseFloat(this.calcIMC(w.peso, this.altura)));
 
     // Projeção de IMC: mesma matemática da projeção de peso (peso/altura²)
-    const imcMeta = this.metaKg / h2; // IMC alvo (= 30 na config do app)
+    const imcMeta = this.metaKg != null ? this.metaKg / h2 : null; // IMC alvo (null = sem meta de perda)
     const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
     const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
     const projData = new Array(imcData.length - 1).fill(null);
     projData.push(imcData[imcData.length - 1]); // ancora no último ponto real
 
-    if (velDiaria > 0 && projecaoAtiva) {
+    if (this.metaKg != null && velDiaria > 0 && projecaoAtiva) {
       const diasParaMeta = Math.ceil((last.peso - this.metaKg) / velDiaria);
       const projSteps = 4;
       for (let i = 1; i <= projSteps; i++) {
@@ -2949,17 +3035,19 @@ const VITALE_CORE = {
     const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
     const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
     const velSemanal = (velDiaria * 7).toFixed(2);
-    const kgFalta = Math.max(last.peso - this.metaKg, 0).toFixed(1);
+    const kgFalta = this.metaKg != null ? Math.max(last.peso - this.metaKg, 0).toFixed(1) : null;
 
     const setText = (id, v, c) => { const el = document.getElementById(id); if (el) { el.textContent = v; if (c) el.style.color = c; } };
     setText('statusObesidade', info.grau, info.color);
     setText('velocidadePerda', `${velSemanal} kg/semana`);
     setText('imcAtualMetas', imc);
-    setText('faltaMeta', `${kgFalta} kg`);
+    setText('faltaMeta', kgFalta != null ? `${kgFalta} kg` : '—');
 
     const pt = document.getElementById('projecaoTexto');
     if (pt) {
-      if (velDiaria > 0) {
+      if (this.metaKg == null) {
+        pt.textContent = this._metaTextoObjetivo();
+      } else if (velDiaria > 0) {
         const diasParaMeta = Math.ceil((last.peso - this.metaKg) / velDiaria);
         const dataMeta = new Date(); dataMeta.setDate(dataMeta.getDate() + diasParaMeta);
         pt.innerHTML = `No ritmo atual de <strong style="color:var(--gold)">${velSemanal} kg/semana</strong>, você atingirá <strong>${this.metaKg.toFixed(1)} kg (IMC < 30)</strong> em <strong style="color:var(--em)">${this.fmtLong(dataMeta)}</strong> — ${diasParaMeta} dias.`;
@@ -4668,7 +4756,8 @@ const VITALE_CORE = {
     const hoje = this._hojeSP();
     // cache: 1 dica por dia, guardada em localStorage
     let cache = null;
-    try { cache = JSON.parse(localStorage.getItem('vitale_dica') || 'null'); } catch (e) {}
+    const dicaKey = 'vitale_dica_' + (this.state.profile?.id || 'anon');
+    try { cache = JSON.parse(localStorage.getItem(dicaKey) || 'null'); } catch (e) {}
     if (cache && cache.data === hoje && cache.texto) {
       el.innerHTML = `<div style="font-size:13px;color:var(--text);line-height:1.6">💡 <strong style="color:var(--gold)">Dica do dia:</strong> ${this._escapeHtml(cache.texto)}</div>`;
       el.style.display = '';
@@ -4677,7 +4766,7 @@ const VITALE_CORE = {
     // gera uma dica curta determinística (sem custo de IA) baseada no estado
     const dica = this._gerarDicaLocal();
     if (dica) {
-      try { localStorage.setItem('vitale_dica', JSON.stringify({ data: hoje, texto: dica })); } catch (e) {}
+      try { localStorage.setItem(dicaKey, JSON.stringify({ data: hoje, texto: dica })); } catch (e) {}
       el.innerHTML = `<div style="font-size:13px;color:var(--text);line-height:1.6">💡 <strong style="color:var(--gold)">Dica do dia:</strong> ${this._escapeHtml(dica)}</div>`;
       el.style.display = '';
     }
