@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.3 · Bloco 1 — Objetivo+Composição · 2026-07-15';
+const VITALE_VERSION = 'v5.4 · Bloco 1 + Análise 360 · 2026-07-17';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -174,7 +174,6 @@ const VITALE_CORE = {
     const user = await window.VitaleAuth.getUser();
     if (!user) return [];
     // Defesa em profundidade: filtra por user_id ALÉM do RLS/security_invoker.
-    // Fallback: se a view não expuser user_id, refaz sem filtro (o invoker protege).
     let res = await window.sb
       .from('weight_daily')
       .select('data, peso, registros_dia')
@@ -292,15 +291,10 @@ const VITALE_CORE = {
   get altura() { return this.state.profile?.altura || 1.70; },
 
   // ===== BLOCO 1 — MODO OBJETIVO =====
-  // O objetivo vem do health_profile (emagrecimento é o default histórico).
   get objetivo() { return this.state.healthProfile?.objetivo || 'emagrecimento'; },
-  // Meta de PERDA (IMC 30) só faz sentido nestes objetivos:
   get isModoPerda() { const o = this.objetivo; return o === 'emagrecimento' || o === 'outro'; },
-  // metaKg agora pode ser NULL (sem meta de perda ativa). Vira null quando:
-  //  a) objetivo não é de perda (recomposição/hipertrofia/manutenção/saúde), ou
-  //  b) o usuário JÁ está com peso <= alvo IMC 30 (meta cumprida — caso de
-  //     quem emagreceu e ainda está com objetivo antigo no perfil).
-  // Todos os consumidores tratam null.
+  // metaKg pode ser NULL (sem meta de perda ativa): objetivo não é de perda,
+  // ou usuário já está com peso <= alvo IMC 30. Consumidores tratam null.
   get metaKg() {
     if (!this.isModoPerda) return null;
     const alvo = 30 * this.altura * this.altura;
@@ -309,7 +303,6 @@ const VITALE_CORE = {
     if (last && last.peso <= alvo) return null;
     return alvo;
   },
-  // Texto neutro exibido no lugar de "faltam X kg" quando não há meta de perda
   _metaTextoObjetivo() {
     const o = this.objetivo;
     if (o === 'recomposicao') return '💪 Modo recomposição — acompanhe músculo vs gordura no Panorama.';
@@ -453,7 +446,7 @@ const VITALE_CORE = {
       streakRecorde: this.calcStreak().recorde,
       perdaTotal: sorted.length >= 2 ? (sorted[0].peso - sorted[sorted.length - 1].peso) : 0,
       pesoAtual: sorted.length ? sorted[sorted.length - 1].peso : null,
-      metaKg: 30 * this.altura * this.altura, // alvo bruto: badge meta_batida precisa disparar mesmo com metaKg null
+      metaKg: 30 * this.altura * this.altura, // alvo bruto: badge meta_batida dispara mesmo com metaKg null
       imcInicial: sorted.length ? parseFloat(this.calcIMC(sorted[0].peso, this.altura)) : 0,
       imcAtual: sorted.length ? parseFloat(this.calcIMC(sorted[sorted.length - 1].peso, this.altura)) : null,
       temMood: !!this.state.moodHoje,
@@ -1042,8 +1035,7 @@ const VITALE_CORE = {
       this._invalidateCoachCache();
 
       // BLOCO 1: peso da bioimpedância vira pesagem do dia — SE não houver
-      // pesagem naquele dia. IMC do header é SEMPRE calculado pelo app
-      // (peso ÷ altura²); o IMC do aparelho fica só como referência no registro.
+      // pesagem naquele dia. IMC do header é SEMPRE calculado pelo app.
       this._compPesoIntegrado = false;
       if (reg.peso) {
         try {
@@ -1057,7 +1049,6 @@ const VITALE_CORE = {
           }
         } catch (eInt) { console.warn('integração peso-bioimpedância', eInt); }
       }
-      // Refresh completo: header, IMC e gráficos reagem na hora
       try {
         this.state.weights = await this.loadWeights();
         this.updateDashboard();
@@ -1950,14 +1941,13 @@ const VITALE_CORE = {
       if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">🍽️ <strong>Identifiquei uma refeição:</strong> ${this._escapeHtml(a.descricao || '')} · ~${a.calorias || '?'} kcal<br><button class="btn btn-gold btn-small" style="margin-top:8px" onclick="VITALE_CORE._goTab('alimentacao')">Confirmar na aba Alimentação →</button></div>`;
     } else if (cat === 'composicao' && auto.composicao) {
       const c = auto.composicao;
-      // BLOCO 1: preenche direto o formulário de Composição Corporal —
-      // sem pedir a mesma foto de novo. Usuário confere e salva.
+      // BLOCO 1: preenche direto o formulário de Composição Corporal.
       const setC = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
       setC('comp_peso', c.peso); setC('comp_gordura_pct', c.gordura_pct);
       setC('comp_massa_gordura', c.massa_gordura); setC('comp_massa_muscular', c.massa_muscular);
       setC('comp_agua_corporal', c.agua_corporal); setC('comp_gordura_visceral', c.gordura_visceral);
       setC('comp_tmb', c.tmb); setC('comp_imc', c.imc);
-      setC('comp_data', c.data); // data extraída do print (OCR v2, YYYY-MM-DD validado)
+      setC('comp_data', c.data);
       const fonteSel = document.getElementById('comp_fonte');
       if (fonteSel && c.fonte) fonteSel.value = c.fonte;
       if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">⚖️ <strong>Identifiquei bioimpedância</strong> (${this._escapeHtml(c.fonte || 'balança')}): peso ${c.peso ?? '?'} kg · gordura ${c.gordura_pct ?? '?'}% · músculo ${c.massa_muscular ?? '?'} kg${c.data ? ' · ' + this.fmt(c.data) : ''}<br><span style="color:var(--textm);font-size:12px">Já preenchi o formulário de Composição Corporal abaixo — confira os valores e a data antes de salvar.</span><br><button class="btn btn-gold btn-small" style="margin-top:8px" onclick="document.getElementById('comp_peso').scrollIntoView({behavior:'smooth',block:'center'})">Revisar e salvar →</button></div>`;
@@ -4146,6 +4136,178 @@ const VITALE_CORE = {
       chart.destroy();
       return url;
     } catch (e) { return null; }
+  },
+
+  // =====================================================
+  // ANÁLISE 360 (v5.4) — relatório paciente / médico
+  // Status frente à META de otimização metabólica, não só à
+  // referência do laboratório. Determinístico (sem custo de IA).
+  // =====================================================
+  // Overlay de metas "ótimas" — usado SÓ para colorir o retrato.
+  // Metas individuais variam por risco: o texto sempre deixa isso claro.
+  _metas360: {
+    glicose:       { otimoMax: 90,  meta: '70–90' },
+    hba1c:         { otimoMax: 5.4, meta: '< 5,4' },
+    homa_ir:       { otimoMax: 2.0, meta: '< 2,0' },
+    triglicerides: { otimoMax: 100, meta: '< 100' },
+    hdl:           { otimoMin: 50,  meta: '> 50' },
+    ldl:           { otimoMax: 70,  meta: '< 70 se alto risco' },
+    pcr:           { otimoMax: 0.1, meta: '< 0,1' },
+    vitamina_d:    { otimoMin: 40,  meta: '40–60' }
+  },
+  // Direção "melhor" por marcador (pra detectar ganhos/pioras entre coletas)
+  _menorMelhor360: ['glicose', 'hba1c', 'insulina', 'homa_ir', 'colesterol_total', 'ldl', 'triglicerides', 'tgo', 'tgp', 'ggt', 'pcr', 'acido_urico', 'ureia'],
+  _maiorMelhor360: ['hdl', 'vitamina_d', 'vitamina_b12', 'testosterona_total'],
+
+  // Classifica um valor: 'otimo' | 'ok' | 'atencao' | 'fora'
+  _status360(mid, valor, refMin, refMax) {
+    const foraRef = (refMin != null && valor < refMin) || (refMax != null && valor > refMax);
+    if (foraRef) return 'fora';
+    const ov = this._metas360[mid];
+    if (!ov) return 'ok';
+    const atinge = (ov.otimoMax == null || valor <= ov.otimoMax) && (ov.otimoMin == null || valor >= ov.otimoMin);
+    return atinge ? 'otimo' : 'atencao';
+  },
+
+  // Reúne todos os dados do retrato (compartilhado paciente/médico)
+  _analise360Dados() {
+    const sorted = this.getSorted();
+    const first = sorted[0] || null, last = sorted[sorted.length - 1] || null;
+    const imc = last ? parseFloat(this.calcIMC(last.peso, this.altura)) : null;
+
+    // Cintura (medidas de fita — state.medidas vem em ordem desc)
+    const medidas = (this.state.medidas || []).filter(m => m.cintura);
+    const cintAtual = medidas.length ? medidas[0].cintura : null;
+    const cintInicial = medidas.length ? medidas[medidas.length - 1].cintura : null;
+
+    // Exames: último e primeiro valor por marcador
+    const porM = {};
+    (this.state.exames || []).forEach(e => { (porM[e.marcador] = porM[e.marcador] || []).push(e); });
+    const retrato = Object.entries(porM).map(([mid, regs]) => {
+      const info = this._marcInfo(mid);
+      const ord = [...regs].sort((a, b) => new Date(a.data) - new Date(b.data));
+      const pri = ord[0], ult = ord[ord.length - 1];
+      const st = this._status360(mid, ult.valor, ult.ref_min ?? info.ref_min, ult.ref_max ?? info.ref_max);
+      let tendencia = null; // 'melhorou' | 'piorou' | null
+      if (ord.length >= 2 && pri.valor !== ult.valor) {
+        if (this._menorMelhor360.includes(mid)) tendencia = ult.valor < pri.valor ? 'melhorou' : 'piorou';
+        else if (this._maiorMelhor360.includes(mid)) tendencia = ult.valor > pri.valor ? 'melhorou' : 'piorou';
+      }
+      return { mid, info, pri, ult, st, tendencia, meta: this._metas360[mid]?.meta || null };
+    });
+
+    // Fases da jornada
+    const fases = [];
+    if (first) fases.push({ titulo: 'Início do acompanhamento', quando: this.fmt(first.date), desc: `Peso de partida: ${first.peso.toFixed(1)} kg` });
+    const doses = this.state.doses || [];
+    if (doses.length) {
+      const priDose = [...doses].sort((a, b) => new Date(a.data) - new Date(b.data))[0];
+      fases.push({ titulo: `Medicação GLP-1 (${priDose.medicamento || 'início'})`, quando: this.fmt(priDose.data), desc: 'Entrada da medicação no protocolo' });
+    }
+    const ex30 = this.state.exercicios || [];
+    if (ex30.length >= 4) fases.push({ titulo: 'Treino ativo', quando: 'últimos 30 dias', desc: `${ex30.length} sessões registradas — fase de recomposição` });
+
+    // Ganhos e alvos (síntese)
+    const ganhos = retrato.filter(r => r.tendencia === 'melhorou').map(r => r.info.nome);
+    const alvos = retrato.filter(r => r.st === 'fora' || r.st === 'atencao').map(r => r.info.nome);
+    const comp = (this.state.composicao || [])[0] || null;
+    const treinoIntenso = ex30.length >= 8;
+
+    return { sorted, first, last, imc, cintAtual, cintInicial, retrato, fases, ganhos, alvos, comp, treinoIntenso };
+  },
+
+  gerarRelatorio360(modo = 'paciente') {
+    if (!this.state.weights.length) return this.showAlert('error', 'Sem dados para o relatório!');
+    try {
+      if (typeof html2pdf === 'undefined') throw new Error('html2pdf não carregado');
+      const medico = modo === 'medico';
+      const d = this._analise360Dados();
+      const nome = this.state.profile?.nome || '';
+      const perda = d.first && d.last ? d.first.peso - d.last.peso : 0;
+      const CORES = { otimo: '#1a7a3a', ok: '#2a4d8f', atencao: '#b08420', fora: '#b03020' };
+      const ROTULO = medico
+        ? { otimo: 'Ótimo', ok: 'Na referência', atencao: 'Ref. ok · fora do ideal', fora: 'Fora da referência' }
+        : { otimo: 'Ótimo ✓', ok: 'Tudo certo', atencao: 'Dá pra melhorar', fora: 'Atenção' };
+
+      // --- Retrato: cards (paciente) ou tabela densa (médico) ---
+      let retratoHtml = '';
+      if (d.retrato.length) {
+        if (medico) {
+          const linhas = d.retrato.map(r => {
+            const ref = (r.ult.ref_min != null ? r.ult.ref_min + '–' : '<') + (r.ult.ref_max != null ? r.ult.ref_max : '');
+            const tend = r.tendencia === 'melhorou' ? '<span style="color:#1a7a3a">▲ melhorou</span>' : r.tendencia === 'piorou' ? '<span style="color:#b03020">▼ piorou</span>' : '—';
+            return `<tr><td style="padding:7px 9px;border-bottom:1px solid #e8e8e8;font-size:12px">${r.info.nome}</td><td style="padding:7px 9px;border-bottom:1px solid #e8e8e8;text-align:center;font-weight:700;color:${CORES[r.st]}">${r.ult.valor} ${r.info.unidade}</td><td style="padding:7px 9px;border-bottom:1px solid #e8e8e8;text-align:center;font-size:11px;color:#666">${ref}</td><td style="padding:7px 9px;border-bottom:1px solid #e8e8e8;text-align:center;font-size:11px;color:#666">${r.meta || '—'}</td><td style="padding:7px 9px;border-bottom:1px solid #e8e8e8;text-align:center;font-size:11px;color:${CORES[r.st]}">${ROTULO[r.st]}</td><td style="padding:7px 9px;border-bottom:1px solid #e8e8e8;text-align:center;font-size:11px">${tend}</td><td style="padding:7px 9px;border-bottom:1px solid #e8e8e8;text-align:center;font-size:11px;color:#666">${this.fmt(r.ult.data)}</td></tr>`;
+          }).join('');
+          retratoHtml = `<table style="width:100%;border-collapse:collapse;margin:12px 0">
+            <thead><tr style="background:#1a2438;color:#fff"><th style="padding:8px 9px;text-align:left;font-size:10px;letter-spacing:1px">MARCADOR</th><th style="padding:8px;font-size:10px">RESULTADO</th><th style="padding:8px;font-size:10px">REF. LAB</th><th style="padding:8px;font-size:10px">META OTIM.</th><th style="padding:8px;font-size:10px">STATUS</th><th style="padding:8px;font-size:10px">TENDÊNCIA</th><th style="padding:8px;font-size:10px">COLETA</th></tr></thead>
+            <tbody>${linhas}</tbody></table>
+            <p style="font-size:10px;color:#888;font-style:italic">"Meta otim." = alvo de otimização metabólica de uso geral; metas individuais dependem do risco do paciente e da conduta do médico assistente.</p>`;
+        } else {
+          const cards = d.retrato.map(r => `<div style="display:inline-block;width:31%;margin:0 1% 10px 0;background:#f7f5f0;border:1px solid #e5e0d5;border-left:4px solid ${CORES[r.st]};border-radius:8px;padding:10px 12px;vertical-align:top;page-break-inside:avoid">
+              <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.5px">${r.info.nome}</div>
+              <div style="font-size:20px;font-weight:700;color:${CORES[r.st]};margin:2px 0">${r.ult.valor}<span style="font-size:11px;font-weight:400;color:#888"> ${r.info.unidade}</span></div>
+              <div style="font-size:10.5px;color:${CORES[r.st]};font-weight:600">${ROTULO[r.st]}${r.tendencia === 'melhorou' ? ' · melhorando 📈' : ''}</div>
+            </div>`).join('');
+          retratoHtml = `<div>${cards}</div>`;
+        }
+      }
+
+      // --- Fases ---
+      const fasesHtml = d.fases.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0">${d.fases.map((f, i) => `<div style="flex:1;min-width:170px;background:#f7f5f0;border:1px solid #e5e0d5;border-top:3px solid #d4a843;border-radius:8px;padding:12px"><div style="font-size:10px;color:#b08420;letter-spacing:1.5px;font-weight:700">FASE ${i + 1} · ${f.quando.toUpperCase()}</div><div style="font-size:13px;font-weight:600;color:#1a2438;margin:4px 0 2px">${f.titulo}</div><div style="font-size:11.5px;color:#555">${f.desc}</div></div>`).join('')}</div>` : '';
+
+      // --- Síntese em três frases ---
+      const f1 = d.ganhos.length
+        ? `O que está claramente ganho: ${perda > 0 ? `−${perda.toFixed(1)} kg${d.cintAtual && d.cintInicial ? ` e −${(d.cintInicial - d.cintAtual).toFixed(0)} cm de cintura` : ''}, com ` : ''}melhora em ${d.ganhos.slice(0, 4).join(', ')}.`
+        : (perda > 0 ? `O que está claramente ganho: −${perda.toFixed(1)} kg desde o início do acompanhamento.` : 'Início de jornada: os primeiros registros formam a linha de base para comparação.');
+      const f2 = d.treinoIntenso
+        ? 'A lente de interpretação: treino intenso recente pode elevar creatinina, ferritina, ácido úrico e enzimas hepáticas — valores nessas áreas merecem leitura contextualizada antes de qualquer conclusão.'
+        : 'A lente de interpretação: os valores refletem a fase atual da jornada; compare sempre com as coletas anteriores, não só com a referência isolada.';
+      const f3 = d.alvos.length
+        ? `O alvo que resta: ${d.alvos.slice(0, 4).join(', ')} ${medico ? '— priorizar reavaliação nesses marcadores.' : '— leve esta lista para sua próxima consulta.'}`
+        : 'O alvo que resta: manter a consistência — nenhum marcador registrado está fora da meta.';
+      const sinteseHtml = `<ol style="margin:10px 0 6px 20px;line-height:1.9;font-size:${medico ? '12.5' : '13.5'}px;color:#333"><li>${f1}</li><li>${f2}</li><li>${f3}</li></ol>`;
+
+      // --- Composição corporal ---
+      const compHtml = d.comp ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin:10px 0">
+          ${[['Massa muscular', d.comp.massa_muscular, 'kg'], ['Massa de gordura', d.comp.massa_gordura, 'kg'], ['% Gordura', d.comp.gordura_pct, '%'], ['Água corporal', d.comp.agua_corporal, 'L']].filter(x => x[1] != null).map(x => `<div style="flex:1;min-width:110px;background:#f7f5f0;border:1px solid #e5e0d5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase">${x[0]}</div><div style="font-size:19px;font-weight:700;color:#1a2438;margin-top:2px">${x[1]}<span style="font-size:11px;font-weight:400"> ${x[2]}</span></div></div>`).join('')}
+        </div><p style="font-size:10.5px;color:#888">Bioimpedância de ${this.fmt(d.comp.data)} · fonte: ${d.comp.fonte || 'não informada'}. Compare apenas medições da mesma fonte.</p>` : '';
+
+      const S2 = 'margin:26px 0 10px;font-size:15px;color:#1a2438;border-left:4px solid #d4a843;padding-left:10px;text-transform:uppercase;letter-spacing:1px';
+      const html = `<div style="font-family:\'Segoe UI\',Helvetica,Arial,sans-serif;max-width:800px;color:#222">
+        <div style="background:#1a2438;color:#fff;padding:26px 32px;border-bottom:4px solid #d4a843">
+          <div style="font-size:11px;letter-spacing:3px;color:#d4a843">VITALE · ANÁLISE 360</div>
+          <div style="font-size:23px;font-weight:600;margin-top:4px">${medico ? 'Relatório para o Médico Assistente' : 'Sua Saúde em Retrato'}</div>
+          <div style="font-size:12px;color:#aab;margin-top:6px">${nome ? nome + ' · ' : ''}${new Date().toLocaleDateString('pt-BR')} · ${medico ? 'documento clínico-informativo · confidencial' : 'feito para você · confidencial'}</div>
+        </div>
+        <div style="padding:22px 32px">
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div style="flex:1;min-width:110px;background:#f7f5f0;border:1px solid #e5e0d5;border-radius:10px;padding:13px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">Peso atual</div><div style="font-size:24px;font-weight:700;color:#1a2438;margin-top:3px">${d.last.peso.toFixed(1)}<span style="font-size:12px;font-weight:400"> kg</span></div></div>
+            <div style="flex:1;min-width:110px;background:#f7f5f0;border:1px solid #e5e0d5;border-radius:10px;padding:13px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">${perda >= 0 ? 'Eliminados' : 'Variação'}</div><div style="font-size:24px;font-weight:700;color:#1a7a3a;margin-top:3px">${Math.abs(perda).toFixed(1)}<span style="font-size:12px;font-weight:400"> kg</span></div></div>
+            ${d.cintAtual && d.cintInicial ? `<div style="flex:1;min-width:110px;background:#f7f5f0;border:1px solid #e5e0d5;border-radius:10px;padding:13px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">Cintura</div><div style="font-size:24px;font-weight:700;color:#1a7a3a;margin-top:3px">−${(d.cintInicial - d.cintAtual).toFixed(0)}<span style="font-size:12px;font-weight:400"> cm</span></div></div>` : ''}
+            <div style="flex:1;min-width:110px;background:#f7f5f0;border:1px solid #e5e0d5;border-radius:10px;padding:13px;text-align:center"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:1px">IMC</div><div style="font-size:24px;font-weight:700;color:#1a2438;margin-top:3px">${d.imc}</div></div>
+          </div>
+          ${fasesHtml ? `<h2 style="${S2}">A jornada em fases</h2>${fasesHtml}` : ''}
+          ${retratoHtml ? `<h2 style="${S2}">Retrato atual</h2><p style="font-size:11px;color:#888;margin:4px 0 8px">Cor = situação frente à meta de otimização, não só à referência do laboratório.</p>${retratoHtml}` : ''}
+          <h2 style="${S2}">Síntese em três frases</h2>${sinteseHtml}
+          ${compHtml ? `<h2 style="${S2}">Composição corporal</h2>${compHtml}` : ''}
+          <p style="margin-top:22px;font-size:10.5px;color:#999;font-style:italic">${medico ? 'Dados auto-registrados pelo paciente no app VITALE. Este documento organiza informações e não constitui laudo, diagnóstico ou conduta — a interpretação clínica é do médico assistente.' : 'Este retrato organiza os SEUS dados para você acompanhar sua evolução e conversar melhor com seu médico. Ele não é diagnóstico nem substitui consulta.'}</p>
+          <p style="margin-top:6px;border-top:2px solid #d4a843;padding-top:10px;font-size:10.5px;color:#888">VITALE · vitale.acacianegocios.com.br · ${new Date().toLocaleDateString('pt-BR')}</p>
+        </div>
+      </div>`;
+
+      html2pdf().set({
+        margin: 10,
+        filename: `VITALE_360_${medico ? 'medico' : 'paciente'}_${new Date().toISOString().slice(0, 10)}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+      }).from(html).save();
+      this.showAlert('success', '✅ Análise 360 gerada!');
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('relatorio_360', { modo });
+    } catch (err) {
+      this.showAlert('error', '❌ Erro na Análise 360: ' + err.message);
+      if (window.VitaleErr) window.VitaleErr.log('relatorio_360', err);
+    }
   },
 
   gerarRelatorioPDF(modo = 'completo') {
