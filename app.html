@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A13">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A14">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -15,7 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A13"></script>
+<script src="/config.js?v=A14"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -1139,21 +1139,47 @@
       </label>
       <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.salvarPerfil()">Salvar Perfil</button>
     </div>
-    <div class="settings-section"><h4>💾 Dados</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.exportarJSON()">📤 Exportar Backup JSON</button></div>
+    <div class="settings-section"><h4>💾 Dados</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.exportarJSON()">📤 Exportar meus dados (JSON)</button></div>
     <div class="settings-section"><h4>🎓 Ajuda</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.refazerTour()">🔄 Rever tour de boas-vindas</button></div>
     <div class="settings-section"><h4>🚪 Conta</h4><button class="btn btn-danger btn-small" onclick="VITALE_CORE.signOut()">Sair da conta</button></div>
+    <div class="settings-section" style="border-top:1px solid rgba(232,80,74,0.25);margin-top:8px;padding-top:14px">
+      <h4 style="color:var(--red)">⚠️ Zona de risco</h4>
+      <p style="font-size:12px;color:var(--textm);line-height:1.6;margin:6px 0 12px">Apagar a conta remove <strong>definitivamente</strong> todos os seus dados: pesagens, exames, medicações, histórico e autorizações a médicos. Não há como desfazer. Exporte seus dados antes, se quiser guardá-los.</p>
+      <button class="btn btn-danger btn-small" onclick="VITALE_CORE.abrirExclusaoConta()">Excluir minha conta e dados</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EXCLUSÃO DE CONTA (confirmação dupla · LGPD/Apple) -->
+<div id="modalExcluir" class="modal">
+  <div class="modal-content" style="max-width:440px">
+    <div class="modal-header"><h2 style="font-size:20px;margin:0;color:var(--red)">Excluir conta</h2><button class="modal-close" onclick="VITALE_CORE.closeModal('modalExcluir')">✕</button></div>
+    <div style="padding:4px 2px">
+      <p style="font-size:14px;line-height:1.7;color:var(--text);margin-bottom:14px">Isto apaga <strong>para sempre</strong>:</p>
+      <ul style="font-size:13px;color:var(--textm);line-height:1.9;margin:0 0 16px 18px">
+        <li>Todo o seu histórico de peso, composição e medidas</li>
+        <li>Exames, medicações, doses e efeitos colaterais</li>
+        <li>Alimentação, exercícios, humor e diário</li>
+        <li>As autorizações que você deu a médicos</li>
+      </ul>
+      <div class="info-box" style="margin-bottom:16px;background:rgba(232,80,74,0.06);border-color:rgba(232,80,74,0.2)">Recomendado: <strong>exporte seus dados</strong> antes. <a href="#" onclick="VITALE_CORE.exportarJSON();return false" style="color:var(--gold)">Exportar agora</a></div>
+      <label style="font-size:12px;color:var(--textm);letter-spacing:0.5px">Para confirmar, digite <strong style="color:var(--red)">EXCLUIR</strong> abaixo</label>
+      <input type="text" id="confirmarExclusao" placeholder="EXCLUIR" style="width:100%;text-align:center;letter-spacing:2px;margin:8px 0 16px" oninput="this.value=this.value.toUpperCase()">
+      <button class="btn btn-danger" id="btnExcluirDef" onclick="VITALE_CORE.excluirContaDefinitivo()" style="width:100%;padding:14px">Apagar minha conta permanentemente</button>
+      <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.closeModal('modalExcluir')" style="width:100%;margin-top:8px">Cancelar</button>
+    </div>
   </div>
 </div>
 
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Meus Médicos (A13)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Exclusão Conta (A14)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A13"></script>
-<script src="/assets/js/feature-flags.js?v=A13"></script>
-<script src="/assets/js/vitale-core.js?v=A13"></script>
+<script src="/assets/js/supabase-client.js?v=A14"></script>
+<script src="/assets/js/feature-flags.js?v=A14"></script>
+<script src="/assets/js/vitale-core.js?v=A14"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1171,7 +1197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.8') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.9') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();

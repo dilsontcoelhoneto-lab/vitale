@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.8 · Meus Médicos · 2026-07-21';
+const VITALE_VERSION = 'v5.9 · Exclusão de Conta · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -5538,6 +5538,35 @@ const VITALE_CORE = {
   // =====================================================
   // BACKUP JSON
   // =====================================================
+  // ===== v5.9 — EXCLUSÃO DE CONTA (LGPD art.18 · Apple 5.1.1(v)) =====
+  abrirExclusaoConta() {
+    const inp = document.getElementById('confirmarExclusao');
+    if (inp) inp.value = '';
+    this.closeModal('modalSettings');
+    document.getElementById('modalExcluir')?.classList.add('active');
+  },
+
+  async excluirContaDefinitivo() {
+    const inp = document.getElementById('confirmarExclusao');
+    if ((inp?.value || '').trim().toUpperCase() !== 'EXCLUIR') {
+      return this.showAlert('error', 'Digite EXCLUIR para confirmar.');
+    }
+    const btn = document.getElementById('btnExcluirDef');
+    if (btn) { btn.disabled = true; btn.textContent = 'Apagando…'; }
+    try {
+      const { error } = await window.sb.rpc('excluir_minha_conta');
+      if (error) throw error;
+      try { await window.sb.auth.signOut(); } catch (e) {}
+      // Limpa qualquer resíduo local do usuário
+      try { Object.keys(localStorage).filter(k => k.startsWith('vitale_')).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+      alert('Sua conta e todos os seus dados foram apagados. Sentiremos sua falta.');
+      location.href = '/';
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Apagar minha conta permanentemente'; }
+      this.showAlert('error', '❌ Não foi possível excluir agora: ' + (e.message || e));
+    }
+  },
+
   exportarJSON() {
     const data = {
       vitale_version: '4.1',
