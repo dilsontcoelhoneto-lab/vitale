@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A11">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A13">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -15,7 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A11"></script>
+<script src="/config.js?v=A13"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -48,7 +48,6 @@
     </div>
     <div id="userMenuDropdown" style="display:none;position:absolute;top:60px;right:24px;background:var(--card);border:1px solid var(--border2);border-radius:10px;padding:8px;z-index:300;min-width:180px">
       <a href="#" onclick="VITALE_CORE.openSettings();toggleUserMenu();return false" style="display:block;padding:10px 14px;color:var(--text);text-decoration:none;font-size:13px;border-radius:6px">⚙️ Configurações</a>
-      <a id="adminLink" href="/admin.html" style="display:none;padding:10px 14px;color:var(--gold);text-decoration:none;font-size:13px;border-radius:6px">🏛️ Torre de Comando</a>
       <a href="/docs/install.html" target="_blank" style="display:block;padding:10px 14px;color:var(--text);text-decoration:none;font-size:13px;border-radius:6px">📖 Ajuda</a>
       <a href="#" onclick="VITALE_CORE.signOut();return false" style="display:block;padding:10px 14px;color:var(--red);text-decoration:none;font-size:13px;border-radius:6px;border-top:1px solid var(--border);margin-top:4px">🚪 Sair</a>
     </div>
@@ -374,6 +373,22 @@
     </div>
 
     <button class="save-btn-mega" onclick="VITALE_CORE.salvarHealthProfile()">💾 SALVAR PERFIL DE SAÚDE</button>
+
+    <!-- ===== MEUS MÉDICOS (v5.8) — controle de compartilhamento (LGPD) ===== -->
+    <div class="card" style="margin-top:16px;border-color:rgba(39,196,125,0.25)">
+      <h3>🩺 Meus Médicos</h3>
+      <p style="font-size:13px;color:var(--textm);margin:6px 0 16px;line-height:1.7">Você decide quem vê seus dados e o quê. O acesso do médico é registrado e você pode revogar a qualquer momento.</p>
+
+      <div id="medVincularBox" style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:16px;margin-bottom:16px">
+        <label style="font-size:12px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;display:block">Vincular um médico</label>
+        <p style="font-size:12px;color:var(--textm);margin-bottom:12px">Digite o código de 6 caracteres que seu médico forneceu.</p>
+        <input type="text" id="medCodigo" placeholder="EX: A1B2C3" maxlength="6" style="text-transform:uppercase;letter-spacing:3px;font-size:18px;text-align:center;width:100%;margin-bottom:12px" oninput="this.value=this.value.toUpperCase()">
+        <div id="medPreview" style="display:none;margin-bottom:12px"></div>
+        <button class="btn btn-secondary" onclick="VITALE_CORE.buscarMedico()" style="width:100%;padding:12px">🔍 Localizar médico</button>
+      </div>
+
+      <div id="meusMedicosLista"></div>
+    </div>
 
     <!-- Botão: Refazer questionário inicial -->
     <div class="card" style="margin-top:16px;background:rgba(74,157,232,0.04);border-color:rgba(74,157,232,0.15)">
@@ -1133,16 +1148,16 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Auditoria (A11)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Meus Médicos (A13)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A11"></script>
-<script src="/assets/js/feature-flags.js?v=A11"></script>
-<script src="/assets/js/vitale-core.js?v=A11"></script>
+<script src="/assets/js/supabase-client.js?v=A13"></script>
+<script src="/assets/js/feature-flags.js?v=A13"></script>
+<script src="/assets/js/vitale-core.js?v=A13"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
-(async () => { try { const profile = await window.VitaleAuth.getProfile(); if (profile?.role === 'admin') document.getElementById('adminLink').style.display = 'block'; } catch (e) {} })();
+// Torre de Comando separada do app do paciente (v5.7): acesse direto em /admin.html
 document.addEventListener('DOMContentLoaded', () => {
   const coreEl = document.getElementById('coreVersion');
   if (typeof VITALE_CORE === 'undefined') {
@@ -1156,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.6') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.8') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();

@@ -10,13 +10,14 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.6 · Auditoria de Cálculos · 2026-07-21';
+const VITALE_VERSION = 'v5.8 · Meus Médicos · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
   state: {
     profile: null,
     healthProfile: null,
+    plano: null,
     weights: [],          // média diária (1 ponto/dia) — vista
     weightsRaw: [],       // todos os registros individuais (histórico)
     medicacoes: [],
@@ -246,6 +247,124 @@ const VITALE_CORE = {
       icone: s.icone,
       atingida: s.atingida
     }));
+  },
+
+  // v5.7 — plano do usuário (base da monetização; ainda não bloqueia nada)
+  async loadPlano() {
+    try {
+      const { data, error } = await window.sb.rpc('meu_plano');
+      if (error || !data || !data.length) return { plano_id: 'free', nome: 'Gratuito' };
+      return data[0];
+    } catch (e) { return { plano_id: 'free', nome: 'Gratuito' }; }
+  },
+
+  // Verifica se um recurso está liberado no plano atual.
+  // Enquanto a cobrança não é ativada, sempre libera — mas já registra a intenção
+  // no código, para que ligar os limites seja trocar uma constante.
+  COBRANCA_ATIVA: false,
+  podeUsar(recurso) {
+    if (!this.COBRANCA_ATIVA) return true;
+    const p = this.state.plano || {};
+    if (recurso === 'relatorio_360') return !!p.tem_relatorio_360;
+    if (recurso === 'portal_medico') return !!p.tem_portal_medico;
+    return true;
+  },
+
+  // ===== v5.8 — MEUS MÉDICOS (compartilhamento controlado pelo paciente) =====
+  _medEncontrado: null,
+
+  async buscarMedico() {
+    const cod = (document.getElementById('medCodigo')?.value || '').trim().toUpperCase();
+    const prev = document.getElementById('medPreview');
+    if (cod.length !== 6) return this.showAlert('error', 'O código tem 6 caracteres.');
+    if (prev) prev.style.display = 'none';
+    try {
+      const { data, error } = await window.sb.from('medicos_publicos')
+        .select('codigo, nome, crm, crm_uf, especialidade').eq('codigo', cod).maybeSingle();
+      if (error) throw error;
+      if (!data) return this.showAlert('error', 'Código não encontrado ou médico não verificado.');
+      this._medEncontrado = data;
+      if (prev) {
+        prev.style.display = 'block';
+        prev.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:14px">
+          <div style="font-size:15px;color:var(--text);font-weight:600">${this._escapeHtml(data.nome)}</div>
+          <div style="font-size:12px;color:var(--textm);margin:2px 0 12px">CRM ${this._escapeHtml(data.crm)}/${this._escapeHtml(data.crm_uf)}${data.especialidade ? ' · ' + this._escapeHtml(data.especialidade) : ''}</div>
+          <div style="font-size:12px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">O que você libera</div>
+          ${this._escoposHtml()}
+          <button class="btn btn-primary" onclick="VITALE_CORE.confirmarVinculo()" style="width:100%;margin-top:12px;padding:12px">✅ Autorizar acesso · expira em 12 meses</button>
+        </div>`;
+      }
+    } catch (e) { this.showAlert('error', '❌ ' + e.message); }
+  },
+
+  _escoposDef: [
+    { id: 'peso', nome: 'Peso e IMC', on: true },
+    { id: 'composicao', nome: 'Composição corporal', on: true },
+    { id: 'exames', nome: 'Exames laboratoriais', on: true },
+    { id: 'medicacoes', nome: 'Medicações e doses', on: true },
+    { id: 'exercicios', nome: 'Exercícios', on: false },
+    { id: 'alimentacao', nome: 'Alimentação', on: false },
+    { id: 'humor', nome: 'Humor e sono', on: false },
+    { id: 'diario', nome: 'Diário pessoal', on: false }
+  ],
+  _escoposHtml() {
+    return this._escoposDef.map(e => `<label style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:14px;color:var(--text);cursor:pointer">
+      <span>${e.nome}</span>
+      <input type="checkbox" id="esc_${e.id}" ${e.on ? 'checked' : ''} style="width:20px;height:20px;accent-color:var(--em)">
+    </label>`).join('');
+  },
+
+  async confirmarVinculo() {
+    if (!this._medEncontrado) return;
+    const args = { p_codigo: this._medEncontrado.codigo };
+    this._escoposDef.forEach(e => { args['p_' + e.id] = !!document.getElementById('esc_' + e.id)?.checked; });
+    try {
+      const { data, error } = await window.sb.rpc('vincular_medico', args);
+      if (error) throw error;
+      this.showAlert('success', '✅ Médico autorizado! Ele já pode ver os dados que você liberou.');
+      document.getElementById('medCodigo').value = '';
+      document.getElementById('medPreview').style.display = 'none';
+      this._medEncontrado = null;
+      await this.loadMeusMedicos();
+    } catch (e) { this.showAlert('error', '❌ ' + e.message); }
+  },
+
+  async loadMeusMedicos() {
+    const el = document.getElementById('meusMedicosLista');
+    if (!el) return;
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return;
+    const { data, error } = await window.sb.from('consentimentos')
+      .select('id, status, concedido_em, expira_em, esc_peso, esc_composicao, esc_exames, esc_medicacoes, esc_exercicios, esc_alimentacao, esc_humor, esc_diario, medicos(nome, crm, crm_uf, especialidade)')
+      .eq('status', 'ativo').eq('paciente_id', user.id).order('concedido_em', { ascending: false });
+    if (error) { el.innerHTML = ''; return; }
+    if (!data || !data.length) {
+      el.innerHTML = '<p style="font-size:13px;color:var(--textm);text-align:center;padding:12px 0">Nenhum médico com acesso aos seus dados.</p>';
+      return;
+    }
+    const mapaEsc = { esc_peso: 'peso', esc_composicao: 'composição', esc_exames: 'exames', esc_medicacoes: 'medicações', esc_exercicios: 'exercícios', esc_alimentacao: 'alimentação', esc_humor: 'humor', esc_diario: 'diário' };
+    el.innerHTML = data.map(c => {
+      const m = c.medicos || {};
+      const escopos = Object.entries(mapaEsc).filter(([k]) => c[k]).map(([, v]) => v).join(', ') || 'nenhum';
+      return `<div style="border:1px solid var(--border);border-left:3px solid var(--em);border-radius:12px;padding:16px;margin-bottom:12px">
+        <div style="font-size:15px;color:var(--text);font-weight:600">${this._escapeHtml(m.nome || 'Médico')}</div>
+        <div style="font-size:12px;color:var(--textm)">CRM ${this._escapeHtml(m.crm || '')}/${this._escapeHtml(m.crm_uf || '')}${m.especialidade ? ' · ' + this._escapeHtml(m.especialidade) : ''}</div>
+        <div style="font-size:12px;color:var(--textm);margin:8px 0"><strong style="color:var(--text)">Vê:</strong> ${escopos}</div>
+        <div style="font-size:11px;color:var(--textm)">Autorizado em ${this.fmt(c.concedido_em.slice(0,10))} · expira em ${c.expira_em ? this.fmt(c.expira_em.slice(0,10)) : 'sem prazo'}</div>
+        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.revogarMedico(${c.id})" style="margin-top:12px">🚫 Revogar acesso</button>
+      </div>`;
+    }).join('');
+  },
+
+  async revogarMedico(id) {
+    if (!confirm('Revogar o acesso deste médico? Ele deixa de ver seus dados imediatamente.')) return;
+    try {
+      const { error } = await window.sb.from('consentimentos')
+        .update({ status: 'revogado', revogado_em: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+      this.showAlert('success', 'Acesso revogado.');
+      await this.loadMeusMedicos();
+    } catch (e) { this.showAlert('error', '❌ ' + e.message); }
   },
 
   async loadHealthProfile() {
@@ -5456,6 +5575,10 @@ const VITALE_CORE = {
     // Ao abrir Medicações, renderiza os forms e listas GLP-1
     if (tabName === 'medic') {
       try { this.renderGlp1Forms(); this.renderDosesList(); this.renderEfeitosList(); } catch (err) { console.warn('glp1', err); }
+    }
+    // Ao abrir Saúde, carrega a lista de médicos vinculados (v5.8)
+    if (tabName === 'saude') {
+      try { this.loadMeusMedicos(); } catch (err) { console.warn('meusMedicos', err); }
     }
     // Ao abrir Exames, renderiza forms, lista e gráficos; preenche data com hoje
     if (tabName === 'exames') {

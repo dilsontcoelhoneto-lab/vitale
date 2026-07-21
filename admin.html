@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — Torre de Comando</title>
-<link rel="stylesheet" href="/assets/css/vitale.css">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A12">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=D"></script>
+<script src="/config.js?v=A12"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">VERIFICANDO ACESSO ADMIN...</p></div>
@@ -43,6 +43,8 @@
     <button class="tab-btn active" onclick="switchAdminTab(event,'overview')">📊 VISÃO GERAL</button>
     <button class="tab-btn" onclick="switchAdminTab(event,'flags')">🎚️ FEATURE FLAGS</button>
     <button class="tab-btn" onclick="switchAdminTab(event,'users')">👥 USUÁRIOS</button>
+    <button class="tab-btn" onclick="switchAdminTab(event,'medicos')">🩺 MÉDICOS</button>
+    <button class="tab-btn" onclick="switchAdminTab(event,'consent')">🔐 CONSENTIMENTOS</button>
     <button class="tab-btn" onclick="switchAdminTab(event,'errors')">🐛 ERROS</button>
     <button class="tab-btn" onclick="switchAdminTab(event,'analytics')">📈 USO</button>
   </div>
@@ -104,6 +106,47 @@
   </div>
 
   <!-- ===== ERROS ===== -->
+  <div id="medicos" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)">Médicos</h2>
+    <p style="color:var(--textm);font-size:14px;margin-bottom:20px">Fila de verificação de CRM. Aprove somente após conferir o registro no portal do CFM — a aprovação fica registrada com seu usuário e a data.</p>
+
+    <div class="card" style="background:rgba(212,168,67,0.05);border-color:rgba(212,168,67,0.2);margin-bottom:20px">
+      <h3 style="color:var(--gold)">✔️ Checklist antes de aprovar</h3>
+      <ol style="font-size:13px;color:var(--textm);line-height:1.9;margin:8px 0 0 18px">
+        <li>Consultar o CRM no portal do CFM (busca pública)</li>
+        <li>Conferir se o nome bate com o cadastro</li>
+        <li>Conferir se a situação está <strong>ativa</strong></li>
+        <li>Escrever a nota de verificação antes de aprovar</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h3>Aguardando verificação</h3>
+      <div id="medicosPendentes" style="margin-top:14px"><p style="color:var(--textm);font-size:13px">Carregando…</p></div>
+    </div>
+
+    <div class="card">
+      <h3>Médicos verificados</h3>
+      <div id="medicosAtivos" style="margin-top:14px"><p style="color:var(--textm);font-size:13px">Carregando…</p></div>
+    </div>
+  </div>
+
+  <div id="consent" class="tab-content">
+    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)">Consentimentos</h2>
+    <p style="color:var(--textm);font-size:14px;margin-bottom:20px">Quem autorizou quem, em qual escopo e até quando. Use esta tela para responder a qualquer questionamento de paciente sobre acesso aos seus dados.</p>
+
+    <div class="card">
+      <h3>Autorizações ativas</h3>
+      <div id="listaConsent" style="margin-top:14px"><p style="color:var(--textm);font-size:13px">Carregando…</p></div>
+    </div>
+
+    <div class="card">
+      <h3>Últimos acessos de médicos</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:10px">Padrão anormal — muitos pacientes abertos em sequência ou várias exportações no mesmo dia — merece investigação.</p>
+      <div id="listaAcessos"><p style="color:var(--textm);font-size:13px">Carregando…</p></div>
+    </div>
+  </div>
+
   <div id="errors" class="tab-content">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Logs de Erro</h2>
     <div class="card">
@@ -129,7 +172,7 @@
   </div>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=D"></script>
+<script src="/assets/js/supabase-client.js?v=A12"></script>
 <script>
 let allFlags = [], allUsers = [];
 
@@ -139,6 +182,8 @@ async function signOut() {
 }
 
 function switchAdminTab(e, name) {
+  if (name === 'medicos') setTimeout(loadMedicos, 30);
+  if (name === 'consent') setTimeout(loadConsentimentos, 30);
   document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(name).classList.add('active');
@@ -433,6 +478,110 @@ async function loadAnalytics() {
 }
 
 // ===== TOAST =====
+// ===== MÉDICOS: fila de verificação =====
+async function loadMedicos() {
+  const pend = document.getElementById('medicosPendentes');
+  const ativ = document.getElementById('medicosAtivos');
+  if (!pend) return;
+  const { data, error } = await window.sb.from('medicos').select('*').order('created_at', { ascending: false });
+  if (error) { pend.innerHTML = '<p style="color:var(--red)">Erro: ' + esc(error.message) + '</p>'; return; }
+  const lista = data || [];
+  const pendentes = lista.filter(m => m.status === 'pendente');
+  const ativos = lista.filter(m => m.status === 'verificado');
+
+  pend.innerHTML = pendentes.length ? pendentes.map(m => `
+    <div style="border:1px solid var(--border);border-left:3px solid var(--gold);border-radius:10px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <strong style="font-size:16px">${esc(m.nome)}</strong>
+          <div style="font-size:13px;color:var(--textm);margin-top:2px">CRM ${esc(m.crm)}/${esc(m.crm_uf)}${m.especialidade ? ' · ' + esc(m.especialidade) : ''}</div>
+          <div style="font-size:12px;color:var(--textm)">Solicitado em ${new Date(m.created_at).toLocaleDateString('pt-BR')}</div>
+        </div>
+      </div>
+      <input type="text" id="nota_${m.id}" placeholder="Nota de verificação (ex: CRM conferido no CFM em 21/07)" style="width:100%;margin:12px 0 10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px;color:var(--text);font-family:inherit;font-size:13px">
+      <button class="btn btn-primary btn-small" onclick="aprovarMedico('${m.id}')">✅ Aprovar</button>
+      <button class="btn btn-danger btn-small" onclick="recusarMedico('${m.id}')" style="margin-left:8px">✕ Recusar</button>
+    </div>`).join('') : '<p style="color:var(--textm);font-size:13px">Nenhum cadastro aguardando verificação.</p>';
+
+  ativ.innerHTML = ativos.length ? ativos.map(m => `
+    <div style="border:1px solid var(--border);border-left:3px solid var(--em);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <strong>${esc(m.nome)}</strong>
+        <div style="font-size:12px;color:var(--textm)">CRM ${esc(m.crm)}/${esc(m.crm_uf)} · verificado em ${m.verificado_em ? new Date(m.verificado_em).toLocaleDateString('pt-BR') : '—'}</div>
+        ${m.nota_verificacao ? '<div style="font-size:11px;color:var(--textm);font-style:italic">' + esc(m.nota_verificacao) + '</div>' : ''}
+      </div>
+      <button class="btn btn-secondary btn-small" onclick="suspenderMedico('${m.id}')">Suspender</button>
+    </div>`).join('') : '<p style="color:var(--textm);font-size:13px">Nenhum médico verificado ainda.</p>';
+}
+
+async function aprovarMedico(id) {
+  const nota = (document.getElementById('nota_' + id)?.value || '').trim();
+  if (!nota) return showToast('⚠️ Escreva a nota de verificação antes de aprovar');
+  const { data: { user } } = await window.sb.auth.getUser();
+  const { error } = await window.sb.from('medicos').update({
+    status: 'verificado', verificado_em: new Date().toISOString(),
+    verificado_por: user.id, nota_verificacao: nota
+  }).eq('id', id);
+  if (error) return showToast('❌ ' + error.message);
+  showToast('✅ Médico aprovado'); loadMedicos();
+}
+
+async function recusarMedico(id) {
+  const motivo = prompt('Motivo da recusa (fica registrado):');
+  if (motivo === null) return;
+  const { error } = await window.sb.from('medicos').update({ status: 'recusado', nota_verificacao: motivo }).eq('id', id);
+  if (error) return showToast('❌ ' + error.message);
+  showToast('Cadastro recusado'); loadMedicos();
+}
+
+async function suspenderMedico(id) {
+  if (!confirm('Suspender este médico? Ele perde acesso a TODOS os pacientes imediatamente.')) return;
+  const { error } = await window.sb.from('medicos').update({ status: 'suspenso' }).eq('id', id);
+  if (error) return showToast('❌ ' + error.message);
+  showToast('Médico suspenso'); loadMedicos();
+}
+
+// ===== CONSENTIMENTOS =====
+async function loadConsentimentos() {
+  const el = document.getElementById('listaConsent');
+  const ac = document.getElementById('listaAcessos');
+  if (!el) return;
+  const { data: cs, error } = await window.sb.from('consentimentos')
+    .select('*, medicos(nome, crm, crm_uf)').order('created_at', { ascending: false }).limit(100);
+  if (error) { el.innerHTML = '<p style="color:var(--red)">Erro: ' + esc(error.message) + '</p>'; return; }
+
+  el.innerHTML = (cs && cs.length) ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="color:var(--gold);font-size:10px;letter-spacing:1px;text-transform:uppercase">
+      <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Médico</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Status</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Escopos</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Concedido</th>
+      <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Expira</th></tr></thead>
+    <tbody>${cs.map(c => {
+      const esc_ = [];
+      if (c.esc_peso) esc_.push('peso'); if (c.esc_composicao) esc_.push('composição');
+      if (c.esc_exames) esc_.push('exames'); if (c.esc_medicacoes) esc_.push('medicações');
+      if (c.esc_exercicios) esc_.push('exercícios'); if (c.esc_alimentacao) esc_.push('alimentação');
+      if (c.esc_humor) esc_.push('humor'); if (c.esc_diario) esc_.push('diário');
+      const cor = c.status === 'ativo' ? 'var(--em)' : c.status === 'revogado' ? 'var(--red)' : 'var(--textm)';
+      return `<tr><td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04)">${c.medicos ? esc(c.medicos.nome) + ' <span style="color:var(--textm);font-size:11px">CRM ' + esc(c.medicos.crm) + '/' + esc(c.medicos.crm_uf) + '</span>' : '—'}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04);color:${cor}">${esc(c.status)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;color:var(--textm)">${esc_.join(', ') || '—'}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;color:var(--textm)">${c.concedido_em ? new Date(c.concedido_em).toLocaleDateString('pt-BR') : '—'}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;color:var(--textm)">${c.expira_em ? new Date(c.expira_em).toLocaleDateString('pt-BR') : 'sem prazo'}</td></tr>`;
+    }).join('')}</tbody></table>` : '<p style="color:var(--textm);font-size:13px">Nenhuma autorização registrada ainda.</p>';
+
+  const { data: as } = await window.sb.from('acessos_medico')
+    .select('*, medicos(nome)').order('created_at', { ascending: false }).limit(50);
+  ac.innerHTML = (as && as.length) ? as.map(a => `
+    <div style="font-size:13px;color:var(--textm);padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)">
+      <span style="color:var(--text)">${a.medicos ? esc(a.medicos.nome) : 'Médico'}</span>
+      · ${esc(a.acao)} · ${new Date(a.created_at).toLocaleString('pt-BR')}</div>`).join('')
+    : '<p style="color:var(--textm);font-size:13px">Nenhum acesso registrado.</p>';
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
 function showToast(msg) {
   const t = document.createElement('div');
   t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--em);border-radius:10px;padding:14px 20px;color:var(--text);font-size:13px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.5)';
@@ -445,7 +594,7 @@ function showToast(msg) {
 (async () => {
   // Selo de versão (diagnóstico, igual ao app)
   const vEl = document.getElementById('adminVersion');
-  if (vEl) vEl.textContent = 'admin.html Bloco B · core ' + (window.VITALE_CORE?.VERSION || (typeof window.sb === 'undefined' ? '❌ supabase não carregou' : 'sem core (ok no admin)'));
+  if (vEl) vEl.textContent = 'admin.html Torre v2 · core ' + (window.VITALE_CORE?.VERSION || (typeof window.sb === 'undefined' ? '❌ supabase não carregou' : 'sem core (ok no admin)'));
   try {
     const profile = await window.VitaleAuth.requireAdmin();
     if (!profile) return;
@@ -460,6 +609,6 @@ function showToast(msg) {
   }
 })();
 </script>
-<div id="adminVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">admin.html Bloco B · core —</div>
+<div id="adminVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">admin.html Torre v2 · core —</div>
 </body>
 </html>
