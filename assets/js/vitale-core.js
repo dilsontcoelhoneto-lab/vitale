@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.4 · Bloco 1 + Análise 360 · 2026-07-17';
+const VITALE_VERSION = 'v5.5 · Metas IMC + Filtro Período · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -289,6 +289,12 @@ const VITALE_CORE = {
   getSorted() { return [...this.state.weights].sort((a, b) => new Date(a.date) - new Date(b.date)); },
 
   get altura() { return this.state.profile?.altura || 1.70; },
+  // Altura REAL do perfil, sem fallback. Null = não cadastrada/implausível.
+  // Usada onde gravar dado errado é pior que não gravar (metas em cascata).
+  get alturaValida() {
+    const a = parseFloat(this.state.profile?.altura);
+    return (!isNaN(a) && a >= 1.2 && a <= 2.3) ? a : null;
+  },
 
   // ===== BLOCO 1 — MODO OBJETIVO =====
   get objetivo() { return this.state.healthProfile?.objetivo || 'emagrecimento'; },
@@ -2669,6 +2675,29 @@ const VITALE_CORE = {
   // nunca os cálculos de projeção/coach, que sempre usam a série completa)
   dashFiltro: { de: null, ate: null },
 
+  // v5.5 — Filtro rápido por período (30/60/90/120 dias · tudo)
+  filtrarPeriodoDashboard(dias) {
+    const elDe = document.getElementById('dashFiltroDe');
+    const elAte = document.getElementById('dashFiltroAte');
+    if (!dias) { // "tudo"
+      this.dashFiltro = { de: null, ate: null };
+      if (elDe) elDe.value = '';
+      if (elAte) elAte.value = '';
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() - parseInt(dias, 10));
+      const de = d.toISOString().slice(0, 10);
+      this.dashFiltro = { de, ate: null };
+      if (elDe) elDe.value = de;
+      if (elAte) elAte.value = '';
+    }
+    this.buildWeightChart();
+    this.buildIMCChart();
+    if (this.buildComposicaoChart) this.buildComposicaoChart();
+    if (this.buildMedidasChart) this.buildMedidasChart();
+    this._atualizarInfoFiltro();
+  },
+
   aplicarFiltroDashboard() {
     this.dashFiltro = {
       de: document.getElementById('dashFiltroDe')?.value || null,
@@ -3622,6 +3651,57 @@ const VITALE_CORE = {
     if (error) return this.showAlert('error', 'Erro: ' + error.message);
     this.state.submetas = this.state.submetas.filter(s => s.id !== id);
     this.updateSubmetasUI();
+  },
+
+  // =====================================================
+  // v5.5 — RECALCULAR METAS DE IMC (reparo)
+  // =====================================================
+  // Corrige submetas de marco de IMC gravadas com altura errada e remove
+  // as que o usuário já ultrapassou. Não toca em submetas personalizadas.
+  async recalcularMetasIMC() {
+    const altura = this.alturaValida;
+    if (!altura) return this.showAlert('error', '⚠️ Cadastre sua altura no perfil primeiro.');
+    if (!this.state.weights.length) return this.showAlert('warning', 'Adicione pelo menos um peso primeiro.');
+
+    const sorted = this.getSorted();
+    const pesoAtual = sorted[sorted.length - 1].peso;
+    const imcAtual = pesoAtual / (altura * altura);
+    const porNome = {};
+    this._marcosIMC.forEach(m => { porNome[m.label] = m; });
+
+    const alvos = this.state.submetas.filter(s => porNome[s.nome]);
+    if (!alvos.length) return this.showAlert('info', 'Nenhuma meta de IMC para recalcular. As metas personalizadas não são alteradas.');
+
+    let corrigidas = 0, removidas = 0;
+    try {
+      for (const s of alvos) {
+        const m = porNome[s.nome];
+        const pesoCorreto = parseFloat((m.imc * altura * altura).toFixed(1));
+        if (imcAtual <= m.imc) {
+          // marco já ultrapassado — sai da lista de metas pendentes
+          const { error } = await window.sb.from('submetas').delete().eq('id', s.id);
+          if (error) throw error;
+          this.state.submetas = this.state.submetas.filter(x => x.id !== s.id);
+          removidas++;
+        } else if (Math.abs(s.pesoAlvo - pesoCorreto) >= 0.1) {
+          const { error } = await window.sb.from('submetas').update({ peso_alvo: pesoCorreto }).eq('id', s.id);
+          if (error) throw error;
+          s.pesoAlvo = pesoCorreto;
+          corrigidas++;
+        }
+      }
+      this.updateSubmetasUI();
+      this.updateDashboard();
+      this._invalidateCoachCache();
+      const partes = [];
+      if (corrigidas) partes.push(`${corrigidas} alvo(s) corrigido(s) para altura ${altura.toFixed(2)} m`);
+      if (removidas) partes.push(`${removidas} marco(s) já atingido(s) removido(s)`);
+      this.showAlert('success', partes.length ? '✅ ' + partes.join(' · ') : '✅ Suas metas de IMC já estavam corretas.');
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('metas_recalculadas', { corrigidas, removidas });
+    } catch (e) {
+      this.showAlert('error', '❌ Erro ao recalcular: ' + e.message);
+      if (window.VitaleErr) window.VitaleErr.log('recalcular_metas', e);
+    }
   },
 
   updateSubmetasUI() {
@@ -5171,12 +5251,27 @@ const VITALE_CORE = {
   // =====================================================
   // Cria submetas de IMC: Obesidade III → II → I → Sobrepeso → Normal
   // Pula marcos já atingidos. Calcula data estimada conforme urgência.
+  // Catálogo único dos marcos de IMC (usado ao gerar E ao recalcular)
+  _marcosIMC: [
+    { imc: 40, label: 'Sair de Obesidade Grau III', icone: '🎯' },
+    { imc: 35, label: 'Sair de Obesidade Grau II', icone: '🎯' },
+    { imc: 30, label: 'Sair de Obesidade Grau I', icone: '🎯' },
+    { imc: 25, label: 'Atingir Peso Normal (IMC < 25)', icone: '🩺' },
+    { imc: 22, label: 'Peso Normal Ideal (IMC 22)', icone: '⭐' }
+  ],
+
   async gerarMetasAutomaticas(silencioso = false) {
     if (!this.state.weights.length) {
       if (!silencioso) this.showAlert('warning', 'Adicione pelo menos um peso primeiro.');
       return;
     }
-    const altura = this.altura;
+    // GUARD (v5.5): sem altura real no perfil, os alvos sairiam calculados
+    // com o fallback 1,70 m — foi exatamente o que gerou metas erradas.
+    const altura = this.alturaValida;
+    if (!altura) {
+      if (!silencioso) this.showAlert('error', '⚠️ Cadastre sua altura no perfil antes de gerar metas — sem ela os alvos saem errados.');
+      return;
+    }
     const pesoAtual = this.state.weights[this.state.weights.length - 1].peso;
     const imcAtual = pesoAtual / (altura * altura);
     const hp = this.state.healthProfile || {};
@@ -5187,13 +5282,7 @@ const VITALE_CORE = {
                       urgencia === 'acelerada' ? 0.85 : 0.6;
 
     // Marcos em cascata (do mais distante ao mais próximo)
-    const todosMarcos = [
-      { imc: 40, label: 'Sair de Obesidade Grau III', icone: '🎯' },
-      { imc: 35, label: 'Sair de Obesidade Grau II', icone: '🎯' },
-      { imc: 30, label: 'Sair de Obesidade Grau I', icone: '🎯' },
-      { imc: 25, label: 'Atingir Peso Normal (IMC < 25)', icone: '🩺' },
-      { imc: 22, label: 'Peso Normal Ideal (IMC 22)', icone: '⭐' }
-    ];
+    const todosMarcos = this._marcosIMC;
 
     // Filtra apenas marcos AINDA NÃO atingidos
     const marcosFalta = todosMarcos.filter(m => imcAtual > m.imc);
