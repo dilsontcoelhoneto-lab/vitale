@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A10">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A11">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -15,7 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A10"></script>
+<script src="/config.js?v=A11"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -133,22 +133,10 @@
     </div>
     <div class="chart-card">
       <h3>📉 Histórico + Projeção</h3>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
-        <div style="flex:1;min-width:160px">
-          <label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Período rápido</label>
-          <select id="dashPeriodoRapido" onchange="VITALE_CORE.filtrarPeriodoDashboard(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:10px;color:var(--text);font-family:inherit;font-size:14px">
-            <option value="30">Últimos 30 dias</option>
-            <option value="60">Últimos 60 dias</option>
-            <option value="90">Últimos 90 dias</option>
-            <option value="120">Últimos 120 dias</option>
-            <option value="180">Últimos 6 meses</option>
-            <option value="" selected>Todo o histórico</option>
-          </select>
-        </div>
-      </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
-        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">De</label><input type="date" id="dashFiltroDe" style="width:100%"></div>
-        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Até</label><input type="date" id="dashFiltroAte" style="width:100%"></div>
+        <div style="width:130px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Período</label><select id="dashPeriodoRapido" onchange="VITALE_CORE.filtrarPeriodoDashboard(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:9px;color:var(--text);font-family:inherit;font-size:14px"><option value="" selected>Tudo</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option><option value="120">120 dias</option><option value="180">6 meses</option></select></div>
+        <div style="flex:1;min-width:110px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">De</label><input type="date" id="dashFiltroDe" style="width:100%"></div>
+        <div style="flex:1;min-width:110px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Até</label><input type="date" id="dashFiltroAte" style="width:100%"></div>
         <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.aplicarFiltroDashboard()" style="padding:9px 16px">🔍 Filtrar</button>
         <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.limparFiltroDashboard()" style="padding:9px 16px">↺ Limpar</button>
       </div>
@@ -1145,12 +1133,12 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Metas (A10)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Auditoria (A11)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A10"></script>
-<script src="/assets/js/feature-flags.js?v=A10"></script>
-<script src="/assets/js/vitale-core.js?v=A10"></script>
+<script src="/assets/js/supabase-client.js?v=A11"></script>
+<script src="/assets/js/feature-flags.js?v=A11"></script>
+<script src="/assets/js/vitale-core.js?v=A11"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1168,7 +1156,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.5') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.6') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();

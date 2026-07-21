@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>VITALE — Portal do Médico</title>
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A11">
+<meta name="theme-color" content="#040608">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="/config.js?v=A11"></script>
+<style>
+  body { background:var(--bg,#040608); color:var(--text,#ede8e0); font-family:'DM Sans',sans-serif; margin:0; }
+  .topo { background:#0d1223; border-bottom:2px solid #d4a843; padding:14px 22px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+  .topo .marca { font-family:'Cormorant Garamond',serif; font-size:22px; color:#d4a843; }
+  .topo .marca small { display:block; font-family:'DM Sans',sans-serif; font-size:10px; letter-spacing:2px; color:#8a8fa8; text-transform:uppercase; }
+  .wrap { max-width:1100px; margin:0 auto; padding:22px; }
+  .card { background:#0d1223; border:1px solid rgba(255,255,255,0.08); border-radius:14px; padding:20px 22px; margin-bottom:16px; }
+  h2 { font-family:'Cormorant Garamond',serif; color:#d4a843; font-size:24px; margin:0 0 12px; }
+  h3 { font-family:'Cormorant Garamond',serif; font-size:19px; margin:18px 0 8px; }
+  label { display:block; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:#8a8fa8; margin-bottom:5px; }
+  input, select { width:100%; background:#040608; border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:11px; color:#ede8e0; font-family:inherit; font-size:16px; margin-bottom:12px; }
+  .btn { background:#d4a843; color:#040608; border:0; border-radius:10px; padding:12px 18px; font-weight:600; font-size:15px; cursor:pointer; font-family:inherit; }
+  .btn.sec { background:transparent; color:#ede8e0; border:1px solid rgba(255,255,255,0.15); }
+  .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:#d4a843; padding:10px; border-bottom:1px solid rgba(255,255,255,0.08); }
+  td { padding:12px 10px; border-bottom:1px solid rgba(255,255,255,0.04); }
+  tr.pac:hover { background:rgba(212,168,67,0.05); cursor:pointer; }
+  .pill { display:inline-block; font-size:11px; padding:2px 9px; border-radius:20px; font-weight:600; }
+  .pill.ok { background:rgba(39,196,125,0.15); color:#27c47d; }
+  .pill.at { background:rgba(212,168,67,0.15); color:#d4a843; }
+  .pill.al { background:rgba(232,80,74,0.15); color:#e8504a; }
+  .kpi { flex:1; min-width:120px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:13px; text-align:center; }
+  .kpi .l { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#8a8fa8; }
+  .kpi .v { font-size:24px; font-weight:700; margin-top:3px; }
+  .aviso { background:rgba(212,168,67,0.07); border:1px solid rgba(212,168,67,0.2); border-radius:10px; padding:12px 14px; font-size:13px; color:#d4a843; margin-bottom:14px; }
+  .oculto { display:none; }
+  .msg { font-size:13px; padding:10px 12px; border-radius:8px; margin-bottom:12px; }
+  .msg.err { background:rgba(232,80,74,0.1); color:#e8504a; }
+  .msg.ok { background:rgba(39,196,125,0.1); color:#27c47d; }
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <div class="marca">VITALE<small>Portal do Médico</small></div>
+  <div id="topoUser" style="font-size:13px;color:#8a8fa8"></div>
+</div>
+
+<div class="wrap">
+
+  <!-- ===== LOGIN ===== -->
+  <div id="telaLogin" class="card" style="max-width:420px;margin:40px auto">
+    <h2>Acesso profissional</h2>
+    <div id="loginMsg"></div>
+    <label>E-mail</label>
+    <input type="email" id="loginEmail" autocomplete="username">
+    <label>Senha</label>
+    <input type="password" id="loginSenha" autocomplete="current-password">
+    <button class="btn" style="width:100%" onclick="PORTAL.entrar()">Entrar</button>
+    <p style="font-size:12px;color:#8a8fa8;margin-top:14px;line-height:1.6">Acesso restrito a profissionais cadastrados e verificados. Os dados exibidos são auto-relatados pelos pacientes e liberados por autorização expressa de cada um.</p>
+  </div>
+
+  <!-- ===== PENDENTE DE VERIFICAÇÃO ===== -->
+  <div id="telaPendente" class="card oculto" style="max-width:520px;margin:40px auto">
+    <h2>Cadastro em análise</h2>
+    <p style="font-size:14px;line-height:1.7;color:#8a8fa8">Seu cadastro está aguardando verificação de CRM. Assim que aprovado, você poderá convidar pacientes e visualizar os dados autorizados.</p>
+  </div>
+
+  <!-- ===== LISTA DE PACIENTES ===== -->
+  <div id="telaLista" class="oculto">
+    <div class="card">
+      <h2>Meus pacientes</h2>
+      <div class="aviso">⚕️ Dados auto-relatados pelos pacientes, liberados por autorização expressa. Este portal é informativo e não constitui prontuário eletrônico — a conduta clínica e o registro oficial são de sua responsabilidade.</div>
+      <div id="listaMsg"></div>
+      <table>
+        <thead><tr><th>Paciente</th><th>Peso atual</th><th>Variação</th><th>Últ. registro</th><th>Alertas</th><th></th></tr></thead>
+        <tbody id="tbPacientes"><tr><td colspan="6" style="color:#8a8fa8">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Convidar paciente</h3>
+      <p style="font-size:13px;color:#8a8fa8;line-height:1.6">Gere um código e entregue ao paciente. Ele autoriza no app, escolhendo quais dados libera. Sem essa autorização, nenhum dado é exibido aqui.</p>
+      <button class="btn sec" onclick="PORTAL.gerarConvite()">Gerar código de convite</button>
+      <div id="conviteOut" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ===== FICHA DO PACIENTE (Análise 360) ===== -->
+  <div id="telaFicha" class="oculto">
+    <button class="btn sec" onclick="PORTAL.voltar()" style="margin-bottom:14px">← Voltar à lista</button>
+    <div id="fichaConteudo"></div>
+  </div>
+
+</div>
+
+<script>
+const PORTAL = {
+  sb: null,
+  medico: null,
+  pacientes: [],
+
+  async init() {
+    this.sb = window.supabase.createClient(window.VITALE_CONFIG.SUPABASE_URL, window.VITALE_CONFIG.SUPABASE_ANON_KEY);
+    const { data: { session } } = await this.sb.auth.getSession();
+    if (session) await this.pos_login();
+  },
+
+  _msg(alvo, texto, tipo = 'err') {
+    const el = document.getElementById(alvo);
+    if (el) el.innerHTML = texto ? `<div class="msg ${tipo}">${texto}</div>` : '';
+  },
+
+  async entrar() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const senha = document.getElementById('loginSenha').value;
+    if (!email || !senha) return this._msg('loginMsg', 'Informe e-mail e senha.');
+    this._msg('loginMsg', 'Entrando…', 'ok');
+    const { error } = await this.sb.auth.signInWithPassword({ email, password: senha });
+    if (error) return this._msg('loginMsg', 'Falha no acesso: ' + error.message);
+    await this.pos_login();
+  },
+
+  async pos_login() {
+    const { data: { user } } = await this.sb.auth.getUser();
+    if (!user) return;
+    // Confere cadastro de médico (RLS: só devolve o próprio registro)
+    const { data: med } = await this.sb.from('medicos').select('*').eq('id', user.id).maybeSingle();
+    if (!med) {
+      this._msg('loginMsg', 'Esta conta não possui cadastro profissional. Fale com o administrador.');
+      await this.sb.auth.signOut();
+      return;
+    }
+    this.medico = med;
+    document.getElementById('telaLogin').classList.add('oculto');
+    document.getElementById('topoUser').textContent = `${med.nome} · CRM ${med.crm}/${med.crm_uf}`;
+    if (med.status !== 'verificado') {
+      document.getElementById('telaPendente').classList.remove('oculto');
+      return;
+    }
+    document.getElementById('telaLista').classList.remove('oculto');
+    await this.carregarPacientes();
+  },
+
+  async carregarPacientes() {
+    const tb = document.getElementById('tbPacientes');
+    // View medico_pacientes: só devolve quem tem consentimento ATIVO
+    const { data: pacs, error } = await this.sb.from('medico_pacientes').select('*');
+    if (error) { tb.innerHTML = `<tr><td colspan="6" style="color:#e8504a">Erro: ${error.message}</td></tr>`; return; }
+    if (!pacs || !pacs.length) {
+      tb.innerHTML = '<tr><td colspan="6" style="color:#8a8fa8">Nenhum paciente autorizou acesso ainda. Use o convite abaixo.</td></tr>';
+      return;
+    }
+    this.pacientes = pacs;
+    const linhas = [];
+    for (const p of pacs) {
+      const resumo = await this._resumoPaciente(p.paciente_id);
+      linhas.push(`<tr class="pac" onclick="PORTAL.abrirFicha('${p.paciente_id}')">
+        <td><strong>${this._esc(p.nome || 'Paciente')}</strong></td>
+        <td>${resumo.pesoAtual != null ? resumo.pesoAtual.toFixed(1) + ' kg' : '—'}</td>
+        <td style="color:${resumo.variacao < 0 ? '#27c47d' : resumo.variacao > 0 ? '#e8504a' : '#8a8fa8'}">${resumo.variacao != null ? (resumo.variacao > 0 ? '+' : '') + resumo.variacao.toFixed(1) + ' kg' : '—'}</td>
+        <td style="font-size:13px;color:#8a8fa8">${resumo.ultimaData || '—'}</td>
+        <td>${resumo.foraMeta > 0 ? `<span class="pill al">${resumo.foraMeta} fora da faixa</span>` : '<span class="pill ok">sem alertas</span>'}${resumo.inativo ? ' <span class="pill at">inativo</span>' : ''}</td>
+        <td style="text-align:right"><span style="color:#d4a843">ver →</span></td>
+      </tr>`);
+    }
+    tb.innerHTML = linhas.join('');
+  },
+
+  async _resumoPaciente(pid) {
+    const out = { pesoAtual: null, variacao: null, ultimaData: null, foraMeta: 0, inativo: false };
+    const { data: pesos } = await this.sb.from('weights').select('data, peso').eq('user_id', pid).order('data', { ascending: true });
+    if (pesos && pesos.length) {
+      const ult = pesos[pesos.length - 1];
+      out.pesoAtual = parseFloat(ult.peso);
+      out.variacao = parseFloat(ult.peso) - parseFloat(pesos[0].peso);
+      out.ultimaData = this._fmt(ult.data);
+      const dias = Math.round((Date.now() - new Date(ult.data + 'T12:00:00')) / 86400000);
+      out.inativo = dias > 15;
+    }
+    const { data: ex } = await this.sb.from('exames_lab').select('marcador, valor, ref_min, ref_max, data').eq('user_id', pid);
+    if (ex && ex.length) {
+      const ultimoPorMarcador = {};
+      ex.forEach(e => { const a = ultimoPorMarcador[e.marcador]; if (!a || e.data > a.data) ultimoPorMarcador[e.marcador] = e; });
+      out.foraMeta = Object.values(ultimoPorMarcador).filter(e =>
+        (e.ref_min != null && e.valor < e.ref_min) || (e.ref_max != null && e.valor > e.ref_max)).length;
+    }
+    return out;
+  },
+
+  async abrirFicha(pid) {
+    document.getElementById('telaLista').classList.add('oculto');
+    document.getElementById('telaFicha').classList.remove('oculto');
+    const alvo = document.getElementById('fichaConteudo');
+    alvo.innerHTML = '<div class="card">Carregando dados do paciente…</div>';
+
+    // Trilha de auditoria — o paciente vê que você abriu
+    try { await this.sb.from('acessos_medico').insert({ medico_id: this.medico.id, paciente_id: pid, acao: 'abriu_paciente' }); } catch (e) {}
+
+    const pac = this.pacientes.find(p => p.paciente_id === pid) || {};
+    const [{ data: perfil }, { data: pesos }, { data: exames }, { data: comp }, { data: meds }, { data: doses }, { data: medidas }] = await Promise.all([
+      this.sb.from('profiles').select('nome, altura').eq('id', pid).maybeSingle(),
+      this.sb.from('weights').select('data, peso').eq('user_id', pid).order('data', { ascending: true }),
+      this.sb.from('exames_lab').select('*').eq('user_id', pid).order('data', { ascending: true }),
+      this.sb.from('composicao_corporal').select('*').eq('user_id', pid).order('data', { ascending: false }),
+      this.sb.from('medicacoes').select('nome, dose').eq('user_id', pid),
+      this.sb.from('doses_medicacao').select('data, medicamento, dose').eq('user_id', pid).order('data', { ascending: false }),
+      this.sb.from('body_measurements').select('data, cintura').eq('user_id', pid).order('data', { ascending: false })
+    ]);
+
+    alvo.innerHTML = this._montarFicha({ pid, pac, perfil, pesos: pesos || [], exames: exames || [], comp: comp || [], meds: meds || [], doses: doses || [], medidas: medidas || [] });
+    this._desenharGrafico(pesos || [], perfil?.altura);
+  },
+
+  // ===== Análise 360 — mesma leitura do relatório do paciente =====
+  _metas360: {
+    glicose:{max:90,txt:'70–90'}, hba1c:{max:5.4,txt:'< 5,4'}, homa_ir:{max:2.0,txt:'< 2,0'},
+    triglicerides:{max:100,txt:'< 100'}, hdl:{min:50,txt:'> 50'}, ldl:{max:70,txt:'< 70*'},
+    pcr:{max:0.1,txt:'< 0,1'}, vitamina_d:{min:40,txt:'40–60'}
+  },
+  _nomes: { glicose:'Glicose (jejum)', hba1c:'HbA1c', insulina:'Insulina', homa_ir:'HOMA-IR', colesterol_total:'Colesterol Total', ldl:'LDL', hdl:'HDL', triglicerides:'Triglicérides', tgo:'TGO (AST)', tgp:'TGP (ALT)', ggt:'Gama-GT', creatinina:'Creatinina', ureia:'Ureia', acido_urico:'Ácido Úrico', tsh:'TSH', t4_livre:'T4 Livre', testosterona_total:'Testosterona Total', vitamina_d:'Vitamina D', vitamina_b12:'Vitamina B12', pcr:'PCR-us', ferritina:'Ferritina' },
+  _menorMelhor: ['glicose','hba1c','insulina','homa_ir','colesterol_total','ldl','triglicerides','tgo','tgp','ggt','pcr','acido_urico','ureia'],
+  _maiorMelhor: ['hdl','vitamina_d','vitamina_b12','testosterona_total'],
+
+  _status(mid, v, rmin, rmax) {
+    if ((rmin != null && v < rmin) || (rmax != null && v > rmax)) return 'fora';
+    const m = this._metas360[mid];
+    if (!m) return 'ok';
+    return ((m.max == null || v <= m.max) && (m.min == null || v >= m.min)) ? 'otimo' : 'atencao';
+  },
+
+  _montarFicha(d) {
+    const CORES = { otimo:'#27c47d', ok:'#4a9de8', atencao:'#d4a843', fora:'#e8504a' };
+    const ROT = { otimo:'Ótimo', ok:'Na referência', atencao:'Ref. ok · fora do ideal', fora:'Fora da referência' };
+    const altura = d.perfil?.altura || null;
+    const nome = d.perfil?.nome || d.pac.nome || 'Paciente';
+    const pesos = d.pesos;
+    const primeiro = pesos[0], ultimo = pesos[pesos.length - 1];
+    const pesoAtual = ultimo ? parseFloat(ultimo.peso) : null;
+    const perda = (primeiro && ultimo) ? parseFloat(primeiro.peso) - parseFloat(ultimo.peso) : null;
+    const imc = (pesoAtual && altura) ? (pesoAtual / (altura * altura)) : null;
+
+    // Velocidade recente (28 dias) — mesma regra corrigida do app (v5.6)
+    let velSem = null, estavel = false;
+    if (pesos.length >= 2) {
+      const corte = new Date(); corte.setDate(corte.getDate() - 28);
+      const rec = pesos.filter(p => p.data >= corte.toISOString().slice(0, 10));
+      if (rec.length >= 2) {
+        const dias = Math.max(Math.round((new Date(rec[rec.length-1].data + 'T12:00:00') - new Date(rec[0].data + 'T12:00:00')) / 86400000), 1);
+        const v = (parseFloat(rec[0].peso) - parseFloat(rec[rec.length-1].peso)) / dias * 7;
+        velSem = v; estavel = Math.abs(v) < 0.1;
+      }
+    }
+
+    // Cintura
+    const comCint = d.medidas.filter(m => m.cintura);
+    const cintAtual = comCint.length ? comCint[0].cintura : null;
+    const cintInicial = comCint.length ? comCint[comCint.length - 1].cintura : null;
+
+    // Retrato laboratorial
+    const porM = {};
+    d.exames.forEach(e => { (porM[e.marcador] = porM[e.marcador] || []).push(e); });
+    const retrato = Object.entries(porM).map(([mid, regs]) => {
+      const ord = [...regs].sort((a,b) => a.data < b.data ? -1 : 1);
+      const pri = ord[0], ult = ord[ord.length - 1];
+      const st = this._status(mid, ult.valor, ult.ref_min, ult.ref_max);
+      let tend = null;
+      if (ord.length >= 2 && pri.valor !== ult.valor) {
+        if (this._menorMelhor.includes(mid)) tend = ult.valor < pri.valor ? 'melhorou' : 'piorou';
+        else if (this._maiorMelhor.includes(mid)) tend = ult.valor > pri.valor ? 'melhorou' : 'piorou';
+      }
+      return { mid, pri, ult, st, tend, meta: this._metas360[mid]?.txt || '—' };
+    });
+    const ganhos = retrato.filter(r => r.tend === 'melhorou').map(r => this._nomes[r.mid] || r.mid);
+    const alvos = retrato.filter(r => r.st === 'fora' || r.st === 'atencao').map(r => this._nomes[r.mid] || r.mid);
+
+    const linhasLab = retrato.map(r => {
+      const ref = (r.ult.ref_min != null ? r.ult.ref_min + '–' : '< ') + (r.ult.ref_max != null ? r.ult.ref_max : '');
+      const tend = r.tend === 'melhorou' ? '<span style="color:#27c47d">▲ melhorou</span>' : r.tend === 'piorou' ? '<span style="color:#e8504a">▼ piorou</span>' : '—';
+      const delta = r.pri !== r.ult ? `<span style="color:#8a8fa8;font-size:11px">de ${r.pri.valor} (${this._fmt(r.pri.data)})</span>` : '';
+      return `<tr><td>${this._nomes[r.mid] || r.mid}</td>
+        <td style="text-align:center;font-weight:700;color:${CORES[r.st]}">${r.ult.valor}</td>
+        <td style="text-align:center;font-size:12px;color:#8a8fa8">${ref}</td>
+        <td style="text-align:center;font-size:12px;color:#8a8fa8">${r.meta}</td>
+        <td style="text-align:center;font-size:12px;color:${CORES[r.st]}">${ROT[r.st]}</td>
+        <td style="text-align:center;font-size:12px">${tend}<br>${delta}</td>
+        <td style="text-align:center;font-size:12px;color:#8a8fa8">${this._fmt(r.ult.data)}</td></tr>`;
+    }).join('');
+
+    const c = d.comp[0];
+    const dosesTxt = d.doses.slice(0, 6).map(x => `<li>${this._fmt(x.data)} — ${this._esc(x.medicamento || '')} ${this._esc(x.dose || '')}</li>`).join('');
+    const medsTxt = d.meds.length ? d.meds.map(m => `<li>${this._esc(m.nome)} — ${this._esc(m.dose || '')}</li>`).join('') : '<li>Nenhuma registrada</li>';
+
+    return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div><h2 style="margin:0">${this._esc(nome)}</h2>
+          <div style="font-size:12px;color:#8a8fa8">Análise 360 · gerada em ${new Date().toLocaleDateString('pt-BR')}</div></div>
+        <button class="btn sec" onclick="PORTAL.exportarPDF('${d.pid}')">📄 Exportar PDF</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <div class="kpi"><div class="l">Peso atual</div><div class="v">${pesoAtual != null ? pesoAtual.toFixed(1) : '—'}<span style="font-size:12px"> kg</span></div></div>
+        <div class="kpi"><div class="l">${perda >= 0 ? 'Eliminados' : 'Variação'}</div><div class="v" style="color:#27c47d">${perda != null ? Math.abs(perda).toFixed(1) : '—'}<span style="font-size:12px"> kg</span></div></div>
+        ${cintAtual && cintInicial ? `<div class="kpi"><div class="l">Cintura</div><div class="v" style="color:#27c47d">−${(cintInicial - cintAtual).toFixed(0)}<span style="font-size:12px"> cm</span></div></div>` : ''}
+        <div class="kpi"><div class="l">IMC</div><div class="v">${imc != null ? imc.toFixed(1) : '—'}</div></div>
+        <div class="kpi"><div class="l">Ritmo (28d)</div><div class="v" style="font-size:18px">${velSem == null ? '—' : estavel ? 'estável' : (velSem > 0 ? '−' : '+') + Math.abs(velSem).toFixed(2) + ' kg/sem'}</div></div>
+      </div>
+      ${!altura ? '<div class="aviso" style="margin-top:12px">⚠️ Altura não cadastrada pelo paciente — IMC não pôde ser calculado.</div>' : ''}
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Evolução do peso</h3>
+      <div style="height:260px"><canvas id="gPeso"></canvas></div>
+    </div>
+
+    ${retrato.length ? `<div class="card">
+      <h3 style="margin-top:0">Retrato laboratorial</h3>
+      <p style="font-size:12px;color:#8a8fa8;margin-bottom:10px">Cor considera a faixa do laboratório <em>e</em> metas de otimização metabólica de uso geral. *Metas individuais dependem do risco do paciente e da sua conduta.</p>
+      <table><thead><tr><th>Marcador</th><th style="text-align:center">Resultado</th><th style="text-align:center">Ref. lab</th><th style="text-align:center">Meta otim.</th><th style="text-align:center">Status</th><th style="text-align:center">Evolução</th><th style="text-align:center">Coleta</th></tr></thead>
+      <tbody>${linhasLab}</tbody></table>
+    </div>` : ''}
+
+    <div class="card">
+      <h3 style="margin-top:0">Síntese</h3>
+      <ol style="line-height:1.9;font-size:14px">
+        <li><strong>Ganhos:</strong> ${perda > 0 ? `−${perda.toFixed(1)} kg${cintAtual && cintInicial ? ` e −${(cintInicial-cintAtual).toFixed(0)} cm de cintura` : ''}` : 'linha de base em formação'}${ganhos.length ? `; melhora em ${ganhos.slice(0,4).join(', ')}` : ''}.</li>
+        <li><strong>Lente de interpretação:</strong> valores refletem a fase atual da jornada. Em pacientes em treino de força, creatinina, ferritina, ácido úrico e enzimas hepáticas podem elevar-se sem significado patológico.</li>
+        <li><strong>Alvos remanescentes:</strong> ${alvos.length ? alvos.slice(0,5).join(', ') : 'nenhum marcador fora das metas registradas'}.</li>
+      </ol>
+    </div>
+
+    ${c ? `<div class="card"><h3 style="margin-top:0">Composição corporal</h3>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${[['Massa muscular',c.massa_muscular,'kg'],['Massa de gordura',c.massa_gordura,'kg'],['% Gordura',c.gordura_pct,'%'],['Gord. visceral',c.gordura_visceral,''],['TMB',c.tmb,'kcal']].filter(x=>x[1]!=null).map(x=>`<div class="kpi"><div class="l">${x[0]}</div><div class="v" style="font-size:20px">${x[1]}<span style="font-size:11px"> ${x[2]}</span></div></div>`).join('')}
+      </div>
+      <p style="font-size:12px;color:#8a8fa8;margin-top:10px">Medição de ${this._fmt(c.data)} · aparelho: ${this._esc(c.fonte || 'não informado')}. Comparar apenas medições da mesma fonte.</p></div>` : ''}
+
+    <div class="card">
+      <h3 style="margin-top:0">Medicações e doses</h3>
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px"><strong style="font-size:13px;color:#d4a843">Em uso</strong><ul style="font-size:14px;margin-top:6px">${medsTxt}</ul></div>
+        <div style="flex:1;min-width:220px"><strong style="font-size:13px;color:#d4a843">Últimas doses GLP-1</strong><ul style="font-size:14px;margin-top:6px">${dosesTxt || '<li>Nenhuma registrada</li>'}</ul></div>
+      </div>
+    </div>
+
+    <div class="card" style="border-color:rgba(212,168,67,0.25)">
+      <p style="font-size:12px;color:#8a8fa8;margin:0;line-height:1.7">Documento gerado a partir de dados <strong>auto-relatados</strong> pelo paciente no aplicativo VITALE. Não constitui laudo, diagnóstico ou conduta. A interpretação clínica é do médico assistente. Este acesso foi registrado e é visível ao paciente.</p>
+    </div>`;
+  },
+
+  _desenharGrafico(pesos, altura) {
+    const cv = document.getElementById('gPeso');
+    if (!cv || !pesos.length) return;
+    new Chart(cv.getContext('2d'), {
+      type: 'line',
+      data: { labels: pesos.map(p => this._fmt(p.data)),
+        datasets: [{ label: 'Peso (kg)', data: pesos.map(p => parseFloat(p.peso)), borderColor: '#27c47d', backgroundColor: 'rgba(39,196,125,0.08)', tension: 0.3, fill: true, pointRadius: 2 }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { color: '#545870', font: { size: 9 }, maxTicksLimit: 10 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                  y: { ticks: { color: '#545870', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } } } }
+    });
+  },
+
+  async exportarPDF(pid) {
+    try {
+      await this.sb.from('acessos_medico').insert({ medico_id: this.medico.id, paciente_id: pid, acao: 'exportou_pdf' });
+    } catch (e) {}
+    const el = document.getElementById('fichaConteudo');
+    html2pdf().set({ margin: 8, filename: `VITALE_360_${new Date().toISOString().slice(0,10)}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+      jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' } }).from(el).save();
+  },
+
+  async gerarConvite() {
+    const out = document.getElementById('conviteOut');
+    out.innerHTML = '<p style="font-size:13px;color:#8a8fa8">Gerando…</p>';
+    const { data, error } = await this.sb.from('consentimentos')
+      .insert({ paciente_id: this.medico.id, medico_id: this.medico.id, status: 'pendente' })
+      .select('convite_token').maybeSingle();
+    if (error) {
+      out.innerHTML = `<div class="msg err">Convites ainda não habilitados neste ambiente (${error.message}). Use o cadastro manual no painel administrativo durante o piloto.</div>`;
+      return;
+    }
+    out.innerHTML = `<div class="msg ok">Código: <strong>${data.convite_token}</strong><br>Peça ao paciente para inserir em Perfil → Meus médicos.</div>`;
+  },
+
+  voltar() {
+    document.getElementById('telaFicha').classList.add('oculto');
+    document.getElementById('telaLista').classList.remove('oculto');
+  },
+
+  _fmt(s) { return s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—'; },
+  _esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+};
+
+document.addEventListener('DOMContentLoaded', () => PORTAL.init());
+</script>
+</body>
+</html>

@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.5 · Metas IMC + Filtro Período · 2026-07-21';
+const VITALE_VERSION = 'v5.6 · Auditoria de Cálculos · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -289,6 +289,37 @@ const VITALE_CORE = {
   getSorted() { return [...this.state.weights].sort((a, b) => new Date(a.date) - new Date(b.date)); },
 
   get altura() { return this.state.profile?.altura || 1.70; },
+
+  // ===== v5.6 — VELOCIDADE DE PERDA (fonte única) =====
+  // ERRO CORRIGIDO: a velocidade era a média de TODO o histórico
+  // (primeiro peso → último). Quem perdeu muito no início e estagnou
+  // continuava vendo ritmo alto e projeções que nunca se realizariam.
+  // Agora usa a janela recente (padrão 28 dias) e só cai para o
+  // histórico quando não há registros recentes suficientes.
+  _velocidade(janelaDias = 28) {
+    const sorted = this.getSorted();
+    if (sorted.length < 2) return { kgDia: 0, base: 'sem_dados', dias: 0, confiavel: false };
+
+    const corte = new Date(); corte.setDate(corte.getDate() - janelaDias);
+    const corteStr = corte.toISOString().slice(0, 10);
+    const rec = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) >= corteStr);
+
+    if (rec.length >= 2) {
+      const a = rec[0], b = rec[rec.length - 1];
+      const d = Math.max(Math.round((new Date(b.date + 'T12:00:00') - new Date(a.date + 'T12:00:00')) / 86400000), 1);
+      return { kgDia: (a.peso - b.peso) / d, base: 'recente', dias: d, confiavel: d >= 7 };
+    }
+    // Fallback: histórico completo — marcado como pouco confiável
+    const f = sorted[0], l = sorted[sorted.length - 1];
+    const d = Math.max(Math.round((new Date(l.date + 'T12:00:00') - new Date(f.date + 'T12:00:00')) / 86400000), 1);
+    return { kgDia: (f.peso - l.peso) / d, base: 'historico', dias: d, confiavel: false };
+  },
+  // Texto de rodapé explicando a base do cálculo (transparência com o usuário)
+  _velocidadeFonte(v) {
+    if (v.base === 'recente') return `ritmo das últimas ${v.dias > 28 ? 4 : Math.max(Math.round(v.dias / 7), 1)} semana(s)`;
+    if (v.base === 'historico') return 'média de todo o histórico (poucos registros recentes)';
+    return 'sem dados suficientes';
+  },
   // Altura REAL do perfil, sem fallback. Null = não cadastrada/implausível.
   // Usada onde gravar dado errado é pior que não gravar (metas em cascata).
   get alturaValida() {
@@ -1294,14 +1325,13 @@ const VITALE_CORE = {
     // 2) TMB manual no perfil
     const hp = this.state.healthProfile || {};
     if (hp.tmb_manual) return { valor: hp.tmb_manual, fonte: 'informada por você' };
-    // 3) Mifflin-St Jeor com peso atual (assume masculino; idade do perfil ou 40)
-    const sorted = this.getSorted();
-    const peso = sorted.length ? sorted[sorted.length - 1].peso : null;
-    if (!peso) return null;
-    const alturaCm = this.altura * 100;
-    const idade = hp.idade || 40;
-    // Mifflin-St Jeor (homem): 10*peso + 6.25*altura_cm - 5*idade + 5
-    const tmb = Math.round(10 * peso + 6.25 * alturaCm - 5 * idade + 5);
+    // 3) Mifflin-St Jeor — v5.6: usa a implementação correta (_tmb), que
+    // considera SEXO e idade real (data_nascimento).
+    // ERRO CORRIGIDO: esta função assumia sexo masculino e idade 40 fixa
+    // (hp.idade nem existe no perfil — o campo é data_nascimento). Para
+    // mulheres a fórmula difere em 166 kcal, distorcendo o balanço calórico.
+    const tmb = this._tmb();
+    if (tmb == null) return null; // sem sexo/nascimento: melhor não estimar
     return { valor: tmb, fonte: 'estimada por fórmula (Mifflin-St Jeor)' };
   },
 
@@ -1657,8 +1687,8 @@ const VITALE_CORE = {
     const first = sorted[0], last = sorted[sorted.length - 1];
     const totalPerdido = first.peso - last.peso;
     const pctPerdido = (totalPerdido / first.peso * 100).toFixed(1);
-    const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
-    const velDiaria = diasTotal > 0 ? totalPerdido / diasTotal : 0;
+    const _v = this._velocidade();
+    const velDiaria = _v.kgDia;
     const velSemanal = (velDiaria * 7).toFixed(2);
     const temMeta = this.metaKg != null;
     const kgFalta = temMeta ? Math.max(last.peso - this.metaKg, 0).toFixed(1) : null;
@@ -1667,10 +1697,13 @@ const VITALE_CORE = {
 
     let tendencia4w = '';
     const last4wDate = new Date(); last4wDate.setDate(last4wDate.getDate() - 28);
-    const recent4w = sorted.filter(w => new Date(w.date) >= last4wDate);
+    const _corte4w = last4wDate.toISOString().slice(0, 10);
+    // v5.6: comparação por STRING de data normalizada (antes usava new Date(w.date)
+    // sem hora, que desloca 1 dia em fusos negativos como o Brasil)
+    const recent4w = sorted.filter(w => (this._normData ? this._normData(w.date) : w.date) >= _corte4w);
     if (recent4w.length >= 2) {
       const r0 = recent4w[0], rN = recent4w[recent4w.length - 1];
-      const rDias = Math.max(Math.floor((new Date(rN.date) - new Date(r0.date)) / 86400000), 1);
+      const rDias = Math.max(Math.round((new Date(rN.date + 'T12:00:00') - new Date(r0.date + 'T12:00:00')) / 86400000), 1);
       const velRecente = ((r0.peso - rN.peso) / rDias * 7);
       if (velRecente > 0) {
         const sinal = velRecente > velDiaria * 7 * 1.1 ? '📈 acelerando'
@@ -2768,8 +2801,7 @@ const VITALE_CORE = {
     }
 
     const first = sorted[0], last = sorted[sorted.length - 1];
-    const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
-    const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
+    const velDiaria = this._velocidade().kgDia;
 
     const allPesos = sorted.map(w => w.peso);
     const pesoMax = Math.max(...allPesos);
@@ -2917,8 +2949,7 @@ const VITALE_CORE = {
 
     // Projeção de IMC: mesma matemática da projeção de peso (peso/altura²)
     const imcMeta = this.metaKg != null ? this.metaKg / h2 : null; // IMC alvo (null = sem meta de perda)
-    const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
-    const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
+    const velDiaria = this._velocidade().kgDia;
     const projData = new Array(imcData.length - 1).fill(null);
     projData.push(imcData[imcData.length - 1]); // ancora no último ponto real
 
@@ -3051,14 +3082,14 @@ const VITALE_CORE = {
     const first = sorted[0], last = sorted[sorted.length - 1];
     const imc = this.calcIMC(last.peso, this.altura);
     const info = this.getObesidadeInfo(imc);
-    const diasTotal = Math.floor((new Date(last.date) - new Date(first.date)) / 86400000);
-    const velDiaria = diasTotal > 0 ? (first.peso - last.peso) / diasTotal : 0;
+    const _vp = this._velocidade();
+    const velDiaria = _vp.kgDia;
     const velSemanal = (velDiaria * 7).toFixed(2);
     const kgFalta = this.metaKg != null ? Math.max(last.peso - this.metaKg, 0).toFixed(1) : null;
 
     const setText = (id, v, c) => { const el = document.getElementById(id); if (el) { el.textContent = v; if (c) el.style.color = c; } };
     setText('statusObesidade', info.grau, info.color);
-    setText('velocidadePerda', `${velSemanal} kg/semana`);
+    setText('velocidadePerda', velDiaria > 0 ? `${velSemanal} kg/semana` : 'estável');
     setText('imcAtualMetas', imc);
     setText('faltaMeta', kgFalta != null ? `${kgFalta} kg` : '—');
 
@@ -3069,9 +3100,10 @@ const VITALE_CORE = {
       } else if (velDiaria > 0) {
         const diasParaMeta = Math.ceil((last.peso - this.metaKg) / velDiaria);
         const dataMeta = new Date(); dataMeta.setDate(dataMeta.getDate() + diasParaMeta);
-        pt.innerHTML = `No ritmo atual de <strong style="color:var(--gold)">${velSemanal} kg/semana</strong>, você atingirá <strong>${this.metaKg.toFixed(1)} kg (IMC < 30)</strong> em <strong style="color:var(--em)">${this.fmtLong(dataMeta)}</strong> — ${diasParaMeta} dias.`;
+        pt.innerHTML = `No ritmo atual de <strong style="color:var(--gold)">${velSemanal} kg/semana</strong>, você atingirá <strong>${this.metaKg.toFixed(1)} kg (IMC < 30)</strong> em <strong style="color:var(--em)">${this.fmtLong(dataMeta)}</strong> — ${diasParaMeta} dias.<br><span style="font-size:11px;color:var(--textm)">Base: ${this._velocidadeFonte(_vp)}${_vp.confiavel ? '' : ' — estimativa pouco confiável, registre mais pesagens'}.</span>`;
       } else {
-        pt.textContent = 'Adicione registros mais recentes para calcular a projeção.';
+        // v5.6: peso estável não é "falta de dados" — é informação clínica.
+        pt.innerHTML = `Seu peso está <strong>estável</strong> nas últimas semanas — sem tendência de queda para projetar.<br><span style="font-size:11px;color:var(--textm)">Estabilidade após perda é comum e pode indicar recomposição corporal. Acompanhe a composição (músculo × gordura) e a cintura.</span>`;
       }
     }
 
@@ -3716,8 +3748,7 @@ const VITALE_CORE = {
     const sorted = this.getSorted();
     const first = sorted[0];
     const current = sorted[sorted.length - 1].peso;
-    const diasDecorridos = sorted.length >= 2 ? Math.max(Math.floor((new Date(sorted[sorted.length - 1].date) - new Date(first.date)) / 86400000), 1) : 1;
-    const velD = sorted.length >= 2 ? (first.peso - current) / diasDecorridos : 0;
+    const velD = this._velocidade().kgDia;
 
     el.innerHTML = this.state.submetas.map(s => {
       const reached = current <= s.pesoAlvo;
