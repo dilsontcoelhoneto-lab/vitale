@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.19 · Data do Exame · 2026-07-21';
+const VITALE_VERSION = 'v5.20 · Dados Básicos no Perfil · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1557,7 +1557,7 @@ const VITALE_CORE = {
         </p>`
       : `<div style="margin-top:12px;padding:10px 12px;background:rgba(212,168,67,0.07);border:1px solid rgba(212,168,67,0.2);border-radius:8px">
           <p style="font-size:12px;color:var(--gold);line-height:1.6">Para calcular seu gasto diário preciso de <strong>sexo</strong> e <strong>data de nascimento</strong> — sem eles não estimo (evita conta errada).
-          <a href="#" onclick="VITALE_CORE.switchTab({currentTarget:document.querySelector('[onclick*=saude]')},'saude');return false" style="color:var(--gold);text-decoration:underline">Completar no perfil →</a></p>
+          <a href="#" onclick="VITALE_CORE.irDadosBasicos();return false" style="color:var(--gold);text-decoration:underline">Completar agora →</a></p>
         </div>`}`;
   },
 
@@ -2184,6 +2184,21 @@ const VITALE_CORE = {
     } else {
       if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🤔 Não consegui identificar essa imagem como treino, refeição, balança, peso ou exame. Tente uma foto mais nítida ou use as seções específicas abaixo.</p>';
     }
+  },
+
+  // v5.20 — leva à aba Saúde E rola até os dados básicos, destacando o card
+  irDadosBasicos() {
+    const btn = document.querySelector('.tab-btn[onclick*="saude"]');
+    this.switchTab({ currentTarget: btn || { classList: { add() {} } } }, 'saude');
+    setTimeout(() => {
+      const card = document.getElementById('cardDadosBasicos');
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.style.transition = 'box-shadow .4s';
+      card.style.boxShadow = '0 0 0 3px rgba(212,168,67,0.45)';
+      setTimeout(() => { card.style.boxShadow = ''; }, 2200);
+      document.getElementById('hDataNasc')?.focus();
+    }, 220);
   },
 
   // v5.11 — ponto de entrada único: vai ao dashboard e foca o campo Registrar
@@ -4884,6 +4899,12 @@ const VITALE_CORE = {
     setVal('hSono', hp.horas_sono);
     setVal('hStress', hp.nivel_stress);
 
+    // v5.20: dados básicos na aba (sexo, nascimento, altura, atividade)
+    setVal('hDataNasc', hp.data_nascimento);
+    setVal('hSexo', hp.sexo);
+    setVal('hAltura', this.state.profile?.altura);
+    setVal('hFatorAtividade', hp.fator_atividade ? String(hp.fator_atividade) : '1.375');
+
     // v5.16: protocolo GLP-1
     const gAtivo = document.getElementById('glp1Ativo'); if (gAtivo) gAtivo.checked = !!hp.glp1_ativo;
     setVal('glp1Medicamento', hp.glp1_medicamento);
@@ -4941,6 +4962,9 @@ const VITALE_CORE = {
         objetivo: getStr('hObjetivo'),
         objetivo_outro: getStr('hObjetivoOutro'),
         urgencia: getStr('hUrgencia'),
+        data_nascimento: getStr('hDataNasc'),
+        sexo: getStr('hSexo'),
+        fator_atividade: getNum('hFatorAtividade'),
         glp1_ativo: !!document.getElementById('glp1Ativo')?.checked,
         glp1_medicamento: getStr('glp1Medicamento'),
         glp1_dose: getStr('glp1Dose'),
@@ -4948,10 +4972,21 @@ const VITALE_CORE = {
         updated_at: new Date().toISOString()
       };
 
+      // v5.20 — altura pertence a profiles; salva junto para o usuário não precisar
+      // procurar em dois lugares diferentes.
+      const alturaNova = parseFloat((document.getElementById('hAltura')?.value || '').replace(',', '.'));
+      if (!isNaN(alturaNova) && alturaNova >= 1.2 && alturaNova <= 2.3) {
+        try {
+          const u = await window.VitaleAuth.getUser();
+          await window.sb.from('profiles').update({ altura: alturaNova, updated_at: new Date().toISOString() }).eq('id', u.id);
+          this.state.profile = { ...this.state.profile, altura: alturaNova };
+        } catch (eAlt) { console.warn('altura', eAlt); }
+      }
       const { error } = await window.sb.from('health_profile').upsert(data);
       if (error) throw error;
 
       this.state.healthProfile = data;
+      try { this.updateDashboard(); this.renderBalancoCalorico(); this.renderDoseGLP1(); } catch (e) {}
       this._invalidateCoachCache();
       this.showAlert('success', '✅ Perfil de saúde salvo!');
       if (window.VitaleAnalytics) window.VitaleAnalytics.track('health_profile_saved');
