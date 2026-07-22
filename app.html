@@ -15,6 +15,17 @@
 <style>
   .header-stat-val, #hdrPeso, #hdrIMC, #hdrPerda { font-family:'Fraunces',serif; font-variant-numeric:tabular-nums; letter-spacing:0 }
   .kpi-value, .stat-value, .big-num, .coach-stat-val { font-family:'Fraunces',serif; font-variant-numeric:tabular-nums }
+  /* v5.23 — acordeão de seções (simplifica telas longas) */
+  details.secao { background:var(--card,#0d1223); border:1px solid var(--border,rgba(255,255,255,.08));
+    border-radius:14px; margin-bottom:12px; overflow:hidden }
+  details.secao > summary { cursor:pointer; list-style:none; padding:16px 18px; display:flex;
+    align-items:center; justify-content:space-between; gap:10px; font-size:15.5px; color:var(--text) }
+  details.secao > summary::-webkit-details-marker { display:none }
+  details.secao > summary::after { content:'⌄'; font-size:19px; color:var(--textm); transition:transform .2s }
+  details.secao[open] > summary::after { transform:rotate(180deg) }
+  details.secao > summary:hover { background:rgba(255,255,255,.02) }
+  details.secao .conteudo { padding:0 18px 18px }
+  details.secao .resumo { font-size:12.5px; color:var(--textm); font-weight:400 }
   /* algarismos alinhados em todas as tabelas de dados */
   table td, table th { font-variant-numeric:tabular-nums }
 </style>
@@ -261,7 +272,8 @@
   <!-- SAUDE (NOVA ABA) -->
   <div id="saude" class="tab-content" data-flag="perfil_clinico">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Saúde</h2>
-    <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Seu perfil clínico é usado pelo Coach IA para análises mais precisas e gera relatórios profissionais para seu médico.</p>
+    <p style="color:var(--textm);font-size:14px;margin-bottom:16px;line-height:1.7">Quanto mais completo, melhores as análises. Preencha no seu ritmo — o essencial está aberto, o resto fica guardado abaixo.</p>
+    <div id="perfilCompletude" style="margin-bottom:20px"></div>
 
     <!-- v5.20 — dados básicos direto na aba (antes só existiam no questionário) -->
     <div class="card" id="cardDadosBasicos" style="border-color:rgba(212,168,67,0.3)">
@@ -272,8 +284,9 @@
         <div><label>Sexo biológico</label>
           <select id="hSexo">
             <option value="">Selecione...</option>
-            <option value="masculino">Masculino</option>
-            <option value="feminino">Feminino</option>
+            <option value="M">Masculino</option>
+            <option value="F">Feminino</option>
+            <option value="outro">Prefiro não informar</option>
           </select>
           <p style="font-size:10.5px;color:var(--textm);margin-top:4px">Usado apenas na fórmula metabólica (Mifflin-St Jeor).</p>
         </div>
@@ -292,8 +305,9 @@
       </div>
     </div>
 
-    <div class="card">
-      <h3>🩺 Sinais Vitais</h3>
+    <details class="secao">
+      <summary><span><strong>🩺 Sinais Vitais</strong><br><span class="resumo">Pressão, glicemia e frequência cardíaca</span></span></summary>
+      <div class="conteudo">
       <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Médias de aferição. Atualize com base nas últimas medições.</p>
       <div class="form-group">
         <div><label>Pressão Sistólica (mmHg)</label><input type="number" id="hPaSistolica" placeholder="120"></div>
@@ -304,9 +318,11 @@
         <div><label>FC em repouso (bpm)</label><input type="number" id="hFc" placeholder="68"></div>
       </div>
     </div>
+    </details>
 
-    <div class="card">
-      <h3>💉 Medicações em Uso</h3>
+    <details class="secao">
+      <summary><span><strong>💉 Medicações em Uso</strong><br><span class="resumo">GLP-1, estatinas, metformina e outros</span></span></summary>
+      <div class="conteudo">
       <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Marque tudo que se aplica. Isso é importante para projeções precisas.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
         <label class="check-card"><input type="checkbox" id="hMedGlp1" onchange="document.getElementById('hMedGlp1NomeWrap').style.display=this.checked?'block':'none'"><span class="check-content"><strong>💉 GLP-1</strong><small>Mounjaro, Ozempic, Wegovy, Saxenda...</small></span></label>
@@ -326,9 +342,11 @@
         <textarea id="hMedOutros" placeholder="Ex: Ezetimiba 10mg, Rosuvastatina 10mg..." style="min-height:60px"></textarea>
       </div>
     </div>
+    </details>
 
-    <div class="card">
-      <h3>🩻 Condições de Saúde</h3>
+    <details class="secao">
+      <summary><span><strong>🩻 Condições de Saúde</strong><br><span class="resumo">Diagnósticos e histórico familiar</span></span></summary>
+      <div class="conteudo">
       <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Diagnósticos confirmados pelo médico.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
         <label class="check-card"><input type="checkbox" id="hCondDt2"><span class="check-content"><strong>Diabetes Tipo 2</strong></span></label>
@@ -346,9 +364,11 @@
         <textarea id="hCondOutros" placeholder="Liste outras condições relevantes..." style="min-height:60px"></textarea>
       </div>
     </div>
+    </details>
 
-    <div class="card">
-      <h3>🏃 Estilo de Vida</h3>
+    <details class="secao">
+      <summary><span><strong>🏃 Estilo de Vida</strong><br><span class="resumo">Treino, sono e estresse</span></span></summary>
+      <div class="conteudo">
       <div class="form-group">
         <div>
           <label>Nível de Atividade Física</label>
@@ -378,10 +398,12 @@
         </div>
       </div>
     </div>
+    </details>
 
     <!-- Bloco A.1: Objetivo & Urgência -->
-    <div class="card">
-      <h3>🎯 Objetivo & Urgência</h3>
+    <details class="secao">
+      <summary><span><strong>🎯 Objetivo & Urgência</strong><br><span class="resumo">Define como o Coach IA fala com você</span></span></summary>
+      <div class="conteudo">
       <p style="font-size:11px;color:var(--textm);margin-bottom:16px">Define como o Coach IA personaliza feedback e ajuda a gerar metas automáticas.</p>
       <div class="form-group">
         <div>
@@ -411,8 +433,9 @@
         <textarea id="hObjetivoOutro" placeholder="Descreva seu objetivo..." style="min-height:60px"></textarea>
       </div>
     </div>
+    </details>
 
-    <button class="save-btn-mega" onclick="VITALE_CORE.salvarHealthProfile()">💾 SALVAR PERFIL DE SAÚDE</button>
+    <button class="btn btn-primary" onclick="VITALE_CORE.salvarHealthProfile()" style="width:100%;padding:14px;margin-top:8px">💾 Salvar perfil de saúde</button>
 
     <!-- ===== PROTOCOLO GLP-1 (v5.16) — lembrete semanal de dose ===== -->
     <div class="card" style="margin-top:16px;border-color:rgba(74,157,232,0.25)">
@@ -1257,6 +1280,17 @@
   </div>
 </div>
 
+<!-- v5.22 — BARRA DE SALVAR FIXA: aparece só quando há alteração pendente -->
+<div id="barraSalvar" style="position:fixed;left:0;right:0;bottom:0;z-index:220;transform:translateY(120%);
+  transition:transform .25s ease;background:rgba(13,18,35,0.97);backdrop-filter:blur(10px);
+  border-top:1px solid rgba(212,168,67,0.4);padding:12px 18px calc(12px + env(safe-area-inset-bottom))">
+  <div style="max-width:900px;margin:0 auto;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <span style="flex:1;min-width:150px;font-size:13.5px;color:var(--gold)">✎ Você tem alterações não salvas</span>
+    <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.descartarAlteracoes()">Descartar</button>
+    <button class="btn btn-primary" onclick="VITALE_CORE.salvarHealthProfile()" style="padding:11px 26px">💾 Salvar</button>
+  </div>
+</div>
+
 <!-- BOTÃO FLUTUANTE "REGISTRAR" (v5.11) — ponto de entrada único, visível em qualquer aba -->
 <button id="fabRegistrar" onclick="VITALE_CORE.irRegistrar()" title="Registrar"
   style="position:fixed;right:20px;bottom:52px;width:60px;height:60px;border-radius:50%;border:0;z-index:210;
@@ -1266,13 +1300,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Importar PDF (A23)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Perfil Simples (A25)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A23"></script>
+<script src="/assets/js/vitale-calc.js?v=A25"></script>
 <script src="/assets/js/supabase-client.js?v=A17"></script>
 <script src="/assets/js/feature-flags.js?v=A17"></script>
-<script src="/assets/js/vitale-core.js?v=A23"></script>
+<script src="/assets/js/vitale-core.js?v=A25"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1290,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.21') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.23') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();

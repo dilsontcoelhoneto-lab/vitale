@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.21 · Importar PDF · 2026-07-21';
+const VITALE_VERSION = 'v5.23 · Perfil Simplificado · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -114,6 +114,8 @@ const VITALE_CORE = {
       try { this.updateDashboard(); } catch (e) { console.warn('updateDashboard', e); }
       try { this.updateAgendamentos(); } catch (e) { console.warn('updateAgendamentos', e); }
       try { this.fillHealthProfileForm(); } catch (e) { console.warn('fillHealthProfileForm', e); }
+      try { this._vigiarAlteracoesSaude(); } catch (e) { console.warn('vigiarSaude', e); }
+      try { this.renderCompletude(); } catch (e) { console.warn('completude', e); }
       try { this.renderMoodCard(); } catch (e) { console.warn('renderMoodCard', e); }
       try { this.renderDoseGLP1(); } catch (e) { console.warn('renderDoseGLP1', e); }
       try { this.renderMoodHistorico(); } catch (e) { console.warn('renderMoodHistorico', e); }
@@ -2237,6 +2239,64 @@ const VITALE_CORE = {
     } else {
       if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🤔 Não consegui identificar essa imagem como treino, refeição, balança, peso ou exame. Tente uma foto mais nítida ou use as seções específicas abaixo.</p>';
     }
+  },
+
+  // ===== v5.23 — COMPLETUDE DO PERFIL (mostra o que falta sem abrir tudo) =====
+  renderCompletude() {
+    const el = document.getElementById('perfilCompletude');
+    if (!el) return;
+    const hp = this.state.healthProfile || {};
+    const itens = [
+      { ok: !!(this.state.profile?.altura), rot: 'altura' },
+      { ok: !!hp.data_nascimento, rot: 'nascimento' },
+      { ok: !!hp.sexo, rot: 'sexo' },
+      { ok: !!hp.objetivo, rot: 'objetivo' },
+      { ok: !!(hp.pa_sistolica || hp.glicemia_jejum), rot: 'sinais vitais' },
+      { ok: !!(hp.horas_sono || hp.freq_treino), rot: 'estilo de vida' }
+    ];
+    const feitos = itens.filter(i => i.ok).length;
+    const pct = Math.round((feitos / itens.length) * 100);
+    const faltam = itens.filter(i => !i.ok).map(i => i.rot);
+    const cor = pct >= 80 ? 'var(--em)' : pct >= 50 ? 'var(--gold)' : 'var(--orange)';
+    el.innerHTML = `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+          <span style="font-size:13.5px;color:var(--text)">Perfil <strong style="color:${cor}">${pct}% completo</strong></span>
+          <span style="font-size:12px;color:var(--textm)">${feitos} de ${itens.length}</span>
+        </div>
+        <div style="height:7px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${cor};border-radius:4px;transition:width .5s"></div></div>
+        ${faltam.length ? `<p style="font-size:12px;color:var(--textm);margin-top:9px">Falta preencher: <strong style="color:var(--text)">${faltam.join(' · ')}</strong></p>` : '<p style="font-size:12px;color:var(--em);margin-top:9px">Tudo preenchido — suas análises estão no máximo de precisão.</p>'}
+      </div>`;
+  },
+
+  // ===== v5.22 — BARRA DE SALVAR (aparece só com alterações pendentes) =====
+  _temAlteracoes: false,
+  _mostrarBarraSalvar(mostrar) {
+    const b = document.getElementById('barraSalvar');
+    if (!b) return;
+    this._temAlteracoes = !!mostrar;
+    b.style.transform = mostrar ? 'translateY(0)' : 'translateY(120%)';
+  },
+
+  // Liga a detecção nos campos da aba Saúde (chamado uma vez, no init)
+  _vigiarAlteracoesSaude() {
+    const aba = document.getElementById('saude');
+    if (!aba || aba._vigiado) return;
+    aba._vigiado = true;
+    aba.addEventListener('input', () => this._mostrarBarraSalvar(true));
+    aba.addEventListener('change', () => this._mostrarBarraSalvar(true));
+    // avisa antes de sair com alterações pendentes
+    window.addEventListener('beforeunload', (e) => {
+      if (this._temAlteracoes) { e.preventDefault(); e.returnValue = ''; }
+    });
+  },
+
+  descartarAlteracoes() {
+    if (!confirm('Descartar as alterações não salvas?')) return;
+    try { this.fillHealthProfileForm(); } catch (e) {}
+    this._mostrarBarraSalvar(false);
+    this.showAlert('info', 'Alterações descartadas.');
   },
 
   // v5.20 — leva à aba Saúde E rola até os dados básicos, destacando o card
@@ -5044,6 +5104,8 @@ const VITALE_CORE = {
       if (error) throw error;
 
       this.state.healthProfile = data;
+      this._mostrarBarraSalvar(false);
+      try { this.renderCompletude(); } catch (e) {}
       try { this.updateDashboard(); this.renderBalancoCalorico(); this.renderDoseGLP1(); } catch (e) {}
       this._invalidateCoachCache();
       this.showAlert('success', '✅ Perfil de saúde salvo!');
