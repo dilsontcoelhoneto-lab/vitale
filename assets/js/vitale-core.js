@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.31 · Legibilidade + 2FA do Paciente · A31 · 2026-07-22';
+const VITALE_VERSION = 'v5.32 · E-mail de Segurança + Impressão da Ficha · A32 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -464,12 +464,32 @@ const VITALE_CORE = {
       });
       if (error) { console.warn('registrar_dispositivo', error); return; }
       if (novo) {
-        // Aviso in-app. O e-mail depende de provedor de envio ainda não
-        // configurado — ver docs/SEGURANCA_prioridades.md.
         this.showAlert('info', '🔐 Primeiro acesso a partir de ' + this._rotuloDispositivo() +
           '. Se não foi você, troque sua senha em Configurações.');
+        this._avisarPorEmail('dispositivo_novo', {
+          rotulo: this._rotuloDispositivo(),
+          quando: new Date().toLocaleString('pt-BR')
+        });
       }
     } catch (e) { console.warn('registrarDispositivo', e); }
+  },
+
+  // v5.32 — aviso por e-mail. Nunca deve quebrar o app: se o provedor não
+  // estiver configurado, o endpoint responde { ok:false } e seguimos.
+  // O destinatário é definido no servidor a partir do token, não aqui —
+  // por isso não passamos e-mail nenhum.
+  async _avisarPorEmail(tipo, dados) {
+    try {
+      const { data: { session } } = await window.sb.auth.getSession();
+      if (!session?.access_token) return;
+      const r = await fetch('/api/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+        body: JSON.stringify({ tipo, dados })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!j.ok) console.info('[VITALE] aviso por e-mail não enviado:', j.motivo || r.status);
+    } catch (e) { console.info('[VITALE] aviso por e-mail indisponível', e); }
   },
 
   async loadDispositivos() {

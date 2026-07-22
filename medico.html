@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A31"></script>
+<script src="/config.js?v=A32"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -54,6 +54,57 @@ input:focus{outline:none;border-color:var(--ouro)}
 .btn:hover{opacity:.92}.btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.sec{background:transparent;color:var(--tinta);border:1px solid var(--linha2)}
 .btn.sm{padding:8px 15px;font-size:13.5px}
+
+
+/* ============================================================
+   v5.32 · Bloco 3 — impressão e densidade
+   ============================================================ */
+
+/* ---- Tabela em tela estreita ----
+   7 colunas não cabem num celular. Em vez de rolagem horizontal
+   (que esconde a coluna de sinalizações, justamente a que importa),
+   cada linha vira um bloco com rótulo. */
+@media (max-width:720px){
+  table.pacientes thead{position:absolute;left:-9999px}
+  table.pacientes tr.pac{display:block;border:1px solid var(--linha);border-radius:10px;
+    margin-bottom:10px;padding:12px 14px;background:#FFFEFB}
+  table.pacientes tr.pac.at{border-left:3px solid var(--ambar)}
+  table.pacientes tr.pac td{display:flex;justify-content:space-between;gap:14px;
+    border:0;padding:5px 0;text-align:right}
+  table.pacientes tr.pac td::before{content:attr(data-rot);color:var(--suave);
+    font-size:12px;letter-spacing:.8px;text-transform:uppercase;text-align:left;flex:0 0 auto}
+  table.pacientes tr.pac td:first-child{border-left:0;font-size:17px;padding-bottom:10px;
+    margin-bottom:6px;border-bottom:1px solid var(--linha);display:block;text-align:left}
+  table.pacientes tr.pac td:first-child::before{content:''}
+  table.pacientes tr.pac td.ver{display:none}
+}
+
+/* ---- Impressão ----
+   O médico vai querer anexar a ficha ao prontuário dele. Sem folha de
+   estilo de impressão, sai o portal inteiro com menu, botões e fundo
+   creme desperdiçando tinta. */
+@media print{
+  @page{ size:A4; margin:14mm 12mm 16mm }
+  body{background:#fff;color:#000;font-size:11.5pt}
+  .topo,.sair,.btn,#btnSair,#btnPerfil,.aviso-nao-imprimir,
+  #telaLista,#telaPerfil,#avisoInatividade{ display:none !important }
+  .wrap{max-width:none;padding:0}
+  .card{border:1px solid #bbb;border-radius:0;padding:12px 14px;margin-bottom:10px;
+    break-inside:avoid;page-break-inside:avoid}
+  .sec{border-bottom:1px solid #000;color:#000}
+  table{font-size:10.5pt}
+  th,td{padding:6px 8px}
+  thead{display:table-header-group}      /* repete o cabeçalho a cada página */
+  tr{break-inside:avoid;page-break-inside:avoid}
+  h1,h2,h3{break-after:avoid;page-break-after:avoid}
+  canvas{max-width:100% !important;height:auto !important}
+  a{text-decoration:none;color:#000}
+  /* Rodapé de procedência: documento impresso sem origem não serve
+     para nada num prontuário. */
+  .rodape-impressao{display:block !important;margin-top:14px;padding-top:8px;
+    border-top:1px solid #999;font-size:9pt;color:#333;line-height:1.5}
+}
+.rodape-impressao{display:none}
 
 /* desde último acesso */
 .desde{background:var(--papel2);border:1px solid var(--linha);border-radius:9px;padding:13px 18px;font-size:14.5px;color:var(--tinta2);margin-bottom:26px;line-height:1.7}
@@ -309,7 +360,7 @@ table.lab td{padding:11px 10px}
       <div class="aviso">Dados auto-relatados pelos pacientes, liberados por autorização expressa. Este portal é informativo e não constitui prontuário eletrônico — a conduta clínica e o registro oficial são de sua responsabilidade.</div>
       <div id="listaMsg"></div>
       <div class="card" style="padding:0;overflow-x:auto">
-        <table>
+        <table class="pacientes">
           <thead><tr><th>Paciente</th><th>Peso</th><th>Variação</th><th>Ritmo 28d</th><th>Últ. registro</th><th>Sinalizações</th><th></th></tr></thead>
           <tbody id="tbPacientes"><tr><td colspan="7" class="vazio">Carregando…</td></tr></tbody>
         </table>
@@ -400,7 +451,10 @@ table.lab td{padding:11px 10px}
 
   <!-- FICHA -->
   <div id="telaFicha" class="oculto">
-    <button class="btn sec sm" onclick="PORTAL.voltar()" style="margin-bottom:18px">← Voltar à lista</button>
+    <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
+      <button class="btn sec sm" onclick="PORTAL.voltar()">← Voltar à lista</button>
+      <button class="btn sec sm" onclick="PORTAL.imprimirFicha()">Imprimir ficha</button>
+    </div>
     <div id="fichaConteudo"></div>
   </div>
 
@@ -807,11 +861,11 @@ const PORTAL = {
       if(!s.length)s.push('<span class="marca-ok">sem alertas</span>');
       linhas.push({at,html:`<tr class="pac ${at?'at':''}" onclick="PORTAL.abrirFicha('${p.paciente_id}')">
         <td><b>${this._esc(p.nome||'Paciente')}</b></td>
-        <td class="num">${r.peso!=null?r.peso.toFixed(1)+' kg':'—'}</td>
-        <td class="num" style="color:${r.varia<0?'var(--verde)':r.varia>0?'var(--vermelho)':'var(--suave)'}">${r.varia!=null?(r.varia>0?'+':'')+r.varia.toFixed(1)+' kg':'—'}</td>
-        <td class="num">${r.vel==null?'—':Math.abs(r.vel)<0.1?'<span style="color:var(--suave)">estável</span>':(r.vel>0?'−':'+')+Math.abs(r.vel).toFixed(2)}</td>
-        <td style="color:var(--tinta2);font-size:14px">${r.ultima||'—'}</td>
-        <td>${s.join(' · ')}</td><td class="ver">ver →</td></tr>`});
+        <td class="num" data-rot="Peso">${r.peso!=null?r.peso.toFixed(1)+' kg':'—'}</td>
+        <td class="num" data-rot="Variação" style="color:${r.varia<0?'var(--verde)':r.varia>0?'var(--vermelho)':'var(--suave)'}">${r.varia!=null?(r.varia>0?'+':'')+r.varia.toFixed(1)+' kg':'—'}</td>
+        <td class="num" data-rot="Ritmo 28d">${r.vel==null?'—':Math.abs(r.vel)<0.1?'<span style="color:var(--suave)">estável</span>':(r.vel>0?'−':'+')+Math.abs(r.vel).toFixed(2)}</td>
+        <td data-rot="Últ. registro" style="color:var(--tinta2);font-size:14px">${r.ultima||'—'}</td>
+        <td data-rot="Sinalizações">${s.join(' · ')}</td><td class="ver">ver →</td></tr>`});
     }
     linhas.sort((a,b)=>(b.at?1:0)-(a.at?1:0));
     tb.innerHTML=linhas.map(l=>l.html).join('');
@@ -842,6 +896,7 @@ const PORTAL = {
   },
 
   async abrirFicha(pid){
+    this._pidAtual=pid;
     document.getElementById('telaLista').classList.add('oculto');
     document.getElementById('telaFicha').classList.remove('oculto');
     window.scrollTo(0,0);
@@ -1016,6 +1071,23 @@ const PORTAL = {
         plugins:{legend:{display:false},tooltip:{backgroundColor:'#1C1B18',titleColor:'#FBF8F3',bodyColor:'#FBF8F3',padding:10}},
         scales:{x:{ticks:{color:'#8A8578',font:{size:10},maxTicksLimit:12},grid:{display:false}},
           y:{ticks:{color:'#8A8578',font:{size:11},callback:v=>v+' kg'},grid:{color:'#E4DFD4'}}}}});
+  },
+
+  // v5.32 — impressão da ficha. Registra na trilha igual à exportação em
+  // PDF: sair do sistema em papel é uma saída de dado como qualquer outra.
+  async imprimirFicha(){
+    const pid=this._pidAtual;
+    if(pid){ try{ await this.sb.from('acessos_medico').insert(
+      {medico_id:this.medico.id,paciente_id:pid,acao:'exportou_pdf',detalhe:'impressao'}); }catch(e){} }
+    const rod=document.createElement('div');
+    rod.className='rodape-impressao';
+    rod.innerHTML='Emitido por '+this._esc(this.medico?.nome||'')+' · CRM '+this._esc(this.medico?.crm||'')+'/'+this._esc(this.medico?.crm_uf||'')+
+      ' · '+new Date().toLocaleString('pt-BR')+
+      '<br>VITALE — dados auto-relatados pelo paciente, liberados por autorização expressa. Documento informativo; não constitui prontuário eletrônico.';
+    const alvo=document.getElementById('fichaConteudo');
+    alvo.appendChild(rod);
+    window.print();
+    setTimeout(()=>rod.remove(),800);
   },
 
   async exportarPDF(pid){

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A31">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A32">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A31"></script>
+<script src="/config.js?v=A32"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -1278,13 +1278,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">A31</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">A32</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A31"></script>
-<script src="/assets/js/supabase-client.js?v=A31"></script>
-<script src="/assets/js/feature-flags.js?v=A31"></script>
-<script src="/assets/js/vitale-core.js?v=A31"></script>
+<script src="/assets/js/vitale-calc.js?v=A32"></script>
+<script src="/assets/js/supabase-client.js?v=A32"></script>
+<script src="/assets/js/feature-flags.js?v=A32"></script>
+<script src="/assets/js/vitale-core.js?v=A32"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1301,7 +1301,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.31';
+  const CORE_ESPERADO = 'v5.32';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
