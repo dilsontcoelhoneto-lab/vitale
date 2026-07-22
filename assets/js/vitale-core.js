@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.13 · Papel Clínico · 2026-07-21';
+const VITALE_VERSION = 'v5.14 · Módulo de Cálculos + Testes · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -393,7 +393,12 @@ const VITALE_CORE = {
   // =====================================================
   // UTILS
   // =====================================================
-  calcIMC(kg, h) { return (kg / (h * h)).toFixed(1); },
+  // v5.14 — delega ao módulo único VitaleCalc (fonte de verdade testada);
+  // fallback para a fórmula local se o módulo não tiver carregado.
+  calcIMC(kg, h) {
+    if (window.VitaleCalc) { const v = window.VitaleCalc.calcIMC(kg, h); return v == null ? '—' : v.toFixed(1); }
+    return (kg / (h * h)).toFixed(1);
+  },
 
   getObesidadeInfo(imc) {
     const v = parseFloat(imc);
