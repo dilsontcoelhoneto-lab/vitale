@@ -1,0 +1,25 @@
+# Dependências (nunca versionar — pesa centenas de MB e quebra o push)
+node_modules/
+
+# Pastas nativas geradas pelo Capacitor.
+# Ficam de fora ATÉ existir configuração nativa própria (ícones, permissões,
+# entitlements do HealthKit). Quando isso acontecer, remova estas duas linhas
+# e passe a versionar — senão você perde a configuração a cada `cap add`.
+ios/
+android/
+
+# Pasta de build montada pelo script de empacotamento
+www/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editores
+.vscode/
+.idea/
+
+# Segredos e ambiente
+.env
+.env.*
+!.env.example
