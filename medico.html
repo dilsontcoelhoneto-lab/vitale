@@ -4,182 +4,190 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — Portal do Médico</title>
-<meta name="theme-color" content="#040608">
+<meta name="theme-color" content="#FBF8F3">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A13"></script>
+<script src="/config.js?v=A16"></script>
 <style>
-:root{--bg:#040608;--card:#0d1223;--card2:#10162a;--border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.14);
-  --gold:#d4a843;--em:#27c47d;--cyan:#4a9de8;--red:#e8504a;--amber:#d4a843;--text:#ede8e0;--textm:#8a8fa8;--textd:#6f7590}
+/* ===== PAPEL CLÍNICO ===== */
+:root{
+  --papel:#FBF8F3; --papel2:#F4F0E8; --linha:#E4DFD4; --linha2:#CFC9BC;
+  --tinta:#1C1B18; --tinta2:#5B564C; --suave:#8A8578;
+  --ouro:#C79A35; --verde:#166B45; --verde-p:#1E8F5C; --azul:#31597F;
+  --ambar:#8F6E22; --vermelho:#A02E22;
+}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;line-height:1.65;-webkit-font-smoothing:antialiased}
-h1,h2,h3{font-family:'Cormorant Garamond',serif;font-weight:600}
+body{background:var(--papel);color:var(--tinta);font-family:'Inter',sans-serif;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:'Fraunces',serif;font-weight:600}
 
-/* ===== TOPO ===== */
-.topo{background:linear-gradient(180deg,#0d1223 0%,#0a0f1c 100%);border-bottom:2px solid var(--gold);padding:16px 26px;
-  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;position:sticky;top:0;z-index:50}
-.marca{font-family:'Cormorant Garamond',serif;font-size:24px;color:var(--gold);line-height:1.1}
-.marca small{display:block;font-family:'DM Sans',sans-serif;font-size:9px;letter-spacing:3px;color:var(--textd);text-transform:uppercase;margin-top:2px}
-.topo .user{font-size:13px;color:var(--textm);text-align:right}
-.topo .user b{display:block;color:var(--text);font-weight:500}
-.sair{background:none;border:1px solid var(--border2);color:var(--textm);border-radius:8px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:inherit;margin-left:14px}
-.sair:hover{color:var(--text);border-color:var(--gold)}
+/* topo */
+.topo{background:var(--papel);border-bottom:1px solid var(--linha2);position:sticky;top:0;z-index:50}
+.topo .in{max-width:1120px;margin:0 auto;padding:16px 26px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.marca{font-family:'Fraunces',serif;font-size:24px;font-weight:700;letter-spacing:.5px;display:flex;align-items:center}
+.marca .fio{display:inline-block;width:24px;height:3px;background:var(--ouro);margin:0 0 0 8px}
+.marca small{font-family:'Inter';font-size:10px;font-weight:600;letter-spacing:2.5px;color:var(--suave);text-transform:uppercase;margin-left:12px;align-self:center}
+.user{font-size:13.5px;color:var(--tinta2);text-align:right}
+.user b{display:block;color:var(--tinta);font-weight:600;font-size:15px}
+.sair{background:none;border:1px solid var(--linha2);color:var(--tinta2);border-radius:7px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit;margin-left:14px}
+.sair:hover{border-color:var(--ouro);color:var(--tinta)}
 
-.wrap{max-width:1180px;margin:0 auto;padding:26px 22px 60px}
+.wrap{max-width:1120px;margin:0 auto;padding:30px 26px 70px}
 
-/* ===== CARDS ===== */
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px 26px;margin-bottom:18px}
-.card h2{font-size:26px;color:var(--gold);margin-bottom:6px}
-.card h3{font-size:19px;margin:0 0 12px}
-.rot{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:10px}
+/* seções e cards */
+.bloco{margin-bottom:34px}
+.sec{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--tinta);
+  padding-bottom:8px;border-bottom:1px solid var(--tinta);margin-bottom:16px;display:flex;justify-content:space-between;align-items:baseline}
+.sec span{font-weight:400;letter-spacing:0;text-transform:none;color:var(--suave);font-size:13px;font-family:'Inter'}
+.card{background:#FFFEFB;border:1px solid var(--linha);border-radius:10px;padding:22px 24px;margin-bottom:16px}
 
-/* ===== FORM ===== */
-label{display:block;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--textm);margin-bottom:6px}
-input,select{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:13px;
-  color:var(--text);font-family:inherit;font-size:16px;margin-bottom:14px}
-input:focus,select:focus{outline:none;border-color:var(--gold)}
-.btn{background:var(--gold);color:#05070b;border:0;border-radius:10px;padding:13px 22px;font-weight:600;font-size:15px;
-  cursor:pointer;font-family:inherit;transition:opacity .15s}
-.btn:hover{opacity:.9}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.btn.sec{background:transparent;color:var(--text);border:1px solid var(--border2)}
-.btn.sm{padding:8px 14px;font-size:13px}
+/* login */
+.login{max-width:400px;margin:60px auto}
+label{display:block;font-size:12px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--suave);margin-bottom:6px}
+input{width:100%;background:var(--papel);border:1px solid var(--linha2);border-radius:8px;padding:13px;
+  color:var(--tinta);font-family:inherit;font-size:16px;margin-bottom:14px}
+input:focus{outline:none;border-color:var(--ouro)}
+.btn{background:var(--tinta);color:var(--papel);border:0;border-radius:8px;padding:12px 20px;font-weight:600;font-size:15px;cursor:pointer;font-family:inherit}
+.btn:hover{opacity:.92}.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sec{background:transparent;color:var(--tinta);border:1px solid var(--linha2)}
+.btn.sm{padding:8px 15px;font-size:13.5px}
 
-/* ===== KPIs ===== */
-.kpis{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}
-.kpi{flex:1;min-width:120px;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:15px 12px;text-align:center}
-.kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--textd)}
-.kpi .v{font-size:28px;font-weight:600;margin-top:4px;line-height:1.1;font-family:'Cormorant Garamond',serif}
-.kpi .v small{font-size:13px;color:var(--textm);font-family:'DM Sans',sans-serif}
-.kpi .v.verde{color:var(--em)} .kpi .v.ouro{color:var(--gold)} .kpi .v.red{color:var(--red)}
+/* desde último acesso */
+.desde{background:var(--papel2);border:1px solid var(--linha);border-radius:9px;padding:13px 18px;font-size:14.5px;color:var(--tinta2);margin-bottom:26px;line-height:1.7}
+.desde b{color:var(--tinta)}
+.desde .tag{display:inline-block;background:var(--tinta);color:var(--papel);font-size:10.5px;font-weight:600;letter-spacing:1px;padding:2px 9px;border-radius:3px;margin-right:10px;text-transform:uppercase;vertical-align:middle}
 
-/* ===== TABELAS ===== */
-table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);
-  padding:11px 12px;border-bottom:1px solid var(--border);font-weight:500;white-space:nowrap}
-td{padding:14px 12px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
-tr.pac{cursor:pointer;transition:background .12s}
-tr.pac:hover{background:rgba(212,168,67,.05)}
+/* paciente / kpis */
+.pcabecalho{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:4px}
+.pcabecalho h2{font-size:32px;font-weight:600}
+.pobj{font-size:14px;color:var(--tinta2)}.pobj b{color:var(--tinta)}
+.kpis{display:flex;margin:22px 0 4px;border-top:1px solid var(--linha);border-bottom:1px solid var(--linha);flex-wrap:wrap}
+.kpi{flex:1;min-width:110px;padding:16px 18px 14px;border-right:1px solid var(--linha)}
+.kpi:last-child{border-right:0}
+.kpi .l{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--suave)}
+.kpi .v{font-family:'Fraunces',serif;font-size:30px;font-weight:600;margin-top:2px}
+.kpi .v small{font-family:'Inter';font-size:13px;color:var(--suave);font-weight:400}
+
+/* tabela lista de pacientes */
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{text-align:left;font-size:11px;font-weight:600;letter-spacing:1.1px;text-transform:uppercase;color:var(--suave);padding:12px 12px 8px;border-bottom:1px solid var(--linha2)}
+td{padding:13px 12px;border-bottom:1px solid var(--linha)}
+tr.pac{cursor:pointer}tr.pac:hover td{background:#FFFDF8}
 tr.pac td:first-child{border-left:3px solid transparent}
-tr.pac.atencao td:first-child{border-left-color:var(--red)}
+tr.pac.at td:first-child{border-left-color:var(--vermelho)}
+.ver{color:var(--ouro);font-weight:600;white-space:nowrap}
 
-.pill{display:inline-block;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:500;white-space:nowrap;margin-right:4px}
-.pill.ok{background:rgba(39,196,125,.14);color:var(--em)}
-.pill.al{background:rgba(232,80,74,.14);color:var(--red)}
-.pill.at{background:rgba(212,168,67,.14);color:var(--gold)}
-.pill.nu{background:rgba(255,255,255,.06);color:var(--textm)}
+/* estados clínicos: ponto + texto (sem pill colorida chapada) */
+.st{display:inline-flex;align-items:center;gap:7px;font-size:14px;white-space:nowrap}
+.st::before{content:'';width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.st.otimo::before{background:var(--verde-p)}.st.otimo{color:var(--verde)}
+.st.ok::before{background:var(--azul)}.st.ok{color:var(--azul)}
+.st.aten::before{background:var(--ouro)}.st.aten{color:var(--ambar)}
+.st.fora::before{background:var(--vermelho)}.st.fora{color:var(--vermelho)}
+.marca-al{color:var(--vermelho);font-weight:600;font-size:13.5px}
+.marca-ok{color:var(--verde);font-size:13.5px}
+.marca-nu{color:var(--suave);font-size:13.5px}
 
-/* ===== AVISOS ===== */
-.aviso{background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.2);border-radius:10px;
-  padding:13px 16px;font-size:13px;color:var(--gold);margin-bottom:18px;line-height:1.6}
-.msg{font-size:14px;padding:12px 15px;border-radius:10px;margin-bottom:14px}
-.msg.err{background:rgba(232,80,74,.1);color:var(--red)}
-.msg.ok{background:rgba(39,196,125,.1);color:var(--em)}
-.oculto{display:none}
-.vazio{color:var(--textm);font-size:14px;text-align:center;padding:30px 0}
+/* tabela laboratorial agrupada */
+table.lab td{padding:11px 10px}
+.lab .res{font-weight:600;white-space:nowrap}
+.lab .un,.lab .ref{color:var(--suave);font-size:13.5px}
+.lab .grupo td{font-size:11.5px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--suave);
+  padding:22px 10px 6px;border-bottom:1px solid var(--linha2)}
+.evol{font-size:13.5px}.evol.up{color:var(--verde)}.evol.down{color:var(--vermelho)}
 
-/* ===== FASES ===== */
-.fases{display:flex;gap:12px;flex-wrap:wrap;margin:14px 0}
-.fase{flex:1;min-width:170px;background:var(--card2);border:1px solid var(--border);border-top:3px solid var(--gold);
-  border-radius:10px;padding:14px}
-.fase .q{font-size:10px;letter-spacing:1.4px;color:var(--gold);font-weight:600;text-transform:uppercase}
-.fase .t{font-size:15px;color:var(--text);margin:5px 0 3px;font-weight:500}
-.fase .d{font-size:12px;color:var(--textm);line-height:1.5}
+/* fases */
+.fases{display:flex;gap:12px;flex-wrap:wrap;margin:6px 0}
+.fase{flex:1;min-width:170px;background:var(--papel2);border:1px solid var(--linha);border-top:3px solid var(--ouro);border-radius:8px;padding:14px}
+.fase .q{font-size:10.5px;letter-spacing:1.4px;color:var(--ambar);font-weight:700;text-transform:uppercase}
+.fase .t{font-size:15px;color:var(--tinta);margin:5px 0 3px;font-weight:600}
+.fase .d{font-size:13px;color:var(--tinta2);line-height:1.5}
 
-/* ===== LAB ===== */
-.v-otimo{color:var(--em);font-weight:600} .v-ok{color:var(--cyan);font-weight:600}
-.v-at{color:var(--gold);font-weight:600} .v-fora{color:var(--red);font-weight:600}
-.tend-up{color:var(--em);font-size:12px} .tend-down{color:var(--red);font-size:12px}
-.ref{font-size:12px;color:var(--textd)}
+/* dose x peso */
+.dosewrap{position:relative;height:150px;border-left:1px solid var(--linha);border-bottom:1px solid var(--linha2);margin:8px 4px}
+.doselegenda{font-size:13.5px;color:var(--tinta2);margin-bottom:4px}.doselegenda b{color:var(--azul)}
 
-/* ===== SÍNTESE ===== */
+/* síntese */
 .sintese{counter-reset:s;list-style:none;margin:0}
-.sintese li{position:relative;padding:12px 0 12px 42px;border-bottom:1px solid rgba(255,255,255,.04);font-size:14px;line-height:1.7}
+.sintese li{position:relative;padding:13px 0 13px 40px;border-bottom:1px solid var(--linha);font-size:15px;line-height:1.7}
 .sintese li:last-child{border-bottom:0}
-.sintese li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:12px;width:26px;height:26px;
-  border-radius:50%;background:rgba(212,168,67,.12);color:var(--gold);font-size:12px;font-weight:600;
-  display:flex;align-items:center;justify-content:center}
+.sintese li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:12px;width:24px;height:24px;border-radius:50%;background:var(--papel2);border:1px solid var(--linha2);color:var(--ambar);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
 
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
-.mini{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
-.mini .rot{margin-bottom:8px}
-.mini table{font-size:13px} .mini td{padding:7px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.mini{background:var(--papel2);border:1px solid var(--linha);border-radius:9px;padding:16px 18px}
+.mini .rot{font-size:11px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--suave);margin-bottom:10px}
+.mini table{font-size:14px}.mini td{padding:8px 0;border-bottom:1px solid var(--linha)}
 
-.rodape-legal{font-size:12px;color:var(--textd);line-height:1.7;border-top:1px solid var(--border);padding-top:16px;margin-top:6px}
-@media(max-width:640px){.wrap{padding:16px 14px 40px}.card{padding:18px 16px}.kpi{min-width:calc(50% - 6px)}
-  th,td{padding:10px 7px;font-size:13px}}
+.aviso{background:#FBF3E4;border:1px solid #E8D9B0;border-radius:8px;padding:13px 16px;font-size:13.5px;color:var(--ambar);margin-bottom:18px;line-height:1.6}
+.legal{font-size:13px;color:var(--suave);line-height:1.7}
+.msg{font-size:14px;padding:11px 15px;border-radius:8px;margin-bottom:14px}
+.msg.err{background:#F7E4E1;color:var(--vermelho)}.msg.ok{background:#E3F0E8;color:var(--verde)}
+.oculto{display:none}.vazio{color:var(--suave);text-align:center;padding:30px 0}
+.codigo{text-align:center;background:var(--papel2);border:1px dashed var(--linha2);border-radius:10px;padding:22px}
+.codigo .c{font-family:'JetBrains Mono',monospace;font-size:34px;letter-spacing:8px;color:var(--tinta);font-weight:600}
+@media(max-width:640px){.wrap{padding:20px 16px 50px}.card{padding:18px}.kpi{min-width:calc(50% - 1px)}th,td{padding:10px 7px;font-size:14px}}
 </style>
 </head>
 <body>
 
-<div class="topo">
-  <div class="marca">VITALE<small>Portal do Médico</small></div>
+<div class="topo"><div class="in">
+  <div class="marca">VITALE<span class="fio"></span><small>Portal do Médico</small></div>
   <div style="display:flex;align-items:center">
     <div class="user" id="topoUser"></div>
     <button class="sair oculto" id="btnSair" onclick="PORTAL.sair()">Sair</button>
   </div>
-</div>
+</div></div>
 
 <div class="wrap">
 
-  <!-- ===== LOGIN ===== -->
-  <div id="telaLogin" class="card" style="max-width:430px;margin:50px auto">
-    <div class="rot">Acesso profissional</div>
-    <h2 style="margin-bottom:16px">Entrar</h2>
+  <!-- LOGIN -->
+  <div id="telaLogin" class="card login">
+    <div class="sec" style="border:0;margin-bottom:6px;padding:0">Acesso profissional</div>
+    <h2 style="font-size:26px;margin-bottom:18px">Entrar</h2>
     <div id="loginMsg"></div>
     <label>E-mail</label>
     <input type="email" id="loginEmail" autocomplete="username">
     <label>Senha</label>
     <input type="password" id="loginSenha" autocomplete="current-password" onkeydown="if(event.key==='Enter')PORTAL.entrar()">
     <button class="btn" style="width:100%" onclick="PORTAL.entrar()">Entrar</button>
-    <p style="font-size:12px;color:var(--textd);margin-top:16px;line-height:1.65">
-      Acesso restrito a profissionais cadastrados e verificados. Os dados exibidos são auto-relatados
-      pelos pacientes e liberados por autorização expressa de cada um.</p>
+    <p style="font-size:13px;color:var(--suave);margin-top:16px;line-height:1.65">Acesso restrito a profissionais cadastrados e verificados. Os dados exibidos são auto-relatados pelos pacientes e liberados por autorização expressa de cada um.</p>
   </div>
 
-  <!-- ===== PENDENTE ===== -->
-  <div id="telaPendente" class="card oculto" style="max-width:540px;margin:50px auto">
-    <div class="rot">Cadastro em análise</div>
-    <h2>Aguardando verificação</h2>
-    <p style="color:var(--textm);font-size:14px;margin-top:10px">Seu cadastro está em verificação de CRM.
-    Assim que aprovado, você poderá convidar pacientes e visualizar os dados autorizados.</p>
+  <!-- PENDENTE -->
+  <div id="telaPendente" class="card oculto login">
+    <div class="sec" style="border:0;padding:0">Cadastro em análise</div>
+    <h2 style="font-size:24px">Aguardando verificação</h2>
+    <p style="color:var(--tinta2);font-size:14.5px;margin-top:10px">Seu cadastro está em verificação de CRM. Assim que aprovado, você poderá acompanhar os pacientes que autorizarem o acesso.</p>
   </div>
 
-  <!-- ===== LISTA ===== -->
+  <!-- LISTA -->
   <div id="telaLista" class="oculto">
-    <div class="card">
-      <div class="rot">Sua carteira</div>
-      <h2>Meus pacientes</h2>
-      <div class="aviso" style="margin-top:14px">⚕️ Dados auto-relatados pelos pacientes, liberados por autorização
-        expressa. Este portal é informativo e <strong>não constitui prontuário eletrônico</strong> — a conduta clínica
-        e o registro oficial são de sua responsabilidade.</div>
+    <div class="bloco">
+      <div class="sec">Sua carteira<span id="contaPac"></span></div>
+      <div class="aviso">Dados auto-relatados pelos pacientes, liberados por autorização expressa. Este portal é informativo e não constitui prontuário eletrônico — a conduta clínica e o registro oficial são de sua responsabilidade.</div>
       <div id="listaMsg"></div>
-      <div style="overflow-x:auto">
+      <div class="card" style="padding:0;overflow-x:auto">
         <table>
-          <thead><tr><th>Paciente</th><th>Peso atual</th><th>Variação</th><th>Ritmo 28d</th>
-            <th>Últ. registro</th><th>Sinalizações</th><th></th></tr></thead>
+          <thead><tr><th>Paciente</th><th>Peso</th><th>Variação</th><th>Ritmo 28d</th><th>Últ. registro</th><th>Sinalizações</th><th></th></tr></thead>
           <tbody id="tbPacientes"><tr><td colspan="7" class="vazio">Carregando…</td></tr></tbody>
         </table>
       </div>
-      <p style="font-size:12px;color:var(--textd);margin-top:14px">Ordenado por quem precisa de atenção.</p>
     </div>
-
-    <div class="card">
-      <div class="rot">Novo paciente</div>
-      <h3>Seu código de vínculo</h3>
-      <p style="font-size:13px;color:var(--textm);margin-bottom:14px">Entregue este código ao paciente na consulta.
-        Ele digita em <strong>Perfil → Saúde → Meus médicos</strong> no app e escolhe quais dados libera.
-        Sem essa autorização, nenhum dado aparece aqui.</p>
-      <div id="conviteOut"></div>
+    <div class="bloco">
+      <div class="sec">Vincular paciente</div>
+      <div class="card">
+        <p style="font-size:14px;color:var(--tinta2);margin-bottom:16px">Entregue este código ao paciente na consulta. Ele digita em <b>Perfil → Saúde → Meus médicos</b> no app e escolhe quais dados libera.</p>
+        <div id="conviteOut"></div>
+      </div>
     </div>
   </div>
 
-  <!-- ===== FICHA ===== -->
+  <!-- FICHA -->
   <div id="telaFicha" class="oculto">
-    <button class="btn sec sm" onclick="PORTAL.voltar()" style="margin-bottom:16px">← Voltar à lista</button>
+    <button class="btn sec sm" onclick="PORTAL.voltar()" style="margin-bottom:18px">← Voltar à lista</button>
     <div id="fichaConteudo"></div>
   </div>
 
@@ -187,9 +195,7 @@ tr.pac.atencao td:first-child{border-left-color:var(--red)}
 
 <script>
 const PORTAL = {
-  sb:null, medico:null, pacientes:[], _resumos:{},
-
-  // ===== Catálogo clínico (espelha o app) =====
+  sb:null, medico:null, pacientes:[],
   metas:{glicose:{max:90,t:'70–90'},hba1c:{max:5.4,t:'< 5,4'},homa_ir:{max:2.0,t:'< 2,0'},
     triglicerides:{max:100,t:'< 100'},hdl:{min:50,t:'> 50'},ldl:{max:70,t:'< 70*'},
     pcr:{max:0.1,t:'< 0,1'},vitamina_d:{min:40,t:'40–60'}},
@@ -198,20 +204,27 @@ const PORTAL = {
     tgo:'TGO (AST)',tgp:'TGP (ALT)',ggt:'Gama-GT',creatinina:'Creatinina',ureia:'Ureia',
     acido_urico:'Ácido úrico',tsh:'TSH',t4_livre:'T4 livre',testosterona_total:'Testosterona total',
     vitamina_d:'Vitamina D (25-OH)',vitamina_b12:'Vitamina B12',pcr:'PCR ultrassensível',ferritina:'Ferritina'},
-  unid:{glicose:'mg/dL',hba1c:'%',insulina:'µUI/mL',homa_ir:'',colesterol_total:'mg/dL',ldl:'mg/dL',
-    hdl:'mg/dL',triglicerides:'mg/dL',tgo:'U/L',tgp:'U/L',ggt:'U/L',creatinina:'mg/dL',ureia:'mg/dL',
-    acido_urico:'mg/dL',tsh:'µUI/mL',t4_livre:'ng/dL',testosterona_total:'ng/dL',vitamina_d:'ng/mL',
-    vitamina_b12:'pg/mL',pcr:'mg/dL',ferritina:'ng/mL'},
+  unid:{glicose:'mg/dL',hba1c:'%',insulina:'µUI/mL',homa_ir:'',colesterol_total:'mg/dL',ldl:'mg/dL',hdl:'mg/dL',
+    triglicerides:'mg/dL',tgo:'U/L',tgp:'U/L',ggt:'U/L',creatinina:'mg/dL',ureia:'mg/dL',acido_urico:'mg/dL',
+    tsh:'µUI/mL',t4_livre:'ng/dL',testosterona_total:'ng/dL',vitamina_d:'ng/mL',vitamina_b12:'pg/mL',pcr:'mg/dL',ferritina:'ng/mL'},
+  // agrupamento por sistema (estética de laudo)
+  grupos:[
+    ['Metabolismo glicídico',['glicose','hba1c','insulina','homa_ir']],
+    ['Lipídios',['colesterol_total','ldl','hdl','triglicerides']],
+    ['Fígado',['tgo','tgp','ggt']],
+    ['Rim',['creatinina','ureia','acido_urico']],
+    ['Tireoide e hormônios',['tsh','t4_livre','testosterona_total']],
+    ['Vitaminas e inflamação',['vitamina_d','vitamina_b12','pcr','ferritina']]
+  ],
   menorMelhor:['glicose','hba1c','insulina','homa_ir','colesterol_total','ldl','triglicerides','tgo','tgp','ggt','pcr','acido_urico','ureia'],
   maiorMelhor:['hdl','vitamina_d','vitamina_b12','testosterona_total'],
 
   async init(){
-    if(!window.VITALE_CONFIG){document.getElementById('loginMsg').innerHTML='<div class="msg err">Configuração não carregada.</div>';return;}
-    this.sb = window.supabase.createClient(window.VITALE_CONFIG.SUPABASE_URL, window.VITALE_CONFIG.SUPABASE_ANON_KEY);
-    const {data:{session}} = await this.sb.auth.getSession();
-    if(session) await this.posLogin();
+    if(!window.VITALE_CONFIG){this._msg('loginMsg','Configuração não carregada.');return;}
+    this.sb=window.supabase.createClient(window.VITALE_CONFIG.SUPABASE_URL,window.VITALE_CONFIG.SUPABASE_ANON_KEY);
+    const {data:{session}}=await this.sb.auth.getSession();
+    if(session)await this.posLogin();
   },
-
   _msg(id,txt,tipo='err'){const el=document.getElementById(id);if(el)el.innerHTML=txt?`<div class="msg ${tipo}">${txt}</div>`:'';},
 
   async entrar(){
@@ -223,17 +236,13 @@ const PORTAL = {
     if(error)return this._msg('loginMsg','Falha no acesso: '+error.message);
     await this.posLogin();
   },
-
   async sair(){await this.sb.auth.signOut();location.reload();},
 
   async posLogin(){
     const {data:{user}}=await this.sb.auth.getUser();
     if(!user)return;
     const {data:med}=await this.sb.from('medicos').select('*').eq('id',user.id).maybeSingle();
-    if(!med){
-      this._msg('loginMsg','Esta conta não possui cadastro profissional. Fale com o administrador.');
-      await this.sb.auth.signOut();return;
-    }
+    if(!med){this._msg('loginMsg','Esta conta não possui cadastro profissional. Fale com o administrador.');await this.sb.auth.signOut();return;}
     this.medico=med;
     document.getElementById('telaLogin').classList.add('oculto');
     document.getElementById('btnSair').classList.remove('oculto');
@@ -244,13 +253,10 @@ const PORTAL = {
     this.mostrarCodigo();
   },
 
-  // ===== velocidade recente (mesma regra do app, v5.6) =====
   _velocidade(pesos){
     if(!pesos||pesos.length<2)return null;
-    const corte=new Date();corte.setDate(corte.getDate()-28);
-    const c=corte.toISOString().slice(0,10);
-    const rec=pesos.filter(p=>p.data>=c);
-    if(rec.length<2)return null;
+    const corte=new Date();corte.setDate(corte.getDate()-28);const c=corte.toISOString().slice(0,10);
+    const rec=pesos.filter(p=>p.data>=c); if(rec.length<2)return null;
     const a=rec[0],b=rec[rec.length-1];
     const d=Math.max(Math.round((new Date(b.data+'T12:00:00')-new Date(a.data+'T12:00:00'))/86400000),1);
     return (parseFloat(a.peso)-parseFloat(b.peso))/d*7;
@@ -259,61 +265,53 @@ const PORTAL = {
   async carregarPacientes(){
     const tb=document.getElementById('tbPacientes');
     const {data:pacs,error}=await this.sb.from('medico_pacientes').select('*');
-    if(error){tb.innerHTML=`<tr><td colspan="7" class="vazio" style="color:var(--red)">Erro: ${this._esc(error.message)}</td></tr>`;return;}
-    if(!pacs||!pacs.length){
-      tb.innerHTML='<tr><td colspan="7" class="vazio">Nenhum paciente autorizou acesso ainda.<br>Use o convite abaixo para começar.</td></tr>';return;}
+    if(error){tb.innerHTML=`<tr><td colspan="7" class="vazio" style="color:var(--vermelho)">Erro: ${this._esc(error.message)}</td></tr>`;return;}
+    if(!pacs||!pacs.length){tb.innerHTML='<tr><td colspan="7" class="vazio">Nenhum paciente autorizou acesso ainda.<br>Use o código abaixo para começar.</td></tr>';return;}
     this.pacientes=pacs;
+    const cont=document.getElementById('contaPac'); if(cont)cont.textContent=pacs.length+(pacs.length>1?' pacientes':' paciente');
     const linhas=[];
     for(const p of pacs){
       const r=await this._resumo(p.paciente_id);
-      this._resumos[p.paciente_id]=r;
-      const atencao=r.foraMeta>0||r.inativo||(r.variacao!=null&&r.variacao>0.5);
-      const sinais=[];
-      if(r.foraMeta>0)sinais.push(`<span class="pill al">${r.foraMeta} fora da faixa</span>`);
-      if(r.inativo)sinais.push(`<span class="pill at">inativo ${r.diasSemRegistro}d</span>`);
-      if(r.variacao!=null&&r.variacao>0.5)sinais.push('<span class="pill al">reganho</span>');
-      if(!sinais.length)sinais.push('<span class="pill ok">sem alertas</span>');
-      linhas.push({atencao,html:`<tr class="pac ${atencao?'atencao':''}" onclick="PORTAL.abrirFicha('${p.paciente_id}')">
-        <td><strong>${this._esc(p.nome||'Paciente')}</strong></td>
-        <td>${r.pesoAtual!=null?r.pesoAtual.toFixed(1)+' kg':'—'}</td>
-        <td style="color:${r.variacao<0?'var(--em)':r.variacao>0?'var(--red)':'var(--textm)'}">${r.variacao!=null?(r.variacao>0?'+':'')+r.variacao.toFixed(1)+' kg':'—'}</td>
-        <td style="font-size:13px">${r.vel==null?'—':Math.abs(r.vel)<0.1?'<span style="color:var(--textm)">estável</span>':(r.vel>0?'−':'+')+Math.abs(r.vel).toFixed(2)+' kg/s'}</td>
-        <td style="font-size:13px;color:var(--textm)">${r.ultimaData||'—'}</td>
-        <td>${sinais.join('')}</td>
-        <td style="text-align:right;color:var(--gold);white-space:nowrap">ver →</td></tr>`});
+      const at=r.foraMeta>0||r.inativo||(r.reganho);
+      const s=[];
+      if(r.foraMeta>0)s.push(`<span class="marca-al">${r.foraMeta} fora da faixa</span>`);
+      if(r.reganho)s.push('<span class="marca-al">reganho</span>');
+      if(r.inativo)s.push(`<span class="marca-nu">inativo ${r.dias}d</span>`);
+      if(!s.length)s.push('<span class="marca-ok">sem alertas</span>');
+      linhas.push({at,html:`<tr class="pac ${at?'at':''}" onclick="PORTAL.abrirFicha('${p.paciente_id}')">
+        <td><b>${this._esc(p.nome||'Paciente')}</b></td>
+        <td class="num">${r.peso!=null?r.peso.toFixed(1)+' kg':'—'}</td>
+        <td class="num" style="color:${r.varia<0?'var(--verde)':r.varia>0?'var(--vermelho)':'var(--suave)'}">${r.varia!=null?(r.varia>0?'+':'')+r.varia.toFixed(1)+' kg':'—'}</td>
+        <td class="num">${r.vel==null?'—':Math.abs(r.vel)<0.1?'<span style="color:var(--suave)">estável</span>':(r.vel>0?'−':'+')+Math.abs(r.vel).toFixed(2)}</td>
+        <td style="color:var(--tinta2);font-size:14px">${r.ultima||'—'}</td>
+        <td>${s.join(' · ')}</td><td class="ver">ver →</td></tr>`});
     }
-    linhas.sort((a,b)=>(b.atencao?1:0)-(a.atencao?1:0));
+    linhas.sort((a,b)=>(b.at?1:0)-(a.at?1:0));
     tb.innerHTML=linhas.map(l=>l.html).join('');
   },
 
   async _resumo(pid){
-    const o={pesoAtual:null,variacao:null,ultimaData:null,foraMeta:0,inativo:false,diasSemRegistro:null,vel:null};
+    const o={peso:null,varia:null,ultima:null,foraMeta:0,inativo:false,dias:null,vel:null,reganho:false};
     const {data:pesos}=await this.sb.from('weights').select('data, peso').eq('user_id',pid).order('data',{ascending:true});
     if(pesos&&pesos.length){
-      const u=pesos[pesos.length-1];
-      o.pesoAtual=parseFloat(u.peso);
-      o.variacao=parseFloat(u.peso)-parseFloat(pesos[0].peso);
-      o.ultimaData=this._fmt(u.data);
-      o.diasSemRegistro=Math.round((Date.now()-new Date(u.data+'T12:00:00'))/86400000);
-      o.inativo=o.diasSemRegistro>15;
-      o.vel=this._velocidade(pesos);
-      // reganho: compara com o menor peso registrado
+      const u=pesos[pesos.length-1];o.peso=parseFloat(u.peso);
+      o.varia=parseFloat(u.peso)-parseFloat(pesos[0].peso);
+      o.ultima=this._fmt(u.data);
+      o.dias=Math.round((Date.now()-new Date(u.data+'T12:00:00'))/86400000);
+      o.inativo=o.dias>15; o.vel=this._velocidade(pesos);
       const min=Math.min(...pesos.map(p=>parseFloat(p.peso)));
-      o.variacao=parseFloat(u.peso)-min>0.5?parseFloat(u.peso)-parseFloat(pesos[0].peso):o.variacao;
+      o.reganho=(parseFloat(u.peso)-min)>1.0;
     }
     const {data:ex}=await this.sb.from('exames_lab').select('marcador, valor, ref_min, ref_max, data').eq('user_id',pid);
-    if(ex&&ex.length){
-      const ult={};ex.forEach(e=>{const a=ult[e.marcador];if(!a||e.data>a.data)ult[e.marcador]=e;});
-      o.foraMeta=Object.values(ult).filter(e=>(e.ref_min!=null&&e.valor<e.ref_min)||(e.ref_max!=null&&e.valor>e.ref_max)).length;
-    }
+    if(ex&&ex.length){const ult={};ex.forEach(e=>{const a=ult[e.marcador];if(!a||e.data>a.data)ult[e.marcador]=e;});
+      o.foraMeta=Object.values(ult).filter(e=>(e.ref_min!=null&&e.valor<e.ref_min)||(e.ref_max!=null&&e.valor>e.ref_max)).length;}
     return o;
   },
 
   status(mid,v,rmin,rmax){
     if((rmin!=null&&v<rmin)||(rmax!=null&&v>rmax))return 'fora';
-    const m=this.metas[mid];
-    if(!m)return 'ok';
-    return ((m.max==null||v<=m.max)&&(m.min==null||v>=m.min))?'otimo':'atencao';
+    const m=this.metas[mid]; if(!m)return 'ok';
+    return ((m.max==null||v<=m.max)&&(m.min==null||v>=m.min))?'otimo':'aten';
   },
 
   async abrirFicha(pid){
@@ -323,13 +321,11 @@ const PORTAL = {
     const alvo=document.getElementById('fichaConteudo');
     alvo.innerHTML='<div class="card"><p class="vazio">Carregando dados do paciente…</p></div>';
 
-    // trilha de auditoria — visível ao paciente
     let ultimoAcesso=null;
     try{
-      const {data:acessos}=await this.sb.from('acessos_medico').select('created_at')
-        .eq('medico_id',this.medico.id).eq('paciente_id',pid).eq('acao','abriu_paciente')
-        .order('created_at',{ascending:false}).limit(1);
-      if(acessos&&acessos.length)ultimoAcesso=acessos[0].created_at;
+      const {data:ac}=await this.sb.from('acessos_medico').select('created_at').eq('medico_id',this.medico.id)
+        .eq('paciente_id',pid).eq('acao','abriu_paciente').order('created_at',{ascending:false}).limit(1);
+      if(ac&&ac.length)ultimoAcesso=ac[0].created_at;
       await this.sb.from('acessos_medico').insert({medico_id:this.medico.id,paciente_id:pid,acao:'abriu_paciente'});
     }catch(e){}
 
@@ -339,189 +335,178 @@ const PORTAL = {
       this.sb.from('exames_lab').select('*').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('composicao_corporal').select('*').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
       this.sb.from('medicacoes').select('nome, dose').eq('user_id',pid).then(r=>r.data||[]),
-      this.sb.from('doses_medicacao').select('data, medicamento, dose').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
+      this.sb.from('doses_medicacao').select('data, medicamento, dose').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('efeitos_colaterais').select('data, tipo, intensidade').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
       this.sb.from('body_measurements').select('data, cintura').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
       this.sb.from('exercicios').select('data').eq('user_id',pid).then(r=>r.data||[])
     ]);
 
     alvo.innerHTML=this.montarFicha({pid,perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc,ultimoAcesso});
-    this.grafico(pesos,perfil?.altura);
+    this.graficoDosePeso(pesos,doses);
+  },
+
+  // bloco "desde seu último acesso"
+  _desde(ultimoAcesso,pesos,exames,efeitos){
+    if(!ultimoAcesso)return '';
+    const d=ultimoAcesso.slice(0,10);
+    const np=pesos.filter(p=>p.data>d).length;
+    const nx=exames.filter(e=>e.data>d).length;
+    const ne=efeitos.filter(e=>e.data>d).length;
+    if(!np&&!nx&&!ne)return `<div class="desde"><span class="tag">Desde ${this._fmt(d)}</span>Sem novos registros desde seu último acesso.</div>`;
+    const partes=[];
+    if(np)partes.push(`<b class="num">${np}</b> nova(s) pesagem(ns)`);
+    if(nx)partes.push(`<b class="num">${nx}</b> exame(s) novo(s)`);
+    if(ne)partes.push(`<b class="num">${ne}</b> efeito(s) colateral(is) relatado(s)`);
+    return `<div class="desde"><span class="tag">Desde ${this._fmt(d)}</span>${partes.join(' · ')}</div>`;
   },
 
   montarFicha(d){
-    const CORES={otimo:'var(--em)',ok:'var(--cyan)',atencao:'var(--gold)',fora:'var(--red)'};
-    const ROT={otimo:'Ótimo',ok:'Na referência',atencao:'Ref. ok · fora do ideal',fora:'Fora da referência'};
+    const ROT={otimo:'Ótimo',ok:'Na referência',aten:'Na ref., fora do ideal',fora:'Fora da referência'};
     const nome=d.perfil?.nome||'Paciente';
     const altura=d.perfil?.altura||null;
     const pri=d.pesos[0],ult=d.pesos[d.pesos.length-1];
-    const pesoAtual=ult?parseFloat(ult.peso):null;
+    const peso=ult?parseFloat(ult.peso):null;
     const perda=(pri&&ult)?parseFloat(pri.peso)-parseFloat(ult.peso):null;
-    const imc=(pesoAtual&&altura)?pesoAtual/(altura*altura):null;
+    const imc=(peso&&altura)?peso/(altura*altura):null;
     const vel=this._velocidade(d.pesos);
     const estavel=vel!=null&&Math.abs(vel)<0.1;
-
     const cint=d.medidas.filter(m=>m.cintura);
-    const cintA=cint.length?cint[0].cintura:null, cintI=cint.length?cint[cint.length-1].cintura:null;
+    const cintA=cint.length?cint[0].cintura:null,cintI=cint.length?cint[cint.length-1].cintura:null;
 
-    // ---- retrato laboratorial ----
+    // retrato agrupado por sistema
     const porM={};d.exames.forEach(e=>{(porM[e.marcador]=porM[e.marcador]||[]).push(e);});
-    const retrato=Object.entries(porM).map(([mid,regs])=>{
-      const ord=[...regs].sort((a,b)=>a.data<b.data?-1:1);
-      const p=ord[0],u=ord[ord.length-1];
+    const info=mid=>{
+      const regs=porM[mid];if(!regs)return null;
+      const ord=[...regs].sort((a,b)=>a.data<b.data?-1:1);const p=ord[0],u=ord[ord.length-1];
       const st=this.status(mid,u.valor,u.ref_min,u.ref_max);
-      let tend=null;
-      if(ord.length>=2&&p.valor!==u.valor){
-        if(this.menorMelhor.includes(mid))tend=u.valor<p.valor?'melhorou':'piorou';
-        else if(this.maiorMelhor.includes(mid))tend=u.valor>p.valor?'melhorou':'piorou';
-      }
-      return {mid,p,u,st,tend,meta:this.metas[mid]?.t||'—'};
-    }).sort((a,b)=>{const ordem={fora:0,atencao:1,ok:2,otimo:3};return ordem[a.st]-ordem[b.st];});
+      let tend=null;if(ord.length>=2&&p.valor!==u.valor){
+        if(this.menorMelhor.includes(mid))tend=u.valor<p.valor?'m':'p';
+        else if(this.maiorMelhor.includes(mid))tend=u.valor>p.valor?'m':'p';}
+      return {p,u,st,tend};
+    };
+    const ganhos=[],alvos=[];
+    let linhasLab='';
+    this.grupos.forEach(([titulo,mids])=>{
+      const presentes=mids.filter(m=>porM[m]);
+      if(!presentes.length)return;
+      linhasLab+=`<tr class="grupo"><td colspan="6">${titulo}</td></tr>`;
+      presentes.forEach(mid=>{
+        const i=info(mid);if(!i)return;
+        if(i.tend==='m')ganhos.push(this.nomes[mid]);
+        if(i.st==='fora'||i.st==='aten')alvos.push(this.nomes[mid]);
+        const ref=(i.u.ref_min!=null?i.u.ref_min+'–':'< ')+(i.u.ref_max!=null?i.u.ref_max:'');
+        const tend=i.tend==='m'?'<span class="evol up">▲ melhorou</span>':i.tend==='p'?'<span class="evol down">▼ piorou</span>':'<span style="color:var(--suave)">—</span>';
+        const de=i.p!==i.u?`<div class="ref">de ${i.p.valor} em ${this._fmt(i.p.data)}</div>`:'';
+        linhasLab+=`<tr><td>${this.nomes[mid]}</td>
+          <td class="res num">${i.u.valor} <span class="un">${this.unid[mid]||''}</span></td>
+          <td class="ref num">${ref}</td><td class="ref num">${this.metas[mid]?.t||'—'}</td>
+          <td><span class="st ${i.st}">${ROT[i.st]}</span></td>
+          <td>${tend}${de}</td></tr>`;
+      });
+    });
 
-    const ganhos=retrato.filter(r=>r.tend==='melhorou').map(r=>this.nomes[r.mid]||r.mid);
-    const alvos=retrato.filter(r=>r.st==='fora'||r.st==='atencao').map(r=>this.nomes[r.mid]||r.mid);
-    const treinoIntenso=d.exerc.filter(e=>new Date(e.data+'T12:00:00')>Date.now()-30*86400000).length>=8;
-
-    const linhasLab=retrato.map(r=>{
-      const ref=(r.u.ref_min!=null?r.u.ref_min+'–':'< ')+(r.u.ref_max!=null?r.u.ref_max:'');
-      const tend=r.tend==='melhorou'?'<span class="tend-up">▲ melhorou</span>':r.tend==='piorou'?'<span class="tend-down">▼ piorou</span>':'<span style="color:var(--textd)">—</span>';
-      const de=(r.p!==r.u)?`<div class="ref">de ${r.p.valor} em ${this._fmt(r.p.data)}</div>`:'';
-      return `<tr><td>${this.nomes[r.mid]||r.mid}</td>
-        <td style="white-space:nowrap"><span class="v-${r.st}">${r.u.valor}</span> <span class="ref">${this.unid[r.mid]||''}</span></td>
-        <td class="ref">${ref}</td><td class="ref">${r.meta}</td>
-        <td style="color:${CORES[r.st]};font-size:13px">${ROT[r.st]}</td>
-        <td>${tend}${de}</td>
-        <td class="ref">${this._fmt(r.u.data)}</td></tr>`;
-    }).join('');
-
-    // ---- jornada em fases ----
+    // fases
     const fases=[];
-    if(pri)fases.push({q:this._fmt(pri.date||pri.data),t:'Início do acompanhamento',d:`Peso de partida: ${parseFloat(pri.peso).toFixed(1)} kg`});
-    if(d.doses.length){
-      const pd=[...d.doses].sort((a,b)=>a.data<b.data?-1:1)[0];
-      fases.push({q:this._fmt(pd.data),t:`GLP-1 · ${this._esc(pd.medicamento||'início')}`,d:'Entrada da medicação no protocolo'});
-    }
-    if(treinoIntenso)fases.push({q:'últimos 30 dias',t:'Treino ativo',d:`${d.exerc.length} sessões registradas — fase de recomposição`});
-    const fasesHtml=fases.length?`<div class="fases">${fases.map((f,i)=>`<div class="fase">
-      <div class="q">Fase ${i+1} · ${this._esc(f.q)}</div><div class="t">${this._esc(f.t)}</div><div class="d">${this._esc(f.d)}</div></div>`).join('')}</div>`:'';
+    if(pri)fases.push({q:this._fmt(pri.data),t:'Início do acompanhamento',d:`Peso de partida: ${parseFloat(pri.peso).toFixed(1)} kg`});
+    if(d.doses.length){const pd=[...d.doses].sort((a,b)=>a.data<b.data?-1:1)[0];
+      fases.push({q:this._fmt(pd.data),t:`GLP-1 · ${this._esc(pd.medicamento||'início')}`,d:'Entrada da medicação no protocolo'});}
+    const treino=d.exerc.filter(e=>new Date(e.data+'T12:00:00')>Date.now()-30*86400000).length;
+    if(treino>=8)fases.push({q:'últimos 30 dias',t:'Treino ativo',d:`${d.exerc.length} sessões — fase de recomposição`});
+    const fasesHtml=fases.length?`<div class="fases">${fases.map((f,i)=>`<div class="fase"><div class="q">Fase ${i+1} · ${this._esc(f.q)}</div><div class="t">${this._esc(f.t)}</div><div class="d">${this._esc(f.d)}</div></div>`).join('')}</div>`:'';
 
-    // ---- composição ----
     const c=d.comp[0];
-    const compHtml=c?`<div class="mini"><div class="rot">Composição corporal</div>
-      <table>${[['Massa muscular',c.massa_muscular,'kg'],['Massa de gordura',c.massa_gordura,'kg'],
-        ['% Gordura',c.gordura_pct,'%'],['Água corporal',c.agua_corporal,'L'],
-        ['Gordura visceral',c.gordura_visceral,''],['TMB',c.tmb,'kcal']]
-        .filter(x=>x[1]!=null).map(x=>`<tr><td style="color:var(--textm)">${x[0]}</td>
-        <td style="text-align:right;color:var(--text);font-weight:500">${x[1]} <span class="ref">${x[2]}</span></td></tr>`).join('')}</table>
-      <p class="ref" style="margin-top:10px">Medição de ${this._fmt(c.data)} · aparelho: ${this._esc(c.fonte||'não informado')}.
-      Compare apenas medições da mesma fonte.</p></div>`:'';
+    const compHtml=c?`<div class="mini"><div class="rot">Composição corporal</div><table>
+      ${[['Massa muscular',c.massa_muscular,'kg'],['Massa de gordura',c.massa_gordura,'kg'],['% Gordura',c.gordura_pct,'%'],['Água corporal',c.agua_corporal,'L'],['Gordura visceral',c.gordura_visceral,''],['TMB',c.tmb,'kcal']]
+      .filter(x=>x[1]!=null).map(x=>`<tr><td style="color:var(--tinta2)">${x[0]}</td><td class="num" style="text-align:right;font-weight:600">${x[1]} <span class="un">${x[2]}</span></td></tr>`).join('')}
+      </table><p class="ref" style="margin-top:8px">Bioimpedância de ${this._fmt(c.data)} · ${this._esc(c.fonte||'fonte não informada')}. Compare só a mesma fonte.</p></div>`:'';
+    const dosesHtml=d.doses.length?`<div class="mini"><div class="rot">GLP-1 · últimas doses</div><table>
+      ${[...d.doses].reverse().slice(0,6).map(x=>`<tr><td class="num" style="color:var(--tinta2)">${this._fmt(x.data)}</td><td style="text-align:right">${this._esc(x.medicamento||'')} ${this._esc(x.dose||'')}</td></tr>`).join('')}</table></div>`:'';
+    // efeitos com linha do tempo (mais recentes)
+    const efHtml=d.efeitos.length?`<div class="mini"><div class="rot">Efeitos colaterais · recentes</div><table>
+      ${d.efeitos.slice(0,6).map(e=>`<tr><td style="color:var(--tinta2)">${this._esc(e.tipo||'')}</td><td style="text-align:right"><span class="st aten" style="font-size:13px">${this._esc(e.intensidade||'')}</span> <span class="num ref">${this._fmt(e.data)}</span></td></tr>`).join('')}</table></div>`:'';
+    const medsHtml=d.meds.length?`<div class="mini"><div class="rot">Medicações em uso</div><table>
+      ${d.meds.map(m=>`<tr><td>${this._esc(m.nome)}</td><td style="text-align:right;color:var(--tinta2)">${this._esc(m.dose||'')}</td></tr>`).join('')}</table></div>`:'';
 
-    const dosesHtml=d.doses.length?`<div class="mini"><div class="rot">GLP-1 · últimas doses</div>
-      <table>${d.doses.slice(0,6).map(x=>`<tr><td style="color:var(--textm)">${this._fmt(x.data)}</td>
-      <td style="text-align:right">${this._esc(x.medicamento||'')} ${this._esc(x.dose||'')}</td></tr>`).join('')}</table></div>`:'';
-
-    const efMap={};d.efeitos.forEach(e=>{efMap[e.tipo]=efMap[e.tipo]||{n:0,int:e.intensidade};efMap[e.tipo].n++;});
-    const efHtml=Object.keys(efMap).length?`<div class="mini"><div class="rot">Efeitos colaterais relatados</div>
-      <table>${Object.entries(efMap).slice(0,6).map(([t,v])=>`<tr><td style="color:var(--textm)">${this._esc(t)}</td>
-      <td style="text-align:right"><span class="pill at">${this._esc(v.int||'')} · ${v.n}×</span></td></tr>`).join('')}</table></div>`:'';
-
-    const medsHtml=d.meds.length?`<div class="mini"><div class="rot">Medicações em uso</div>
-      <table>${d.meds.map(m=>`<tr><td>${this._esc(m.nome)}</td>
-      <td style="text-align:right;color:var(--textm)">${this._esc(m.dose||'')}</td></tr>`).join('')}</table></div>`:'';
+    const temDose=d.doses.length&&d.pesos.length>=2;
 
     return `
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-        <div><h2 style="margin:0">${this._esc(nome)}</h2>
-          <div style="font-size:12px;color:var(--textd)">Análise 360 · gerada em ${new Date().toLocaleDateString('pt-BR')}
-          ${d.ultimoAcesso?' · seu último acesso: '+new Date(d.ultimoAcesso).toLocaleDateString('pt-BR'):' · primeiro acesso'}</div></div>
-        <button class="btn sec sm" onclick="PORTAL.exportarPDF('${d.pid}')">📄 Exportar PDF</button>
-      </div>
-      <div class="kpis">
-        <div class="kpi"><div class="l">Peso atual</div><div class="v">${pesoAtual!=null?pesoAtual.toFixed(1):'—'}<small> kg</small></div></div>
-        <div class="kpi"><div class="l">${perda>=0?'Eliminados':'Variação'}</div><div class="v ${perda>=0?'verde':'red'}">${perda!=null?Math.abs(perda).toFixed(1):'—'}<small> kg</small></div></div>
-        ${cintA&&cintI?`<div class="kpi"><div class="l">Cintura</div><div class="v verde">−${(cintI-cintA).toFixed(0)}<small> cm</small></div></div>`:''}
-        <div class="kpi"><div class="l">IMC</div><div class="v ouro">${imc!=null?imc.toFixed(1):'—'}</div></div>
-        <div class="kpi"><div class="l">Ritmo 28 dias</div><div class="v" style="font-size:19px">${vel==null?'—':estavel?'estável':(vel>0?'−':'+')+Math.abs(vel).toFixed(2)+' kg/s'}</div></div>
-      </div>
-      ${!altura?'<div class="aviso">⚠️ Altura não cadastrada pelo paciente — IMC não pôde ser calculado.</div>':''}
-      ${fasesHtml}
+    <div class="pcabecalho">
+      <div><h2>${this._esc(nome)}</h2>
+        <div class="pobj">Análise 360 · gerada em ${new Date().toLocaleDateString('pt-BR')}</div></div>
+      <button class="btn sec sm" onclick="PORTAL.exportarPDF('${d.pid}')">Exportar PDF</button>
     </div>
-
-    <div class="card">
-      <div class="rot">Evolução</div><h3>Peso ao longo do acompanhamento</h3>
-      <div style="height:280px"><canvas id="gPeso"></canvas></div>
+    ${this._desde(d.ultimoAcesso,d.pesos,d.exames,d.efeitos)}
+    <div class="kpis">
+      <div class="kpi"><div class="l">Peso atual</div><div class="v num">${peso!=null?peso.toFixed(1):'—'}<small> kg</small></div></div>
+      <div class="kpi"><div class="l">${perda>=0?'Eliminados':'Variação'}</div><div class="v num" style="color:${perda>=0?'var(--verde)':'var(--vermelho)'}">${perda!=null?Math.abs(perda).toFixed(1):'—'}<small> kg</small></div></div>
+      ${cintA&&cintI?`<div class="kpi"><div class="l">Cintura</div><div class="v num" style="color:var(--verde)">−${(cintI-cintA).toFixed(0)}<small> cm</small></div></div>`:''}
+      <div class="kpi"><div class="l">IMC</div><div class="v num">${imc!=null?imc.toFixed(1):'—'}</div></div>
+      <div class="kpi"><div class="l">Ritmo · 28 dias</div><div class="v num" style="font-size:22px">${vel==null?'—':estavel?'estável':(vel>0?'−':'+')+Math.abs(vel).toFixed(2)+' kg/s'}</div></div>
     </div>
+    ${!altura?'<div class="aviso">Altura não cadastrada pelo paciente — IMC não pôde ser calculado.</div>':''}
+    ${fasesHtml?`<div class="bloco" style="margin-top:26px"><div class="sec">A jornada em fases</div>${fasesHtml}</div>`:''}
 
-    ${retrato.length?`<div class="card">
-      <div class="rot">Laboratório</div><h3>Retrato dos marcadores</h3>
-      <p style="font-size:13px;color:var(--textm);margin-bottom:12px">A cor considera a faixa do laboratório
-        <em>e</em> metas de otimização metabólica de uso geral. Ordenado por prioridade clínica.</p>
-      <div style="overflow-x:auto"><table>
-        <thead><tr><th>Marcador</th><th>Resultado</th><th>Ref. lab</th><th>Meta otim.</th><th>Status</th><th>Evolução</th><th>Coleta</th></tr></thead>
-        <tbody>${linhasLab}</tbody></table></div>
-      <p class="ref" style="margin-top:12px">*Metas individuais dependem do risco do paciente e da sua conduta.</p>
-    </div>`:''}
+    ${temDose?`<div class="bloco"><div class="sec">Peso × doses de GLP-1<span>▪ dose aplicada</span></div>
+      <div class="doselegenda">A curva de peso com as doses marcadas — veja a resposta a cada ajuste.</div>
+      <div class="dosewrap"><canvas id="gDose"></canvas></div></div>`:
+      `<div class="bloco"><div class="sec">Evolução do peso</div><div class="dosewrap"><canvas id="gDose"></canvas></div></div>`}
 
-    <div class="card">
-      <div class="rot">Leitura</div><h3>Síntese</h3>
+    ${linhasLab?`<div class="bloco"><div class="sec">Retrato laboratorial<span>por sistema · frente à meta de otimização</span></div>
+      <table class="lab"><thead><tr><th>Marcador</th><th>Resultado</th><th>Ref. lab</th><th>Meta otim.</th><th>Situação</th><th>Evolução</th></tr></thead>
+      <tbody>${linhasLab}</tbody></table>
+      <p class="ref" style="margin-top:12px">*Metas individuais dependem do risco do paciente e da sua conduta.</p></div>`:''}
+
+    <div class="bloco"><div class="sec">Síntese</div>
       <ol class="sintese">
-        <li><strong>Ganhos:</strong> ${perda>0?`−${perda.toFixed(1)} kg${cintA&&cintI?` e −${(cintI-cintA).toFixed(0)} cm de cintura`:''}`:'linha de base em formação'}${ganhos.length?`; melhora em ${ganhos.slice(0,5).join(', ')}`:''}.</li>
-        <li><strong>Lente de interpretação:</strong> ${treinoIntenso?'treino intenso recente pode elevar creatinina, ferritina, ácido úrico e enzimas hepáticas — valores nessas áreas merecem leitura contextualizada antes de conclusão.':'os valores refletem a fase atual da jornada; compare com as coletas anteriores, não apenas com a referência isolada.'}</li>
-        <li><strong>Alvos remanescentes:</strong> ${alvos.length?alvos.slice(0,5).join(', ')+' — priorizar reavaliação.':'nenhum marcador registrado fora das metas.'}</li>
-      </ol>
-    </div>
+        <li><b>Ganhos:</b> ${perda>0?`−${perda.toFixed(1)} kg${cintA&&cintI?` e −${(cintI-cintA).toFixed(0)} cm de cintura`:''}`:'linha de base em formação'}${ganhos.length?`; melhora em ${ganhos.slice(0,5).join(', ')}`:''}.</li>
+        <li><b>Lente de interpretação:</b> ${treino>=8?'treino intenso recente pode elevar creatinina, ferritina, ácido úrico e enzimas hepáticas — leitura contextualizada antes de conclusão.':'os valores refletem a fase atual da jornada; compare com coletas anteriores, não só com a referência isolada.'}</li>
+        <li><b>Alvos remanescentes:</b> ${alvos.length?alvos.slice(0,5).join(', ')+' — priorizar reavaliação.':'nenhum marcador registrado fora das metas.'}</li>
+      </ol></div>
 
-    ${(compHtml||dosesHtml||efHtml||medsHtml)?`<div class="card"><div class="rot">Detalhamento</div>
-      <div class="grid2" style="margin-top:12px">${compHtml}${dosesHtml}${efHtml}${medsHtml}</div></div>`:''}
+    ${(compHtml||dosesHtml||efHtml||medsHtml)?`<div class="bloco"><div class="sec">Detalhamento</div>
+      <div class="grid2">${compHtml}${dosesHtml}${efHtml}${medsHtml}</div></div>`:''}
 
-    <div class="card">
-      <p class="rodape-legal" style="border:0;padding:0;margin:0">Documento gerado a partir de dados
-      <strong>auto-relatados</strong> pelo paciente no aplicativo VITALE. Não constitui laudo, diagnóstico ou conduta.
-      A interpretação clínica é do médico assistente. Este acesso foi registrado e é visível ao paciente.</p>
-    </div>`;
+    <div class="card"><p class="legal">Documento gerado a partir de dados <b>auto-relatados</b> pelo paciente no aplicativo VITALE. Não constitui laudo, diagnóstico ou conduta. A interpretação clínica é do médico assistente. Este acesso foi registrado e é visível ao paciente.</p></div>`;
   },
 
-  grafico(pesos,altura){
-    const cv=document.getElementById('gPeso');
+  graficoDosePeso(pesos,doses){
+    const cv=document.getElementById('gDose');
     if(!cv||!pesos.length)return;
+    const labels=pesos.map(p=>this._fmt(p.data));
+    const dados=pesos.map(p=>parseFloat(p.peso));
+    // marca doses no ponto de peso mais próximo (mesma data ou anterior)
+    const pts=pesos.map(()=>null);
+    (doses||[]).forEach(dz=>{
+      let idx=-1;for(let i=0;i<pesos.length;i++){if(pesos[i].data<=dz.data)idx=i;else break;}
+      if(idx>=0)pts[idx]=dados[idx];
+    });
     new Chart(cv.getContext('2d'),{type:'line',
-      data:{labels:pesos.map(p=>this._fmt(p.data)),
-        datasets:[{label:'Peso (kg)',data:pesos.map(p=>parseFloat(p.peso)),borderColor:'#27c47d',
-          backgroundColor:'rgba(39,196,125,.08)',borderWidth:2.5,tension:.3,fill:true,pointRadius:2,
-          pointBackgroundColor:'#27c47d'}]},
+      data:{labels,datasets:[
+        {label:'Peso',data:dados,borderColor:'#1C1B18',backgroundColor:'rgba(28,27,24,.04)',borderWidth:2,tension:.3,fill:true,pointRadius:1.5,pointBackgroundColor:'#1C1B18'},
+        {label:'Dose',data:pts,borderColor:'transparent',backgroundColor:'#31597F',pointRadius:6,pointStyle:'rect',showLine:false}
+      ]},
       options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false},tooltip:{backgroundColor:'#0d1223',borderColor:'rgba(255,255,255,.1)',
-          borderWidth:1,titleColor:'#d4a843',bodyColor:'#ede8e0',padding:12}},
-        scales:{x:{ticks:{color:'#545870',font:{size:10},maxTicksLimit:12},grid:{color:'rgba(255,255,255,.04)'}},
-          y:{ticks:{color:'#545870',font:{size:11},callback:v=>v.toFixed(0)+' kg'},grid:{color:'rgba(255,255,255,.04)'}}}}});
+        plugins:{legend:{display:false},tooltip:{backgroundColor:'#1C1B18',titleColor:'#FBF8F3',bodyColor:'#FBF8F3',padding:10}},
+        scales:{x:{ticks:{color:'#8A8578',font:{size:10},maxTicksLimit:12},grid:{display:false}},
+          y:{ticks:{color:'#8A8578',font:{size:11},callback:v=>v+' kg'},grid:{color:'#E4DFD4'}}}}});
   },
 
   async exportarPDF(pid){
     try{await this.sb.from('acessos_medico').insert({medico_id:this.medico.id,paciente_id:pid,acao:'exportou_pdf'});}catch(e){}
     const el=document.getElementById('fichaConteudo');
     html2pdf().set({margin:8,filename:`VITALE_360_${new Date().toISOString().slice(0,10)}.pdf`,
-      image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#040608'},
+      image:{type:'jpeg',quality:.98},html2canvas:{scale:2,backgroundColor:'#FBF8F3'},
       jsPDF:{orientation:'portrait',unit:'mm',format:'a4'}}).from(el).save();
   },
 
-  // v5.8: mostra o CÓDIGO fixo do médico (não gera mais consentimento-remendo)
   mostrarCodigo(){
-    const out=document.getElementById('conviteOut');
-    if(!out)return;
+    const out=document.getElementById('conviteOut');if(!out)return;
     const cod=this.medico?.codigo;
     if(!cod){out.innerHTML='<div class="msg err">Código ainda não gerado para esta conta. Fale com o administrador.</div>';return;}
-    out.innerHTML=`<div style="text-align:center;background:rgba(212,168,67,.06);border:1px solid rgba(212,168,67,.25);border-radius:12px;padding:22px">
-      <div style="font-family:monospace;font-size:34px;letter-spacing:8px;color:var(--gold);font-weight:600">${this._esc(cod)}</div>
-      <div style="font-size:12px;color:var(--textm);margin-top:8px">Válido enquanto sua conta estiver ativa</div></div>`;
+    out.innerHTML=`<div class="codigo"><div class="c">${this._esc(cod)}</div><div style="font-size:13px;color:var(--suave);margin-top:8px">Válido enquanto sua conta estiver ativa</div></div>`;
   },
 
-  voltar(){
-    document.getElementById('telaFicha').classList.add('oculto');
-    document.getElementById('telaLista').classList.remove('oculto');
-    window.scrollTo(0,0);
-  },
-
+  voltar(){document.getElementById('telaFicha').classList.add('oculto');document.getElementById('telaLista').classList.remove('oculto');window.scrollTo(0,0);},
   _fmt(s){return s?new Date(s+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';},
   _esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 };
