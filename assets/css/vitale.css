@@ -698,3 +698,97 @@ input:focus, textarea:focus, select:focus {
   50%  { outline-color: rgba(212,168,67,0.35); }
   100% { outline-color: rgba(212,168,67,1); }
 }
+
+/* =====================================================
+   v5.31 — CAMADA DE LEGIBILIDADE E HIERARQUIA (Bloco 2)
+   Fica no fim do arquivo, sobrescrevendo o que veio antes.
+   Assim dá pra remover o bloco inteiro se algo não agradar,
+   sem desfazer edição espalhada por 700 linhas.
+
+   Diagnóstico que motivou: 40 das ~85 declarações de font-size
+   do arquivo eram <= 11px. Não era "gosto" — era texto pequeno
+   demais para ler no celular.
+   ===================================================== */
+
+:root{
+  /* Cinza de apoio mais claro. Medi antes de mexer: o #8c8880 anterior já
+     passava no WCAG AA (5,75:1 sobre o fundo). O problema real era TAMANHO,
+     não contraste. Ainda assim subi para 7,80:1 — em corpo pequeno, margem
+     folgada de contraste compensa a perda de nitidez. */
+  --textm:#a5a096;
+}
+
+/* ---------- Corpo ---------- */
+body{ font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+
+/* ---------- Títulos ----------
+   Cormorant Garamond em peso 300 com 1.5px de tracking é elegante no
+   papel e ruim numa tela escura: as hastes finas somem. Fraunces (já
+   carregada) tem eixo óptico e aguenta fundo escuro. Tracking quase
+   zero — serifa com tracking largo perde a palavra. */
+h1,h2,h3{ font-family:'Fraunces',Georgia,serif; font-weight:600; letter-spacing:.2px; }
+h1{ font-size:26px; line-height:1.25 }
+h2{ font-size:21px; line-height:1.3 }
+.card h3{ font-size:17px; line-height:1.35; letter-spacing:.2px; margin-bottom:14px }
+h4{ font-family:'Fraunces',Georgia,serif; font-weight:600; font-size:15px; letter-spacing:.2px }
+
+/* ---------- Piso de tamanho ---------- */
+label{ font-size:12px; letter-spacing:.6px; color:var(--textm); text-transform:none }
+input,select,textarea,button{ font-size:15px }
+.btn-small{ font-size:13.5px }
+p,li,td,th{ font-size:15px }
+
+/* ---------- Números ----------
+   tabular-nums impede o valor de "dançar" quando muda de 99,8 para 100,2. */
+.stat-value,.header-stat-val,.torre-kpi .v,.num,
+.imc-value,.coach-stat-val,td.num,.big-num{
+  font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1;
+}
+.stat-value{ font-size:30px; font-weight:700; letter-spacing:-.5px }
+.stat-label{ font-size:11.5px; letter-spacing:1px; color:var(--textm) }
+.header-stat-val{ font-size:19px }
+.header-stat-lbl{ font-size:10.5px; letter-spacing:.8px }
+.imc-label,.coach-role{ font-size:11.5px; letter-spacing:1.6px }
+.logo-sub,.auth-logo .sub{ font-size:10.5px; letter-spacing:2.4px }
+.torre-kpi .l{ font-size:11.5px }
+.coach-stat-lbl{ font-size:11px }
+.submeta-badge{ font-size:11px }
+
+/* ---------- Hierarquia dos cards ----------
+   Antes TODO card tinha o filete dourado no topo. Quando tudo é
+   destaque, nada é — e é justamente isso que dá a sensação de
+   template gerado. O filete agora é exclusivo do card principal. */
+.card::before{ display:none }
+.card--destaque{ position:relative }
+.card--destaque::before{
+  content:'';display:block;position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+}
+.card{ border-radius:16px }
+
+/* ---------- Emoji como decoração, não como informação ----------
+   Onde o emoji sobreviver num título, ele recua: menor e translúcido,
+   para o olho pousar na palavra. */
+.card h3 .ico,h4 .ico{ font-size:.85em; opacity:.55; margin-right:.35em }
+
+/* ---------- Toque ----------
+   Alvo mínimo de 44px é a recomendação da Apple e vale para a App Store. */
+.btn{ min-height:44px }
+.btn-small{ min-height:38px }
+.navsec button{ min-height:40px }
+
+/* ---------- Foco visível (acessibilidade e teclado) ---------- */
+:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; border-radius:6px }
+
+/* ---------- Respeita quem pediu menos movimento ---------- */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{ animation-duration:.01ms !important; transition-duration:.01ms !important }
+}
+
+/* ---------- Telas pequenas ---------- */
+@media(max-width:420px){
+  body{ font-size:15.5px }
+  .stat-value{ font-size:26px }
+  .card h3{ font-size:16px }
+  .container{ padding:18px 14px }
+}

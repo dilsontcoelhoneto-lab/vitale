@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A17">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A18">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -122,8 +122,8 @@
     <!-- DOSE GLP-1 (v5.16) — lembrete no dia e confirmação em um toque -->
     <div id="doseGlp1Card" style="display:none;margin-bottom:20px"></div>
 
-    <div class="card" id="cardRegistrar" style="border-color:rgba(212,168,67,0.3)">
-      <h3>✍️ Registrar</h3>
+    <div class="card card--destaque" id="cardRegistrar" style="border-color:rgba(212,168,67,0.3)">
+      <h3><span class="ico">✍️</span> Registrar</h3>
       <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px">Conte em uma frase — a IA separa cada dado e você confirma. Ex: <em>"pesei 88,4, tomei a dose de 7,5, almocei frango com arroz e caminhei 40 min"</em>. Peso, dose, refeição, treino e contexto entram de uma vez.</p>
       <textarea id="diarioTexto" rows="2" placeholder="pesei 88,4 · dose 7,5 · almocei frango com arroz · caminhei 40 min" style="width:100%;margin-bottom:10px;resize:vertical"></textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -163,7 +163,7 @@
       <div class="stat"><div class="stat-value" id="diasRastro">—</div><div class="stat-label">Dias Rastreando</div></div>
     </div>
     <div class="card">
-      <h3>📈 Progresso para Meta</h3>
+      <h3><span class="ico">📈</span> Progresso para Meta</h3>
       <div style="display:flex;justify-content:space-between;margin-bottom:12px">
         <span style="font-size:12px;color:var(--textm)">Início: <span id="metaInicio" style="color:var(--text)">—</span></span>
         <span style="font-size:12px;color:var(--textm)">Meta: <span id="metaLabel" style="color:var(--gold)">—</span> kg</span>
@@ -172,7 +172,7 @@
       <p style="font-size:12px;color:var(--textm);margin-top:10px" id="metaText">—</p>
     </div>
     <div class="chart-card">
-      <h3>📉 Histórico + Projeção</h3>
+      <h3><span class="ico">📉</span> Histórico + Projeção</h3>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
         <div style="width:130px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Período</label><select id="dashPeriodoRapido" onchange="VITALE_CORE.filtrarPeriodoDashboard(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:9px;color:var(--text);font-family:inherit;font-size:14px"><option value="" selected>Tudo</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option><option value="120">120 dias</option><option value="180">6 meses</option></select></div>
         <div style="flex:1;min-width:110px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">De</label><input type="date" id="dashFiltroDe" style="width:100%"></div>
@@ -207,20 +207,20 @@
 
     <!-- BLOCO COMPOSIÇÃO — Músculo vs Gordura (métrica-chave GLP-1) -->
     <div class="chart-card" id="composicaoChartCard" style="margin-top:20px;display:none">
-      <h3 style="margin-bottom:16px">📊 Composição: Músculo vs Gordura</h3>
+      <h3 style="margin-bottom:16px"><span class="ico">📊</span> Composição: Músculo vs Gordura</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="composicaoChart"></canvas></div>
       <p style="font-size:11px;color:var(--textm);margin-top:10px;text-align:center">💡 No tratamento GLP-1, o ideal é a linha de gordura cair enquanto a de músculo se mantém.</p>
     </div>
 
     <!-- BLOCO MEDIDAS — Gráfico de evolução -->
     <div class="chart-card" id="medidasChartCard" style="margin-top:20px;display:none">
-      <h3 style="margin-bottom:16px">📏 Medidas Corporais (cm)</h3>
+      <h3 style="margin-bottom:16px"><span class="ico">📏</span> Medidas Corporais (cm)</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="medidasChart"></canvas></div>
     </div>
 
     <!-- BLOCO F — Histórico do Diário -->
     <div class="chart-card" id="moodHistCard" style="margin-top:20px;display:none">
-      <h3 style="margin-bottom:16px">📔 Diário — Últimos 30 dias</h3>
+      <h3 style="margin-bottom:16px"><span class="ico">📔</span> Diário — Últimos 30 dias</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="moodHistChart"></canvas></div>
     </div>
 
@@ -235,7 +235,7 @@
   <div id="metas" class="tab-content">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Metas & Projeção</h2>
     <div class="card" data-flag="dashboard">
-      <h3>📊 Status Atual</h3>
+      <h3><span class="ico">📊</span> Status Atual</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div style="background:var(--bg1);padding:16px;border-radius:8px;border:1px solid var(--border)"><p style="font-size:10px;color:var(--textm);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Grau</p><p id="statusObesidade" style="font-size:16px;font-weight:800;margin:0">—</p></div>
         <div style="background:var(--bg1);padding:16px;border-radius:8px;border:1px solid var(--border)"><p style="font-size:10px;color:var(--textm);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px">Ritmo</p><p id="velocidadePerda" style="font-size:16px;font-weight:800;color:var(--em);margin:0">—</p></div>
@@ -244,11 +244,11 @@
       </div>
     </div>
     <div class="projection-card">
-      <h4>🔮 Projeção Personalizada</h4>
+      <h4><span class="ico">🔮</span> Projeção Personalizada</h4>
       <p id="projecaoTexto" style="font-size:14px;line-height:1.8;color:var(--text)">Carregando...</p>
     </div>
     <div class="card" data-flag="submetas" style="border-color:rgba(74,157,232,0.2);background:linear-gradient(135deg,rgba(74,157,232,0.03) 0%,var(--card) 60%)">
-      <h3 style="color:var(--cyan)">🎯 Minhas Submetas</h3>
+      <h3 style="color:var(--cyan)"><span class="ico">🎯</span> Minhas Submetas</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:20px;line-height:1.7">Marcos intermediários com data e propósito.</p>
       <div class="form-group-3">
         <div><label>Nome</label><input type="text" id="subNome" placeholder="Ex: Casamento, Viagem..."></div>
@@ -283,7 +283,7 @@
       <div id="submetasContainer" style="margin-top:20px"></div>
     </div>
     <div class="card" data-flag="marcos_imc">
-      <h3>🏆 Marcos IMC</h3>
+      <h3><span class="ico">🏆</span> Marcos IMC</h3>
       <div id="marcosContainer"></div>
     </div>
   </div>
@@ -296,7 +296,7 @@
 
     <!-- v5.20 — dados básicos direto na aba (antes só existiam no questionário) -->
     <div class="card" id="cardDadosBasicos" style="border-color:rgba(212,168,67,0.3)">
-      <h3>👤 Dados básicos</h3>
+      <h3><span class="ico">👤</span> Dados básicos</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Necessários para calcular seu gasto calórico diário (TMB) e o IMC. Sem eles, o app não estima — para não te dar número errado.</p>
       <div class="form-group">
         <div><label>Data de nascimento</label><input type="date" id="hDataNasc"></div>
@@ -458,7 +458,7 @@
 
     <!-- ===== PROTOCOLO GLP-1 (v5.16) — lembrete semanal de dose ===== -->
     <div class="card" style="margin-top:16px;border-color:rgba(74,157,232,0.25)">
-      <h3>💉 Meu protocolo GLP-1</h3>
+      <h3><span class="ico">💉</span> Meu protocolo GLP-1</h3>
       <p style="font-size:13px;color:var(--textm);margin:6px 0 16px;line-height:1.7">Configure sua aplicação semanal. No dia certo o app lembra e você confirma com um toque — sem precisar digitar nada.</p>
       <label style="display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text);margin-bottom:14px;cursor:pointer">
         <input type="checkbox" id="glp1Ativo" style="width:20px;height:20px;accent-color:var(--em)">
@@ -489,7 +489,7 @@
 
     <!-- ===== MEUS MÉDICOS (v5.8) — controle de compartilhamento (LGPD) ===== -->
     <div class="card" style="margin-top:16px;border-color:rgba(39,196,125,0.25)">
-      <h3>🩺 Meus Médicos</h3>
+      <h3><span class="ico">🩺</span> Meus Médicos</h3>
       <p style="font-size:13px;color:var(--textm);margin:6px 0 16px;line-height:1.7">Você decide quem vê seus dados e o quê. O acesso do médico é registrado e você pode revogar a qualquer momento.</p>
 
       <div id="medVincularBox" style="background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:16px;margin-bottom:16px">
@@ -514,14 +514,14 @@
 
     <!-- v5.29 · P1b — dispositivos conectados -->
     <div class="card" style="margin-top:16px">
-      <h3>📱 Dispositivos conectados</h3>
+      <h3><span class="ico">📱</span> Dispositivos conectados</h3>
       <p style="font-size:13px;color:var(--textm);margin-bottom:14px;line-height:1.7">Aparelhos e navegadores que já entraram nesta conta. Se algum não for seu, troque sua senha.</p>
       <div id="dispositivosLista"></div>
     </div>
 
     <!-- Botão: Refazer questionário inicial -->
     <div class="card" style="margin-top:16px;background:rgba(74,157,232,0.04);border-color:rgba(74,157,232,0.15)">
-      <h3 style="color:var(--cyan)">🔄 Refazer Questionário Inicial</h3>
+      <h3 style="color:var(--cyan)"><span class="ico">🔄</span> Refazer Questionário Inicial</h3>
       <p style="font-size:13px;color:var(--textm);margin-bottom:14px;line-height:1.7">Reabre o questionário <strong>pré-preenchido com seus dados atuais</strong>. Útil pra revisar tudo de uma vez de forma guiada.</p>
       <button class="btn btn-secondary" onclick="VITALE_CORE.reabrirOnboarding()" style="width:100%;padding:14px">🔄 ABRIR QUESTIONÁRIO</button>
     </div>
@@ -530,12 +530,12 @@
   <!-- REGISTRAR MEDIÇÕES -->
   <div id="upload" class="tab-content">
     <!-- v5.21 — UMA ÚNICA ENTRADA: qualquer arquivo, a IA decide o resto -->
-    <h2 style="font-size:30px;margin-bottom:6px;color:var(--gold)">📄 Enviar documento</h2>
+    <h2 style="font-size:30px;margin-bottom:6px;color:var(--gold)"><span class="ico">📄</span> Enviar documento</h2>
     <p style="color:var(--textm);font-size:14px;margin-bottom:20px;line-height:1.7">Mande <strong style="color:var(--text)">qualquer coisa</strong> e a IA identifica sozinha: exame de sangue, bioimpedância, balança, treino ou prato de comida. Você confere e salva.</p>
 
     <div class="card" style="border-color:rgba(212,168,67,0.35)">
       <div class="upload-area" onclick="document.getElementById('autoFile').click()" style="cursor:pointer">
-        <h4 style="font-size:19px">📎 Toque para enviar</h4>
+        <h4 style="font-size:19px"><span class="ico">📎</span> Toque para enviar</h4>
         <p style="margin-top:6px">Foto, print ou <strong style="color:var(--gold)">PDF</strong> — laudo, balança, treino, comida</p>
         <input type="file" id="autoFile" accept="image/*,application/pdf,.pdf" onchange="VITALE_CORE.importarAuto(this)" style="display:none">
       </div>
@@ -554,7 +554,7 @@
           <button id="ocrModoBio" class="btn btn-secondary btn-small" onclick="VITALE_CORE.setOcrModo('bioimpedancia')" style="flex:1">📊 Bioimpedância</button>
         </div>
         <div class="upload-area" onclick="document.getElementById('imageInput').click()">
-          <h4>📷 Clique ou arraste</h4>
+          <h4><span class="ico">📷</span> Clique ou arraste</h4>
           <p>PNG, JPG, WebP, PDF — máx 10MB</p>
           <input type="file" id="imageInput" accept="image/*,application/pdf,.pdf" style="display:none" onchange="VITALE_CORE.handleImageUpload(event)">
         </div>
@@ -566,7 +566,7 @@
 
     <!-- Composição corporal (bioimpedância) -->
     <div class="card">
-      <h3>📊 Composição Corporal</h3>
+      <h3><span class="ico">📊</span> Composição Corporal</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Dados de bioimpedância (InBody, balança smart). Use o print acima no modo 📊 ou preencha o que tiver.</p>
       <div id="composicaoDestaque" style="display:none;background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.2);border-radius:12px;padding:14px;margin-bottom:16px"></div>
       <div class="field" style="margin-bottom:12px"><label>Data</label><input type="date" id="comp_data"></div>
@@ -593,7 +593,7 @@
 
     <!-- Medidas corporais (fita métrica) manual -->
     <div class="card">
-      <h3>📏 Medidas de Fita</h3>
+      <h3><span class="ico">📏</span> Medidas de Fita</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Circunferências medidas com fita. Cintura e quadril calculam sua relação cintura/quadril (risco cardiovascular).</p>
       <div id="medidasDestaque" style="display:none;background:rgba(212,168,67,0.06);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:14px;margin-bottom:16px"></div>
       <div class="field" style="margin-bottom:12px"><label>Data</label><input type="date" id="med_data"></div>
@@ -613,7 +613,7 @@
 
     <!-- Peso: texto múltiplo -->
     <div class="card" data-flag="importar_texto">
-      <h3>✍️ Peso por Texto (múltiplas linhas)</h3>
+      <h3><span class="ico">✍️</span> Peso por Texto (múltiplas linhas)</h3>
       <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Formato: <code style="background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--gold)">2026-03-16: 116.4kg</code></p>
       <textarea id="textInput" placeholder="2026-03-16: 116.4kg&#10;2026-03-09: 117.2kg&#10;2026-03-02: 118.0kg" style="min-height:110px;margin-bottom:14px"></textarea>
       <button class="btn btn-primary" onclick="VITALE_CORE.importarTexto()" style="width:100%">📥 IMPORTAR DO TEXTO</button>
@@ -621,7 +621,7 @@
 
     <!-- Peso: registro único -->
     <div class="card" data-flag="importar_manual">
-      <h3>⚖️ Peso (registro único)</h3>
+      <h3><span class="ico">⚖️</span> Peso (registro único)</h3>
       <div class="form-group">
         <div><label>Data</label><input type="date" id="manualDate"></div>
         <div><label>Peso (kg)</label><input type="number" id="manualPeso" step="0.1" placeholder="114.3"></div>
@@ -634,7 +634,7 @@
   <div id="medic" class="tab-content" data-flag="medicacoes">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Medicações & Suplementos</h2>
     <div class="card">
-      <h3>💉 Novo Agendamento</h3>
+      <h3><span class="ico">💉</span> Novo Agendamento</h3>
       <div class="form-group">
         <div><label>Nome</label><input type="text" id="medNome" placeholder="Ex: Vitamina D, Glifage XR..."></div>
         <div><label>Dose</label><input type="text" id="medDose" placeholder="Ex: 10.000 IU, 500mg..."></div>
@@ -705,13 +705,13 @@
       <button class="save-btn-mega" onclick="VITALE_CORE.salvarAgendamento()">✅ SALVAR AGENDAMENTO</button>
     </div>
     <div class="card">
-      <h3>📋 Agendados</h3>
+      <h3><span class="ico">📋</span> Agendados</h3>
       <div id="agendadosContainer"></div>
     </div>
 
     <!-- DIFERENCIAL GLP-1: Registro de dose ao longo do tempo -->
     <div class="card">
-      <h3>💉 Histórico de Dose (GLP-1)</h3>
+      <h3><span class="ico">💉</span> Histórico de Dose (GLP-1)</h3>
       <div class="info-box" style="margin-bottom:14px">📈 Registre mudanças de dose do seu GLP-1. Assim dá pra ver como seu peso reagiu a cada ajuste.</div>
       <div class="form-group">
         <div><label>Medicamento</label><input type="text" id="doseMed" placeholder="Ex: Ozempic, Mounjaro"></div>
@@ -724,7 +724,7 @@
 
     <!-- DIFERENCIAL GLP-1: Efeitos colaterais -->
     <div class="card">
-      <h3>🤢 Efeitos Colaterais</h3>
+      <h3><span class="ico">🤢</span> Efeitos Colaterais</h3>
       <div class="info-box" style="margin-bottom:14px">📝 Acompanhe sintomas do tratamento. Ajuda você e seu médico a ajustar a dose.</div>
       <label style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px">Sintoma</label>
       <div id="efeitoTipoGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px"></div>
@@ -737,17 +737,17 @@
 
   <!-- ALIMENTAÇÃO -->
   <div id="alimentacao" class="tab-content">
-    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)">🍽️ Alimentação</h2>
+    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)"><span class="ico">🍽️</span> Alimentação</h2>
     <p style="color:var(--textm);font-size:14px;margin-bottom:24px">Registre suas refeições. A estimativa de calorias por foto é aproximada — informe o peso do prato para melhorar a precisão.</p>
 
     <div id="refTotalDia" style="text-align:center;font-size:15px;margin-bottom:16px;padding:12px;background:rgba(212,168,67,0.06);border-radius:12px;border:1px solid rgba(212,168,67,0.15)"></div>
 
     <!-- Foto → IA -->
     <div class="card">
-      <h3>📷 Foto do Prato (IA estima calorias)</h3>
+      <h3><span class="ico">📷</span> Foto do Prato (IA estima calorias)</h3>
       <div class="info-box" style="margin-bottom:14px">📸 Fotografe o prato e a IA estima as calorias. Sempre revise — é uma estimativa. Informar o peso melhora muito a precisão.</div>
       <div class="upload-area" onclick="document.getElementById('foodInput').click()">
-        <h4>📷 Clique ou arraste a foto</h4>
+        <h4><span class="ico">📷</span> Clique ou arraste a foto</h4>
         <p>PNG, JPG, WebP — Máx 10MB</p>
         <input type="file" id="foodInput" accept="image/*" style="display:none" onchange="VITALE_CORE.handleFoodUpload(event)">
       </div>
@@ -758,7 +758,7 @@
 
     <!-- Texto → IA -->
     <div class="card">
-      <h3>✍️ Descreva o que comeu (IA estima calorias)</h3>
+      <h3><span class="ico">✍️</span> Descreva o que comeu (IA estima calorias)</h3>
       <div class="info-box" style="margin-bottom:14px">💬 Sem foto? Escreva o que comeu, com peso aproximado se souber. Ex: "um chocolate Lacta de 90g" ou "2 ovos mexidos com pão integral".</div>
       <textarea id="foodTexto" placeholder='ex: "um pão francês com manteiga e um café com leite"' style="width:100%;min-height:70px;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:12px;color:var(--text);font-family:inherit;font-size:14px;resize:vertical;margin-bottom:12px"></textarea>
       <div id="foodTextoResult" style="margin-bottom:12px"></div>
@@ -767,7 +767,7 @@
 
     <!-- Registro manual -->
     <div class="card">
-      <h3>➕ Registrar Refeição</h3>
+      <h3><span class="ico">➕</span> Registrar Refeição</h3>
       <label style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px">Tipo</label>
       <div id="refTipoGrid" style="display:flex;gap:8px;margin-bottom:16px"></div>
       <div class="field"><label>Data da refeição</label><input type="date" id="ref_data"></div>
@@ -781,7 +781,7 @@
 
     <!-- Lista do dia -->
     <div class="card">
-      <h3>🍴 Refeições de Hoje</h3>
+      <h3><span class="ico">🍴</span> Refeições de Hoje</h3>
       <div id="refLista"></div>
     </div>
   </div>
@@ -794,10 +794,10 @@
 
     <!-- Print de app de exercício → IA -->
     <div class="card" style="margin-bottom:20px">
-      <h3 style="margin-bottom:12px">📷 Print do App (Apple Saúde, Strava…)</h3>
+      <h3 style="margin-bottom:12px"><span class="ico">📷</span> Print do App (Apple Saúde, Strava…)</h3>
       <div class="info-box" style="margin-bottom:14px">📲 Tire um print do seu treino e a IA extrai tipo, duração e calorias automaticamente.</div>
       <div class="upload-area" onclick="document.getElementById('exercFotoInput').click()">
-        <h4>📷 Clique ou arraste o print</h4>
+        <h4><span class="ico">📷</span> Clique ou arraste o print</h4>
         <p>PNG, JPG, WebP — Máx 10MB</p>
         <input type="file" id="exercFotoInput" accept="image/*" style="display:none" onchange="VITALE_CORE.handleExercUpload(event)">
       </div>
@@ -807,7 +807,7 @@
     </div>
 
     <div class="card" style="margin-bottom:20px">
-      <h3 style="margin-bottom:16px">➕ Registrar Atividade</h3>
+      <h3 style="margin-bottom:16px"><span class="ico">➕</span> Registrar Atividade</h3>
       <label style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px">Tipo</label>
       <div id="exercTipoGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;margin-bottom:18px"></div>
 
@@ -839,7 +839,7 @@
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:16px">📋 Últimos 30 dias</h3>
+      <h3 style="margin-bottom:16px"><span class="ico">📋</span> Últimos 30 dias</h3>
       <div id="exercLista"></div>
     </div>
   </div>
@@ -848,7 +848,7 @@
   <div id="historico" class="tab-content" data-flag="historico">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Histórico</h2>
     <div class="card">
-      <h3>⚖️ Todos os Registros</h3>
+      <h3><span class="ico">⚖️</span> Todos os Registros</h3>
 
       <!-- Filtro de data -->
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
@@ -877,80 +877,80 @@
 
     <!-- Composição corporal -->
     <div class="card">
-      <h3>📊 Composição Corporal</h3>
+      <h3><span class="ico">📊</span> Composição Corporal</h3>
       <div id="histComposicao"></div>
     </div>
 
     <!-- Medidas de fita -->
     <div class="card">
-      <h3>📏 Medidas de Fita</h3>
+      <h3><span class="ico">📏</span> Medidas de Fita</h3>
       <div id="histMedidas"></div>
     </div>
 
     <!-- Exercícios -->
     <div class="card">
-      <h3>🏃 Exercícios</h3>
+      <h3><span class="ico">🏃</span> Exercícios</h3>
       <div id="histExercicios"></div>
     </div>
 
     <!-- Diário -->
     <div class="card">
-      <h3>📔 Diário (humor/energia/sono)</h3>
+      <h3><span class="ico">📔</span> Diário (humor/energia/sono)</h3>
       <div id="histDiario"></div>
     </div>
 
     <div class="card">
-      <h3>🍽️ Refeições (30 dias)</h3>
+      <h3><span class="ico">🍽️</span> Refeições (30 dias)</h3>
       <div id="histRefeicoes"></div>
     </div>
 
     <div class="card">
-      <h3>💉 Doses GLP-1</h3>
+      <h3><span class="ico">💉</span> Doses GLP-1</h3>
       <div id="histDoses"></div>
     </div>
 
     <div class="card">
-      <h3>🤢 Efeitos Colaterais</h3>
+      <h3><span class="ico">🤢</span> Efeitos Colaterais</h3>
       <div id="histEfeitos"></div>
     </div>
   </div>
 
   <!-- PANORAMA — todos os gráficos -->
   <div id="panorama" class="tab-content">
-    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)">📈 Panorama</h2>
+    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)"><span class="ico">📈</span> Panorama</h2>
     <p style="color:var(--textm);font-size:14px;margin-bottom:24px">Sua saúde inteira em gráficos: peso, calorias, exercício e marcadores de sangue.</p>
 
     <div class="card">
-      <h3>🔥 Consumo × Gasto de Calorias (14 dias)</h3>
+      <h3><span class="ico">🔥</span> Consumo × Gasto de Calorias (14 dias)</h3>
       <div style="height:220px"><canvas id="panBalanco"></canvas></div>
       <p id="panBalancoNota" style="font-size:11.5px;color:var(--textm);margin-top:10px"></p>
     </div>
 
     <div class="card">
-      <h3>⚖️ Evolução do Peso</h3>
+      <h3><span class="ico">⚖️</span> Evolução do Peso</h3>
       <div style="height:220px"><canvas id="panPeso"></canvas></div>
     </div>
 
     <div class="card">
-      <h3>🏃 Exercício por Semana</h3>
+      <h3><span class="ico">🏃</span> Exercício por Semana</h3>
       <div style="height:200px"><canvas id="panExercicio"></canvas></div>
       <p id="panExercicioNota" style="font-size:12px;margin-top:10px"></p>
     </div>
 
     <div class="card">
-      <h3>🔬 Marcadores-chave</h3>
+      <h3><span class="ico">🔬</span> Marcadores-chave</h3>
       <div id="panMarcadores"></div>
     </div>
   </div>
 
   <!-- EXAMES LABORATORIAIS -->
   <div id="exames" class="tab-content">
-    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)">🔬 Exames Laboratoriais</h2>
+    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)"><span class="ico">🔬</span> Exames Laboratoriais</h2>
     <p style="color:var(--textm);font-size:14px;margin-bottom:20px">Acompanhe a tendência dos seus marcadores. Tudo entra na Análise Completa.</p>
 
     <!-- v5.21 — caminho principal: mandar o laudo e deixar a IA ler -->
     <div class="card" style="border-color:rgba(212,168,67,0.35);margin-bottom:20px">
-      <h3>📄 Enviar o laudo</h3>
+      <h3><span class="ico">📄</span> Enviar o laudo</h3>
       <p style="font-size:13px;color:var(--textm);margin:6px 0 14px;line-height:1.7">Mande o <strong style="color:var(--text)">PDF ou a foto</strong> do exame. A IA lê os marcadores e a data da coleta — você só confere e confirma. É o jeito mais rápido.</p>
       <button class="btn btn-gold" onclick="VITALE_CORE.irAba('upload');setTimeout(()=>document.getElementById('autoFile')?.click(),300)" style="width:100%;padding:14px">📎 Enviar laudo (PDF ou foto)</button>
     </div>
@@ -971,12 +971,12 @@
     </details>
 
     <div class="card">
-      <h3>📊 Tendência dos marcadores</h3>
+      <h3><span class="ico">📊</span> Tendência dos marcadores</h3>
       <div id="examesGraficos"></div>
     </div>
 
     <div class="card">
-      <h3>📎 Anexar exame completo (PDF/foto)</h3>
+      <h3><span class="ico">📎</span> Anexar exame completo (PDF/foto)</h3>
       <p style="font-size:12.5px;color:var(--textm);margin-bottom:14px">Guarde o laudo inteiro do laboratório. Fica salvo na sua conta para download e para levar ao médico.</p>
       <label style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px">Data do exame</label>
       <input type="date" id="arqData" style="width:100%;margin-bottom:12px">
@@ -988,7 +988,7 @@
     </div>
 
     <div class="card">
-      <h3>📋 Últimos valores</h3>
+      <h3><span class="ico">📋</span> Últimos valores</h3>
       <div id="examesLista"></div>
     </div>
   </div>
@@ -997,7 +997,7 @@
   <div id="relatorio" class="tab-content" data-flag="relatorio_pdf">
     <h2 style="font-size:30px;margin-bottom:24px;color:var(--gold)">Relatório & Backup</h2>
     <div class="card">
-      <h3>📄 Relatório para o Médico</h3>
+      <h3><span class="ico">📄</span> Relatório para o Médico</h3>
       <p style="font-size:13px;color:var(--textm);margin-bottom:16px;line-height:1.8"><strong style="color:var(--text)">Simples:</strong> 1-2 páginas com o essencial — situação atual, medicações e últimos exames. Ideal para a consulta.<br><strong style="color:var(--text)">Completo:</strong> a história toda — gráficos de evolução, tendência dos exames, doses GLP-1, efeitos, bem-estar, e um anexo de dados estruturados para analisar com qualquer IA.</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="VITALE_CORE.gerarRelatorioPDF('simples')" style="flex:1;min-width:150px;padding:16px">📄 SIMPLES</button>
@@ -1009,7 +1009,7 @@
       </div>
     </div>
     <div class="card" data-flag="backup_json">
-      <h3>💾 Backup JSON</h3>
+      <h3><span class="ico">💾</span> Backup JSON</h3>
       <p style="font-size:13px;color:var(--textm);margin-bottom:20px;line-height:1.8">Exporte todos os seus dados para backup.</p>
       <button class="btn btn-secondary" onclick="VITALE_CORE.exportarJSON()" style="width:100%;padding:14px">📤 EXPORTAR JSON</button>
     </div>
@@ -1185,9 +1185,9 @@
 
 <div id="modalSettings" class="modal">
   <div class="modal-content">
-    <div class="modal-header"><h2 style="font-size:22px;margin:0">⚙️ Configurações</h2><button class="modal-close" onclick="VITALE_CORE.closeModal('modalSettings')">✕</button></div>
+    <div class="modal-header"><h2 style="font-size:22px;margin:0"><span class="ico">⚙️</span> Configurações</h2><button class="modal-close" onclick="VITALE_CORE.closeModal('modalSettings')">✕</button></div>
     <div class="settings-section">
-      <h4>👤 Perfil</h4>
+      <h4><span class="ico">👤</span> Perfil</h4>
       <div class="form-group"><div><label>Nome</label><input type="text" id="nomeInput" placeholder="Seu nome"></div><div><label>Altura (m)</label><input type="text" id="alturaInput" placeholder="1.84"></div></div>
       <div class="form-group"><div><label>WhatsApp / Telefone</label><input type="tel" id="telefoneInput" placeholder="(41) 99999-9999"></div><div><label>Estado</label>
         <select id="estadoInput">
@@ -1199,11 +1199,38 @@
       </label>
       <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.salvarPerfil()">Salvar Perfil</button>
     </div>
-    <div class="settings-section"><h4>💾 Dados</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.exportarJSON()">📤 Exportar meus dados (JSON)</button></div>
-    <div class="settings-section"><h4>🎓 Ajuda</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.refazerTour()">🔄 Rever tour de boas-vindas</button></div>
-    <div class="settings-section"><h4>🚪 Conta</h4><button class="btn btn-danger btn-small" onclick="VITALE_CORE.signOut()">Sair da conta</button></div>
+    <div class="settings-section"><h4><span class="ico">💾</span> Dados</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.exportarJSON()">📤 Exportar meus dados (JSON)</button></div>
+    <div class="settings-section"><h4><span class="ico">🎓</span> Ajuda</h4><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.refazerTour()">🔄 Rever tour de boas-vindas</button></div>
+    <!-- v5.31 · Bloco 2 — segurança da conta do paciente.
+         2FA aqui é OPCIONAL de propósito: obrigatório num app de saúde de
+         consumo derruba a adoção. No portal do médico é obrigatório, porque
+         lá uma senha vazada expõe a carteira inteira de pacientes. -->
+    <div class="settings-section">
+      <h4><span class="ico">🔐</span> Segurança</h4>
+      <div id="seg2faStatus" style="font-size:13px;color:var(--textm);margin:8px 0 12px">Verificando…</div>
+      <div id="seg2faAcoes" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+
+      <div id="seg2faSetup" style="display:none;margin-top:14px;border:1px solid var(--border2);border-radius:12px;padding:16px">
+        <p style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px">Escaneie o código com Google Authenticator, Authy ou o gerenciador de senhas do seu celular.</p>
+        <div id="seg2faQr" style="text-align:center;margin-bottom:12px"></div>
+        <details style="margin-bottom:12px"><summary style="font-size:12px;color:var(--textm);cursor:pointer">Não consigo escanear</summary>
+          <p id="seg2faSegredo" style="font-family:monospace;font-size:12px;word-break:break-all;background:var(--bg);padding:10px;border-radius:6px;margin-top:8px"></p></details>
+        <label>Código de 6 dígitos</label>
+        <input id="seg2faCodigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="text-align:center;letter-spacing:6px;font-family:monospace">
+        <div id="seg2faMsg" style="font-size:12px;margin:8px 0;min-height:16px"></div>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.confirmar2FA()">Ativar</button>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.cancelar2FA()">Cancelar</button>
+      </div>
+
+      <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
+        <p style="font-size:12.5px;color:var(--textm);line-height:1.6;margin-bottom:10px">Se você acha que alguém entrou na sua conta, desconecte todos os aparelhos — inclusive este. Você vai precisar entrar de novo.</p>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.encerrarTodasSessoes()">Encerrar todas as sessões</button>
+      </div>
+    </div>
+
+    <div class="settings-section"><h4><span class="ico">🚪</span> Conta</h4><button class="btn btn-danger btn-small" onclick="VITALE_CORE.signOut()">Sair da conta</button></div>
     <div class="settings-section" style="border-top:1px solid rgba(232,80,74,0.25);margin-top:8px;padding-top:14px">
-      <h4 style="color:var(--red)">⚠️ Zona de risco</h4>
+      <h4 style="color:var(--red)"><span class="ico">⚠️</span> Zona de risco</h4>
       <p style="font-size:12px;color:var(--textm);line-height:1.6;margin:6px 0 12px">Apagar a conta remove <strong>definitivamente</strong> todos os seus dados: pesagens, exames, medicações, histórico e autorizações a médicos. Não há como desfazer. Exporte seus dados antes, se quiser guardá-los.</p>
       <button class="btn btn-danger btn-small" onclick="VITALE_CORE.abrirExclusaoConta()">Excluir minha conta e dados</button>
     </div>

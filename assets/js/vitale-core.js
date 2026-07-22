@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.30 · Navegação em 4 Grupos + Timeout de Sessão · 2026-07-22';
+const VITALE_VERSION = 'v5.31 · Legibilidade + 2FA do Paciente · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -60,6 +60,11 @@ const VITALE_CORE = {
 
       const user = await window.VitaleAuth.requireAuth();
       if (!user) return;
+
+      // v5.31 — se o usuário ativou 2FA, o desafio precisa ser cobrado AQUI.
+      // Sem isso o segundo fator seria decorativo: o Supabase devolve sessão
+      // em aal1 e as políticas de RLS não exigem aal2.
+      if (!await this._exigir2FA()) return;
 
       // Carrega tudo em paralelo MAS de forma resiliente: cada loader que
       // falhar cai no seu próprio fallback em vez de derrubar o app inteiro.
@@ -5936,6 +5941,7 @@ const VITALE_CORE = {
     const est = document.getElementById('estadoInput'); if (est) est.value = hp.estado || '';
     const mkt = document.getElementById('consentMarketingInput'); if (mkt) mkt.checked = !!hp.consent_marketing;
     document.getElementById('modalSettings').classList.add('active');
+    this.carregar2FA();   // v5.31
   },
 
   async salvarPerfil() {
@@ -6229,6 +6235,132 @@ const VITALE_CORE = {
       c.insertBefore(el, c.children[1] || c.firstChild);
       setTimeout(() => el.remove(), 4500);
     }
+  },
+
+  // Portão de 2FA na abertura do app. Devolve true se pode seguir.
+  async _exigir2FA() {
+    let n;
+    try { n = (await window.sb.auth.mfa.getAuthenticatorAssuranceLevel()).data; }
+    catch (e) { return true; }                       // MFA off no projeto
+    if (!n || n.currentLevel === 'aal2' || n.nextLevel !== 'aal2') return true;
+
+    document.getElementById('initLoader')?.remove();
+    document.body.insertAdjacentHTML('afterbegin', `
+      <div id="gate2fa" style="position:fixed;inset:0;z-index:10000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px">
+        <div style="max-width:380px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px">
+          <h2 style="color:var(--gold);margin-bottom:8px">Verificação em duas etapas</h2>
+          <p style="font-size:14px;color:var(--textm);margin-bottom:18px;line-height:1.6">Abra seu aplicativo autenticador e informe o código de 6 dígitos.</p>
+          <input id="gateCod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"
+            style="width:100%;text-align:center;letter-spacing:8px;font-family:monospace;font-size:22px;padding:14px;background:var(--bg);border:1px solid var(--border2);border-radius:10px;color:var(--text)">
+          <p id="gateMsg" style="font-size:13px;color:var(--red);margin:10px 0;min-height:18px"></p>
+          <button class="btn btn-primary" style="width:100%" onclick="VITALE_CORE._verificarGate2FA()">Entrar</button>
+          <p style="text-align:center;margin-top:14px"><a href="#" onclick="VITALE_CORE.sairDoOnboarding();return false" style="font-size:13px;color:var(--textm)">Entrar com outra conta</a></p>
+        </div>
+      </div>`);
+    setTimeout(() => document.getElementById('gateCod')?.focus(), 120);
+    return false;
+  },
+
+  async _verificarGate2FA() {
+    const msg = document.getElementById('gateMsg');
+    const code = (document.getElementById('gateCod').value || '').replace(/\D/g, '');
+    if (code.length !== 6) { msg.textContent = 'Informe os 6 dígitos.'; return; }
+    msg.style.color = 'var(--textm)'; msg.textContent = 'Verificando…';
+    const { data } = await window.sb.auth.mfa.listFactors();
+    const f = (data?.totp || []).find(x => x.status === 'verified');
+    if (!f) { msg.style.color = 'var(--red)'; msg.textContent = 'Nenhum autenticador ativo.'; return; }
+    const { data: ch, error: e1 } = await window.sb.auth.mfa.challenge({ factorId: f.id });
+    if (e1) { msg.style.color = 'var(--red)'; msg.textContent = e1.message; return; }
+    const { error: e2 } = await window.sb.auth.mfa.verify({ factorId: f.id, challengeId: ch.id, code });
+    if (e2) { msg.style.color = 'var(--red)'; msg.textContent = 'Código incorreto ou expirado. Tente o próximo.'; return; }
+    location.reload();
+  },
+
+  // ===== v5.31 · Bloco 2 — 2FA OPCIONAL do paciente =====
+  async carregar2FA() {
+    const st = document.getElementById('seg2faStatus');
+    const ac = document.getElementById('seg2faAcoes');
+    if (!st || !ac) return;
+    try {
+      const { data, error } = await window.sb.auth.mfa.listFactors();
+      if (error) throw error;
+      const ativo = (data?.totp || []).find(f => f.status === 'verified');
+      this._fator2FA = ativo || null;
+      if (ativo) {
+        st.innerHTML = '<span style="color:var(--em)">Ativa.</span> Ao entrar, além da senha vamos pedir o código do seu autenticador.';
+        ac.innerHTML = '<button class="btn btn-secondary btn-small" onclick="VITALE_CORE.desativar2FA()">Desativar</button>';
+      } else {
+        st.innerHTML = 'Desativada. Com ela, saber sua senha não basta para entrar na sua conta.';
+        ac.innerHTML = '<button class="btn btn-secondary btn-small" onclick="VITALE_CORE.ativar2FA()">Ativar verificação em duas etapas</button>';
+      }
+    } catch (e) {
+      st.textContent = 'Verificação em duas etapas indisponível neste momento.';
+      ac.innerHTML = '';
+    }
+  },
+
+  async ativar2FA() {
+    const box = document.getElementById('seg2faSetup');
+    const qr = document.getElementById('seg2faQr');
+    box.style.display = 'block';
+    qr.innerHTML = '<p style="font-size:13px;color:var(--textm)">Gerando código…</p>';
+    this._msg2FA('');
+    // limpa fatores de tentativas anteriores que ficaram sem verificar
+    try {
+      const { data } = await window.sb.auth.mfa.listFactors();
+      for (const f of (data?.all || [])) if (f.status !== 'verified') await window.sb.auth.mfa.unenroll({ factorId: f.id });
+    } catch (e) {}
+    const { data, error } = await window.sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'VITALE ' + Date.now() });
+    if (error) { qr.innerHTML = ''; return this._msg2FA('Não foi possível gerar: ' + error.message); }
+    this._enroll2FA = data.id;
+    qr.innerHTML = `<img src="${data.totp.qr_code}" alt="QR code" style="width:190px;height:190px;background:#fff;padding:8px;border-radius:10px">`;
+    document.getElementById('seg2faSegredo').textContent = data.totp.secret;
+  },
+
+  async confirmar2FA() {
+    const code = (document.getElementById('seg2faCodigo').value || '').replace(/\D/g, '');
+    if (code.length !== 6) return this._msg2FA('Informe os 6 dígitos.');
+    this._msg2FA('Verificando…', 'var(--textm)');
+    const { data: ch, error: e1 } = await window.sb.auth.mfa.challenge({ factorId: this._enroll2FA });
+    if (e1) return this._msg2FA(e1.message);
+    const { error: e2 } = await window.sb.auth.mfa.verify({ factorId: this._enroll2FA, challengeId: ch.id, code });
+    if (e2) return this._msg2FA('Código incorreto ou expirado. Tente o próximo que o app gerar.');
+    document.getElementById('seg2faSetup').style.display = 'none';
+    document.getElementById('seg2faCodigo').value = '';
+    this.showAlert('success', 'Verificação em duas etapas ativada.');
+    await this.carregar2FA();
+  },
+
+  cancelar2FA() {
+    document.getElementById('seg2faSetup').style.display = 'none';
+    document.getElementById('seg2faCodigo').value = '';
+    this._msg2FA('');
+  },
+
+  async desativar2FA() {
+    if (!confirm('Desativar a verificação em duas etapas?\n\nSua conta volta a ser protegida só pela senha.')) return;
+    try {
+      const { error } = await window.sb.auth.mfa.unenroll({ factorId: this._fator2FA.id });
+      if (error) throw error;
+      this.showAlert('info', 'Verificação em duas etapas desativada.');
+      await this.carregar2FA();
+    } catch (e) { this.showAlert('error', '❌ ' + e.message); }
+  },
+
+  _msg2FA(t, cor) {
+    const el = document.getElementById('seg2faMsg');
+    if (el) { el.textContent = t || ''; el.style.color = cor || 'var(--red)'; }
+  },
+
+  // Encerra a sessão em TODOS os aparelhos (scope global invalida os refresh
+  // tokens no servidor — não adianta o outro aparelho continuar com o token).
+  async encerrarTodasSessoes() {
+    if (!confirm('Encerrar a sessão em todos os aparelhos, inclusive neste?\n\nVocê vai precisar entrar de novo.')) return;
+    try {
+      await window.sb.auth.signOut({ scope: 'global' });
+    } catch (e) { console.warn('signOut global', e); }
+    try { localStorage.clear(); } catch (e) {}
+    window.location.replace('/');
   },
 
   async signOut() {
