@@ -440,6 +440,9 @@ const PORTAL = {
       this.sb.auth.onAuthStateChange((ev)=>{ if(ev==='PASSWORD_RECOVERY'||ev==='SIGNED_IN') this.tela('telaNovaSenha'); });
       this.tela('telaNovaSenha'); return;
     }
+    if(/[?&]expirou=1/.test(location.search)){
+      this._msg('loginMsg','Sua sessão foi encerrada por inatividade. Entre novamente.','ok');
+    }
     const {data:{session}}=await this.sb.auth.getSession();
     if(session)await this.posLogin();
   },
@@ -700,6 +703,39 @@ const PORTAL = {
   },
   async sair(){await this.sb.auth.signOut();location.reload();},
 
+  // ===== v5.30 · P3 — expiração por inatividade =====
+  // Consultório costuma ter computador compartilhado. Sessão de médico aberta
+  // indefinidamente numa tela com dados de paciente é risco real e evitável.
+  // No app do paciente NÃO fazemos isso — lá sessão longa é a expectativa.
+  INATIVIDADE_MIN: 30,
+  _iniciarVigiaInatividade(){
+    if(this._vigiaAtivo) return;
+    this._vigiaAtivo = true;
+    const limite = this.INATIVIDADE_MIN*60*1000;
+    const aviso  = limite - 2*60*1000;   // avisa 2 min antes
+    let tAviso, tFim;
+
+    const barra = document.createElement('div');
+    barra.id='avisoInatividade';
+    barra.style.cssText='display:none;position:fixed;left:0;right:0;bottom:0;z-index:9999;background:var(--tinta);color:var(--papel);padding:12px 16px;font-size:14px;text-align:center';
+    barra.innerHTML='Sua sessão vai expirar por inatividade em instantes. <a href="#" id="continuarSessao" style="color:var(--ouro);text-decoration:underline;margin-left:8px">Continuar conectado</a>';
+    document.body.appendChild(barra);
+
+    const reiniciar=()=>{
+      clearTimeout(tAviso); clearTimeout(tFim);
+      barra.style.display='none';
+      tAviso=setTimeout(()=>{barra.style.display='block';},aviso);
+      tFim=setTimeout(async()=>{
+        await this.sb.auth.signOut();
+        location.href='/medico.html?expirou=1';
+      },limite);
+    };
+    barra.querySelector('#continuarSessao').onclick=(e)=>{e.preventDefault();reiniciar();};
+    ['click','keydown','scroll','touchstart'].forEach(ev=>
+      document.addEventListener(ev,reiniciar,{passive:true}));
+    reiniciar();
+  },
+
   // v5.26 — login social do médico
   async entrarCom(provedor){
     this._msg('loginMsg','Abrindo '+(provedor==='google'?'Google':'Apple')+'…','ok');
@@ -737,6 +773,7 @@ const PORTAL = {
     ['telaMfaCadastro','telaMfaDesafio'].forEach(t=>document.getElementById(t)?.classList.add('oculto'));
 
     document.getElementById('btnPerfil').classList.remove('oculto');
+    this._iniciarVigiaInatividade();          // v5.30 · P3
     this._aplicarMetasCustom();
     document.getElementById('telaLista').classList.remove('oculto');
     await this.carregarPacientes();

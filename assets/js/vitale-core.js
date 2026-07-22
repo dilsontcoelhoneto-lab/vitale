@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.29 · Auditoria de Acesso + 2FA + Dispositivos · 2026-07-22';
+const VITALE_VERSION = 'v5.30 · Navegação em 4 Grupos + Timeout de Sessão · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -147,6 +147,12 @@ const VITALE_CORE = {
 
       // v5.29 — registra o dispositivo e avisa se for o primeiro acesso dele
       this.registrarDispositivo();
+
+      // v5.30 — desenha a navegação. Roda depois das feature flags para não
+      // listar sub-aba desligada (applyToUI é assíncrono).
+      const abaAtiva = document.querySelector('.tab-content.active')?.id || 'dashboard';
+      try { this._syncNav(abaAtiva); } catch (e) { console.warn('syncNav', e); }
+      setTimeout(() => { try { this._syncNav(document.querySelector('.tab-content.active')?.id || 'dashboard'); } catch (e) {} }, 900);
 
       // Esconde loader
       const loader = document.getElementById('initLoader');
@@ -2193,13 +2199,8 @@ const VITALE_CORE = {
 
   // Troca de aba programática (sem evento de clique)
   _goTab(tabName) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    const cont = document.getElementById(tabName);
-    if (cont) cont.classList.add('active');
-    const btn = [...document.querySelectorAll('.tab-btn')].find(b => (b.getAttribute('onclick') || '').includes(`'${tabName}'`));
-    if (btn) btn.classList.add('active');
-    this.switchTab({ currentTarget: btn || { classList: { add() {} } } }, tabName);
+    // v5.30: delega para irAba, que já cuida das duas barras de navegação
+    this.irAba(tabName);
   },
 
   // TMB (Mifflin-St Jeor) — precisa de peso atual, altura, nascimento e sexo
@@ -2432,8 +2433,7 @@ const VITALE_CORE = {
 
   // v5.20 — leva à aba Saúde E rola até os dados básicos, destacando o card
   irDadosBasicos() {
-    const btn = document.querySelector('.tab-btn[onclick*="saude"]');
-    this.switchTab({ currentTarget: btn || { classList: { add() {} } } }, 'saude');
+    this.irAba('saude');
     setTimeout(() => {
       const card = document.getElementById('cardDadosBasicos');
       if (!card) return;
@@ -2447,8 +2447,7 @@ const VITALE_CORE = {
 
   // v5.11 — ponto de entrada único: vai ao dashboard e foca o campo Registrar
   irRegistrar() {
-    const btn = document.querySelector('.tab-btn[onclick*="dashboard"]');
-    this.switchTab({ currentTarget: btn || { classList: { add() {} } } }, 'dashboard');
+    this.irAba('dashboard');
     const card = document.getElementById('cardRegistrar');
     const ta = document.getElementById('diarioTexto');
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -5485,7 +5484,10 @@ const VITALE_CORE = {
     // O escuro é o box-shadow do recorte — funciona acima de qualquer stacking context.
     let spotStyle = 'display:none';
     if (p.destaque) {
-      const btn = document.querySelector(`.tab-btn[onclick*="'${p.destaque}'"]`);
+      // v5.30 — o destaque agora vive nas barras nova (grupo ou sub-aba)
+      this.irAba(p.destaque);
+      const btn = document.querySelector(`.navsec button[data-aba="${p.destaque}"]`)
+        || document.querySelector(`.navprim button[data-grupo="${this._grupoDaAba(p.destaque)}"]`);
       if (btn) {
         btn.scrollIntoView({ block: 'nearest', inline: 'center' }); // instantâneo p/ medir certo
         const r = btn.getBoundingClientRect();
@@ -6122,11 +6124,66 @@ const VITALE_CORE = {
   // =====================================================
   // HELPERS UI
   // =====================================================
+  // ===== v5.30 · U2 — navegação em 2 níveis =====
+  // Os .tab-content continuam os mesmos; só a navegação mudou.
+  GRUPOS: {
+    hoje:      { rotulo: 'Hoje',      abas: [['dashboard', 'Dashboard'], ['metas', 'Metas']] },
+    registrar: { rotulo: 'Registrar', abas: [['upload', 'Enviar documento'], ['alimentacao', 'Alimentação'], ['exercicios', 'Exercícios'], ['medic', 'Medicações']] },
+    evolucao:  { rotulo: 'Evolução',  abas: [['panorama', 'Panorama'], ['exames', 'Exames'], ['historico', 'Histórico'], ['relatorio', 'Relatório']] },
+    perfil:    { rotulo: 'Perfil',    abas: [['saude', 'Saúde e conta']] }
+  },
+
+  _grupoDaAba(tabName) {
+    for (const [g, def] of Object.entries(this.GRUPOS)) {
+      if (def.abas.some(([id]) => id === tabName)) return g;
+    }
+    return 'hoje';
+  },
+
+  // Clique num grupo → abre a primeira sub-aba visível dele
+  irGrupo(grupo) {
+    const def = this.GRUPOS[grupo];
+    if (!def) return;
+    const primeira = def.abas.find(([id]) => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+    if (primeira) this.irAba(primeira[0]);
+  },
+
+  // Troca de aba sem depender de um evento de clique
+  irAba(tabName) {
+    const btn = document.querySelector(`.navsec button[data-aba="${tabName}"]`);
+    this.switchTab({ currentTarget: btn || { classList: { add() {} } } }, tabName);
+  },
+
+  // Redesenha as duas barras conforme a aba ativa
+  _syncNav(tabName) {
+    const grupo = this._grupoDaAba(tabName);
+    document.querySelectorAll('.navprim button').forEach(b =>
+      b.classList.toggle('on', b.dataset.grupo === grupo));
+
+    const sec = document.getElementById('navSecundaria');
+    if (!sec) return;
+    const abas = (this.GRUPOS[grupo]?.abas || []).filter(([id]) => {
+      const el = document.getElementById(id);
+      return el && el.style.display !== 'none';   // respeita feature flags
+    });
+    // Grupo com uma sub-aba só não precisa de segunda barra
+    sec.innerHTML = abas.length < 2 ? '' : abas.map(([id, rot]) =>
+      `<button data-aba="${id}" class="${id === tabName ? 'on' : ''}" role="tab"
+        onclick="VITALE_CORE.irAba('${id}')">${rot}</button>`).join('');
+    const ativo = sec.querySelector('button.on');
+    if (ativo) ativo.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  },
+
   switchTab(e, tabName) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.getElementById(tabName).classList.add('active');
-    e.currentTarget.classList.add('active');
+    if (e && e.currentTarget && e.currentTarget.classList) e.currentTarget.classList.add('active');
+    try { this._syncNav(tabName); } catch (err) { console.warn('syncNav', err); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     // Ao abrir o Histórico, garante que todos os painéis estão atualizados
     if (tabName === 'historico') {
       try { this.renderHistoricoCompleto(); } catch (err) { console.warn('hist', err); }

@@ -693,6 +693,27 @@ async function mfaVerificarAdmin() {
   location.reload();
 }
 
+// ===== v5.30 · P3 — expiração por inatividade na Torre =====
+// A Torre lê a base inteira. Deixá-la aberta numa tela sem vigilância é o
+// pior cenário do sistema. 20 min aqui (mais curto que os 30 do médico).
+function vigiarInatividade(minutos = 20) {
+  const limite = minutos * 60 * 1000, aviso = limite - 2 * 60 * 1000;
+  let tA, tF;
+  const barra = document.createElement('div');
+  barra.style.cssText = 'display:none;position:fixed;left:0;right:0;bottom:0;z-index:9999;background:var(--red);color:#fff;padding:12px 16px;font-size:13px;text-align:center';
+  barra.innerHTML = 'Sessão da Torre expira por inatividade em instantes. <a href="#" id="segueTorre" style="color:#fff;text-decoration:underline;margin-left:8px">Continuar</a>';
+  document.body.appendChild(barra);
+  const reiniciar = () => {
+    clearTimeout(tA); clearTimeout(tF);
+    barra.style.display = 'none';
+    tA = setTimeout(() => { barra.style.display = 'block'; }, aviso);
+    tF = setTimeout(async () => { await window.sb.auth.signOut(); location.href = '/'; }, limite);
+  };
+  barra.querySelector('#segueTorre').onclick = e => { e.preventDefault(); reiniciar(); };
+  ['click', 'keydown', 'scroll', 'touchstart'].forEach(ev => document.addEventListener(ev, reiniciar, { passive: true }));
+  reiniciar();
+}
+
 // ===== INIT =====
 (async () => {
   // Selo de versão (diagnóstico, igual ao app)
@@ -705,6 +726,7 @@ async function mfaVerificarAdmin() {
     if (!await garantirMfaAdmin()) return;
     const loader = document.getElementById('initLoader');
     if (loader) { loader.classList.add('hidden'); setTimeout(() => loader.remove(), 500); }
+    vigiarInatividade();   // v5.30 · P3
     loadOverview();
   } catch (e) {
     console.error('[ADMIN] init error:', e);

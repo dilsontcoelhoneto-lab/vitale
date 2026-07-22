@@ -76,21 +76,40 @@
 <div id="streakBadge" style="text-align:center;padding:10px 16px;font-size:14px;color:var(--text);background:linear-gradient(180deg,rgba(212,168,67,0.08),transparent);border-bottom:1px solid var(--border)">🔥 —</div>
 
 <div class="container">
-  <div class="tabs-wrap">
-  <div class="tabs">
-    <button class="tab-btn active" data-flag="dashboard" onclick="VITALE_CORE.switchTab(event,'dashboard')">📊 DASHBOARD</button>
-    <button class="tab-btn" data-flag="dashboard" onclick="VITALE_CORE.switchTab(event,'metas')">🎯 METAS</button>
-    <button class="tab-btn" onclick="VITALE_CORE.switchTab(event,'panorama')">📈 PANORAMA</button>
-    <button class="tab-btn" data-flag="perfil_clinico" onclick="VITALE_CORE.switchTab(event,'saude')">❤️ SAÚDE</button>
-    <button class="tab-btn" data-flag="importar_manual" onclick="VITALE_CORE.switchTab(event,'upload')">📸 IMPORTAR</button>
-    <button class="tab-btn" onclick="VITALE_CORE.switchTab(event,'exames')">🔬 EXAMES</button>
-    <button class="tab-btn" data-flag="medicacoes" onclick="VITALE_CORE.switchTab(event,'medic')">💊 MEDICAÇÕES</button>
-    <button class="tab-btn" onclick="VITALE_CORE.switchTab(event,'exercicios')">🏃 EXERCÍCIOS</button>
-    <button class="tab-btn" onclick="VITALE_CORE.switchTab(event,'alimentacao')">🍽️ ALIMENTAÇÃO</button>
-    <button class="tab-btn" data-flag="historico" onclick="VITALE_CORE.switchTab(event,'historico')">📋 HISTÓRICO</button>
-    <button class="tab-btn" data-flag="relatorio_pdf" onclick="VITALE_CORE.switchTab(event,'relatorio')">📄 RELATÓRIO</button>
-  </div>
-  </div>
+  <!-- ============================================================
+       v5.30 · U2 — navegação em 2 níveis (11 abas → 4 grupos)
+       Os blocos .tab-content NÃO foram fundidos nem removidos: muda
+       apenas a camada de navegação. Se quebrar, quebra aqui — não nos
+       dados nem nos formulários.
+       ============================================================ -->
+  <style>
+    .navprim{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px}
+    .navprim button{background:transparent;border:1px solid var(--border);border-radius:12px;
+      padding:12px 6px;color:var(--textm);font-family:inherit;font-size:12.5px;font-weight:500;
+      letter-spacing:.4px;cursor:pointer;transition:.15s;display:flex;flex-direction:column;
+      align-items:center;gap:5px;line-height:1.1}
+    .navprim button .gi{font-size:17px;line-height:1}
+    .navprim button:hover{color:var(--text);border-color:var(--border2)}
+    .navprim button.on{background:rgba(212,168,67,0.10);border-color:var(--gold);color:var(--gold)}
+    .navsec{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:18px;
+      scrollbar-width:none}
+    .navsec::-webkit-scrollbar{display:none}
+    .navsec button{background:transparent;border:0;border-bottom:2px solid transparent;
+      padding:7px 12px;color:var(--textm);font-family:inherit;font-size:13px;white-space:nowrap;
+      cursor:pointer;transition:.15s}
+    .navsec button:hover{color:var(--text)}
+    .navsec button.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:600}
+    .navsec:empty{display:none}
+    @media(max-width:380px){ .navprim button{font-size:11px;padding:10px 4px} }
+  </style>
+
+  <nav class="navprim" id="navPrimaria" aria-label="Seções principais">
+    <button data-grupo="hoje" class="on" onclick="VITALE_CORE.irGrupo('hoje')"><span class="gi">📊</span>Hoje</button>
+    <button data-grupo="registrar" onclick="VITALE_CORE.irGrupo('registrar')"><span class="gi">＋</span>Registrar</button>
+    <button data-grupo="evolucao" onclick="VITALE_CORE.irGrupo('evolucao')"><span class="gi">📈</span>Evolução</button>
+    <button data-grupo="perfil" onclick="VITALE_CORE.irGrupo('perfil')"><span class="gi">👤</span>Perfil</button>
+  </nav>
+  <div class="navsec" id="navSecundaria" role="tablist"></div>
 
   <!-- DASHBOARD -->
   <div id="dashboard" class="tab-content active">
@@ -933,7 +952,7 @@
     <div class="card" style="border-color:rgba(212,168,67,0.35);margin-bottom:20px">
       <h3>📄 Enviar o laudo</h3>
       <p style="font-size:13px;color:var(--textm);margin:6px 0 14px;line-height:1.7">Mande o <strong style="color:var(--text)">PDF ou a foto</strong> do exame. A IA lê os marcadores e a data da coleta — você só confere e confirma. É o jeito mais rápido.</p>
-      <button class="btn btn-gold" onclick="VITALE_CORE.switchTab({currentTarget:document.querySelector('.tab-btn[onclick*=upload]')},'upload');setTimeout(()=>document.getElementById('autoFile')?.click(),300)" style="width:100%;padding:14px">📎 Enviar laudo (PDF ou foto)</button>
+      <button class="btn btn-gold" onclick="VITALE_CORE.irAba('upload');setTimeout(()=>document.getElementById('autoFile')?.click(),300)" style="width:100%;padding:14px">📎 Enviar laudo (PDF ou foto)</button>
     </div>
 
     <details class="card">
