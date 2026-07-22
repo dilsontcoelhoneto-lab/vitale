@@ -293,14 +293,14 @@
       </div>
       <div class="form-group">
         <div><label>Altura (m)</label><input type="number" id="hAltura" step="0.01" placeholder="1.75"></div>
-        <div><label>Nível de atividade</label>
+        <div><label>Rotina diária (fora do treino)</label>
           <select id="hFatorAtividade">
-            <option value="1.2">Sedentário — pouco ou nenhum exercício</option>
-            <option value="1.375">Leve — 1 a 3 dias/semana</option>
-            <option value="1.55">Moderado — 3 a 5 dias/semana</option>
-            <option value="1.725">Intenso — 6 a 7 dias/semana</option>
-            <option value="1.9">Muito intenso — atleta / trabalho físico</option>
+            <option value="1.2">Sentado a maior parte do dia</option>
+            <option value="1.3">Em pé / caminho um pouco</option>
+            <option value="1.4">Em movimento boa parte do dia</option>
+            <option value="1.5">Trabalho físico pesado</option>
           </select>
+          <p style="font-size:10.5px;color:var(--textm);margin-top:4px">Não conte o treino aqui — os exercícios que você registra já são somados à parte.</p>
         </div>
       </div>
     </div>
@@ -1300,13 +1300,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Perfil Simples (A25)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">TMB Correta (A26)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A25"></script>
+<script src="/assets/js/vitale-calc.js?v=A26"></script>
 <script src="/assets/js/supabase-client.js?v=A17"></script>
 <script src="/assets/js/feature-flags.js?v=A17"></script>
-<script src="/assets/js/vitale-core.js?v=A25"></script>
+<script src="/assets/js/vitale-core.js?v=A26"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1324,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.23') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.24') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();

@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.23 · Perfil Simplificado · 2026-07-21';
+const VITALE_VERSION = 'v5.24 · TMB sem Dupla Contagem · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1481,7 +1481,7 @@ const VITALE_CORE = {
       .reduce((s, e) => s + (e.calorias || 0), 0);
 
     const tmbInfo = this._getTMB();
-    const fator = hp.fator_atividade || 1.4;
+    const fator = hp.fator_atividade || 1.3; // rotina SEM treino (o exercício entra somado)
     const gasto = tmbInfo ? Math.round(tmbInfo.valor * fator + exHoje) : null;
     const saldo = gasto != null ? consumido - gasto : null;
 
@@ -1555,7 +1555,7 @@ const VITALE_CORE = {
         <span style="font-size:12.5px;color:${cor};font-weight:600">${leitura}</span></div>` : ''}
 
       ${tmbInfo ? `<p style="font-size:10px;color:var(--textm);text-align:center;margin-top:10px">
-          Gasto = TMB (${tmbInfo.valor} kcal, ${tmbInfo.fonte}) × ${fator} atividade${exHoje ? ` + ${exHoje} kcal de exercício` : ''}
+          <strong>TMB ${tmbInfo.valor} kcal</strong> (${tmbInfo.fonte}) × ${fator} rotina${exHoje ? ` + <strong>${exHoje} kcal</strong> de treino` : ''} = <strong>${gasto} kcal</strong> de gasto
         </p>`
       : `<div style="margin-top:12px;padding:10px 12px;background:rgba(212,168,67,0.07);border:1px solid rgba(212,168,67,0.2);border-radius:8px">
           <p style="font-size:12px;color:var(--gold);line-height:1.6">Para calcular seu gasto diário preciso de <strong>sexo</strong> e <strong>data de nascimento</strong> — sem eles não estimo (evita conta errada).
@@ -2822,7 +2822,7 @@ const VITALE_CORE = {
     const tmbInfo = this._getTMB();
     let balanco = null;
     if (tmbInfo) {
-      const fator = hp.fator_atividade || 1.4;
+      const fator = hp.fator_atividade || 1.3; // rotina SEM treino (o exercício entra somado)
       const exHojeKcal = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
       const gasto = Math.round(tmbInfo.valor * fator + exHojeKcal);
       balanco = { consumido: consumidoHoje, gasto, saldo: consumidoHoje - gasto, em_deficit: (consumidoHoje - gasto) < 0 };
@@ -3007,7 +3007,7 @@ const VITALE_CORE = {
     const tmbInfo = this._getTMB();
     let balanco = null;
     if (tmbInfo) {
-      const fator = hp.fator_atividade || 1.4;
+      const fator = hp.fator_atividade || 1.3; // rotina SEM treino (o exercício entra somado)
       const exHojeKcal = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
       const gasto = Math.round(tmbInfo.valor * fator + exHojeKcal);
       balanco = { consumido: consumidoHoje, gasto, saldo: consumidoHoje - gasto, em_deficit: (consumidoHoje - gasto) < 0 };
@@ -5021,7 +5021,7 @@ const VITALE_CORE = {
     setVal('hDataNasc', hp.data_nascimento);
     setVal('hSexo', hp.sexo);
     setVal('hAltura', this.state.profile?.altura);
-    setVal('hFatorAtividade', hp.fator_atividade ? String(hp.fator_atividade) : '1.375');
+    setVal('hFatorAtividade', hp.fator_atividade ? String(hp.fator_atividade) : '1.3');
 
     // v5.16: protocolo GLP-1
     const gAtivo = document.getElementById('glp1Ativo'); if (gAtivo) gAtivo.checked = !!hp.glp1_ativo;
