@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A16"></script>
+<script src="/config.js?v=A19"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -153,7 +153,86 @@ table.lab td{padding:11px 10px}
     <label>Senha</label>
     <input type="password" id="loginSenha" autocomplete="current-password" onkeydown="if(event.key==='Enter')PORTAL.entrar()">
     <button class="btn" style="width:100%" onclick="PORTAL.entrar()">Entrar</button>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:13.5px">
+      <a href="#" onclick="PORTAL.tela('telaCadastro');return false" style="color:var(--ambar)">Criar conta profissional</a>
+      <a href="#" onclick="PORTAL.tela('telaRecuperar');return false" style="color:var(--suave)">Esqueci minha senha</a>
+    </div>
     <p style="font-size:13px;color:var(--suave);margin-top:16px;line-height:1.65">Acesso restrito a profissionais cadastrados e verificados. Os dados exibidos são auto-relatados pelos pacientes e liberados por autorização expressa de cada um.</p>
+  </div>
+
+  <!-- RECUPERAR SENHA -->
+  <div id="telaRecuperar" class="card login oculto">
+    <div class="sec" style="border:0;margin-bottom:6px;padding:0">Recuperação</div>
+    <h2 style="font-size:26px;margin-bottom:8px">Esqueci minha senha</h2>
+    <p style="font-size:14px;color:var(--tinta2);margin-bottom:16px">Enviaremos um link para você definir uma nova senha.</p>
+    <div id="recMsg"></div>
+    <label>E-mail cadastrado</label>
+    <input type="email" id="recEmail" autocomplete="username" onkeydown="if(event.key==='Enter')PORTAL.enviarRecuperacao()">
+    <button class="btn" style="width:100%" onclick="PORTAL.enviarRecuperacao()">Enviar link de recuperação</button>
+    <p style="margin-top:14px"><a href="#" onclick="PORTAL.tela('telaLogin');return false" style="color:var(--suave);font-size:13.5px">← Voltar ao login</a></p>
+  </div>
+
+  <!-- DEFINIR NOVA SENHA (chega pelo link do e-mail) -->
+  <div id="telaNovaSenha" class="card login oculto">
+    <div class="sec" style="border:0;margin-bottom:6px;padding:0">Recuperação</div>
+    <h2 style="font-size:26px;margin-bottom:8px">Definir nova senha</h2>
+    <div id="novaSenhaMsg"></div>
+    <label>Nova senha (mínimo 8 caracteres)</label>
+    <input type="password" id="novaSenha1" autocomplete="new-password">
+    <label>Repita a nova senha</label>
+    <input type="password" id="novaSenha2" autocomplete="new-password" onkeydown="if(event.key==='Enter')PORTAL.salvarNovaSenha()">
+    <button class="btn" style="width:100%" onclick="PORTAL.salvarNovaSenha()">Salvar nova senha</button>
+  </div>
+
+  <!-- CADASTRO PROFISSIONAL -->
+  <div id="telaCadastro" class="oculto" style="max-width:720px;margin:40px auto">
+    <div class="sec">Cadastro profissional<span>análise em até 2 dias úteis</span></div>
+    <div class="card">
+      <p style="font-size:14.5px;color:var(--tinta2);margin-bottom:20px;line-height:1.7">Preencha seus dados. Seu CRM será verificado antes da liberação — você recebe um aviso por e-mail quando for aprovado.</p>
+      <div id="cadMsg"></div>
+
+      <div class="sec" style="font-size:11px;margin:6px 0 14px">Acesso</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+        <div><label>E-mail profissional *</label><input type="email" id="cadEmail" autocomplete="email"></div>
+        <div><label>Senha * (mín. 8 caracteres)</label><input type="password" id="cadSenha" autocomplete="new-password"></div>
+      </div>
+
+      <div class="sec" style="font-size:11px;margin:20px 0 14px">Dados profissionais</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+        <div><label>Nome completo *</label><input type="text" id="cadNome"></div>
+        <div><label>Especialidade *</label><input type="text" id="cadEspecialidade" placeholder="ex: Endocrinologia"></div>
+        <div><label>CRM *</label><input type="text" id="cadCrm" placeholder="somente números"></div>
+        <div><label>UF do CRM *</label><input type="text" id="cadCrmUf" maxlength="2" placeholder="PR" style="text-transform:uppercase"></div>
+        <div><label>RQE (se houver)</label><input type="text" id="cadRqe"></div>
+        <div><label>Telefone</label><input type="text" id="cadTelefone" placeholder="(41) 90000-0000"></div>
+      </div>
+
+      <div class="sec" style="font-size:11px;margin:20px 0 14px">Consultório</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+        <div><label>Nome do consultório / clínica</label><input type="text" id="cadConsNome"></div>
+        <div><label>CEP</label><input type="text" id="cadCep" placeholder="80000-000"></div>
+        <div style="grid-column:1/-1"><label>Endereço</label><input type="text" id="cadEndereco"></div>
+        <div><label>Número</label><input type="text" id="cadNumero"></div>
+        <div><label>Complemento</label><input type="text" id="cadComplemento" placeholder="sala, andar"></div>
+        <div><label>Bairro</label><input type="text" id="cadBairro"></div>
+        <div><label>Cidade</label><input type="text" id="cadCidade"></div>
+        <div><label>UF</label><input type="text" id="cadUf" maxlength="2" style="text-transform:uppercase"></div>
+      </div>
+
+      <div class="sec" style="font-size:11px;margin:20px 0 14px">Presença digital (opcional)</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px">
+        <div><label>Site</label><input type="text" id="cadSite" placeholder="https://"></div>
+        <div><label>Instagram</label><input type="text" id="cadInstagram" placeholder="@perfil"></div>
+      </div>
+
+      <label style="display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--tinta2);line-height:1.6;margin:22px 0 18px;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="cadTermo" style="width:18px;height:18px;margin-top:2px;accent-color:var(--verde-p);flex-shrink:0">
+        <span>Declaro que as informações são verdadeiras, que sou profissional habilitado, e concordo com os <a href="/termos.html" target="_blank" style="color:var(--ambar)">Termos de Uso</a> e a <a href="/privacidade.html" target="_blank" style="color:var(--ambar)">Política de Privacidade</a>. Entendo que os dados dos pacientes são <strong>auto-relatados</strong>, que este portal <strong>não é prontuário eletrônico</strong> e que a conduta clínica é de minha responsabilidade.</span>
+      </label>
+
+      <button class="btn" style="width:100%" onclick="PORTAL.cadastrar()">Enviar cadastro para análise</button>
+      <p style="margin-top:14px"><a href="#" onclick="PORTAL.tela('telaLogin');return false" style="color:var(--suave);font-size:13.5px">← Já tenho conta</a></p>
+    </div>
   </div>
 
   <!-- PENDENTE -->
@@ -222,8 +301,80 @@ const PORTAL = {
   async init(){
     if(!window.VITALE_CONFIG){this._msg('loginMsg','Configuração não carregada.');return;}
     this.sb=window.supabase.createClient(window.VITALE_CONFIG.SUPABASE_URL,window.VITALE_CONFIG.SUPABASE_ANON_KEY);
+    // link de recuperação de senha chega com type=recovery no hash
+    if(location.hash.includes('type=recovery')){
+      this.sb.auth.onAuthStateChange((ev)=>{ if(ev==='PASSWORD_RECOVERY'||ev==='SIGNED_IN') this.tela('telaNovaSenha'); });
+      this.tela('telaNovaSenha'); return;
+    }
     const {data:{session}}=await this.sb.auth.getSession();
     if(session)await this.posLogin();
+  },
+
+  // alterna telas públicas (login / cadastro / recuperação)
+  tela(id){
+    ['telaLogin','telaCadastro','telaRecuperar','telaNovaSenha'].forEach(t=>{
+      const el=document.getElementById(t); if(el) el.classList.toggle('oculto', t!==id);
+    });
+    window.scrollTo(0,0);
+  },
+
+  // ===== CADASTRO PROFISSIONAL (autocadastro → status pendente) =====
+  async cadastrar(){
+    const g=id=>(document.getElementById(id)?.value||'').trim();
+    const email=g('cadEmail'), senha=document.getElementById('cadSenha').value;
+    const nome=g('cadNome'), crm=g('cadCrm'), uf=g('cadCrmUf').toUpperCase(), esp=g('cadEspecialidade');
+    if(!email||senha.length<8) return this._msg('cadMsg','Informe e-mail válido e senha de no mínimo 8 caracteres.');
+    if(!nome||!crm||!uf||!esp) return this._msg('cadMsg','Preencha nome, especialidade, CRM e UF.');
+    if(uf.length!==2) return this._msg('cadMsg','UF do CRM deve ter 2 letras (ex: PR).');
+    if(!document.getElementById('cadTermo').checked) return this._msg('cadMsg','É preciso aceitar os termos para se cadastrar.');
+
+    this._msg('cadMsg','Enviando…','ok');
+    // 1) cria a conta de acesso
+    const {data:auth,error:eAuth}=await this.sb.auth.signUp({email,password:senha});
+    if(eAuth) return this._msg('cadMsg','Não foi possível criar a conta: '+eAuth.message);
+    const uid=auth?.user?.id;
+    if(!uid) return this._msg('cadMsg','Conta criada. Confirme seu e-mail e depois entre para concluir o cadastro.','ok');
+
+    // 2) grava o registro profissional como PENDENTE
+    const reg={
+      id:uid, nome, crm, crm_uf:uf, especialidade:esp, status:'pendente',
+      rqe:g('cadRqe')||null, email, telefone:g('cadTelefone')||null,
+      consultorio_nome:g('cadConsNome')||null, consultorio_cep:g('cadCep')||null,
+      consultorio_endereco:g('cadEndereco')||null, consultorio_numero:g('cadNumero')||null,
+      consultorio_complemento:g('cadComplemento')||null, consultorio_bairro:g('cadBairro')||null,
+      consultorio_cidade:g('cadCidade')||null, consultorio_uf:g('cadUf')?g('cadUf').toUpperCase():null,
+      site:g('cadSite')||null, instagram:g('cadInstagram')||null
+    };
+    const {error:eMed}=await this.sb.from('medicos').insert(reg);
+    if(eMed){
+      if(String(eMed.message||'').includes('duplicate')) return this._msg('cadMsg','Já existe um cadastro com este CRM/UF.');
+      return this._msg('cadMsg','Conta criada, mas o cadastro profissional falhou: '+eMed.message+' — entre e tente novamente.');
+    }
+    document.querySelector('#telaCadastro .card').innerHTML=
+      `<h2 style="font-size:24px;margin-bottom:10px">Cadastro enviado</h2>
+       <p style="font-size:15px;color:var(--tinta2);line-height:1.7">Recebemos seus dados, <b>${this._esc(nome)}</b>.
+       Seu CRM ${this._esc(crm)}/${this._esc(uf)} passará por verificação e você receberá um aviso quando o acesso for liberado.</p>
+       <p style="margin-top:18px"><a href="/medico.html" style="color:var(--ambar)">← Ir para o login</a></p>`;
+  },
+
+  // ===== RECUPERAÇÃO DE SENHA =====
+  async enviarRecuperacao(){
+    const email=(document.getElementById('recEmail')?.value||'').trim();
+    if(!email) return this._msg('recMsg','Informe o e-mail cadastrado.');
+    this._msg('recMsg','Enviando…','ok');
+    const {error}=await this.sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+'/medico.html'});
+    if(error) return this._msg('recMsg','Erro: '+error.message);
+    this._msg('recMsg','Se este e-mail estiver cadastrado, o link de recuperação foi enviado. Confira sua caixa de entrada.','ok');
+  },
+
+  async salvarNovaSenha(){
+    const a=document.getElementById('novaSenha1').value, b=document.getElementById('novaSenha2').value;
+    if(a.length<8) return this._msg('novaSenhaMsg','A senha precisa ter ao menos 8 caracteres.');
+    if(a!==b) return this._msg('novaSenhaMsg','As senhas não conferem.');
+    const {error}=await this.sb.auth.updateUser({password:a});
+    if(error) return this._msg('novaSenhaMsg','Erro: '+error.message);
+    this._msg('novaSenhaMsg','Senha alterada! Redirecionando…','ok');
+    setTimeout(()=>{location.href='/medico.html';},1400);
   },
   _msg(id,txt,tipo='err'){const el=document.getElementById(id);if(el)el.innerHTML=txt?`<div class="msg ${tipo}">${txt}</div>`:'';},
 

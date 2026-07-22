@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.14 · Módulo de Cálculos + Testes · 2026-07-21';
+const VITALE_VERSION = 'v5.16 · Protocolo GLP-1 · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -115,6 +115,7 @@ const VITALE_CORE = {
       try { this.updateAgendamentos(); } catch (e) { console.warn('updateAgendamentos', e); }
       try { this.fillHealthProfileForm(); } catch (e) { console.warn('fillHealthProfileForm', e); }
       try { this.renderMoodCard(); } catch (e) { console.warn('renderMoodCard', e); }
+      try { this.renderDoseGLP1(); } catch (e) { console.warn('renderDoseGLP1', e); }
       try { this.renderMoodHistorico(); } catch (e) { console.warn('renderMoodHistorico', e); }
       try { this.renderConquistas(); } catch (e) { console.warn('renderConquistas', e); }
       // Checa conquistas no load (sem celebrar as antigas — só registra novas em silêncio na 1ª vez)
@@ -4822,6 +4823,12 @@ const VITALE_CORE = {
     setVal('hSono', hp.horas_sono);
     setVal('hStress', hp.nivel_stress);
 
+    // v5.16: protocolo GLP-1
+    const gAtivo = document.getElementById('glp1Ativo'); if (gAtivo) gAtivo.checked = !!hp.glp1_ativo;
+    setVal('glp1Medicamento', hp.glp1_medicamento);
+    setVal('glp1Dose', hp.glp1_dose);
+    setVal('glp1DiaSemana', hp.glp1_dia_semana != null ? String(hp.glp1_dia_semana) : '');
+
     // Bloco A.1: objetivo + urgência na aba Saúde
     setVal('hObjetivo', hp.objetivo);
     setVal('hUrgencia', hp.urgencia);
@@ -4873,6 +4880,10 @@ const VITALE_CORE = {
         objetivo: getStr('hObjetivo'),
         objetivo_outro: getStr('hObjetivoOutro'),
         urgencia: getStr('hUrgencia'),
+        glp1_ativo: !!document.getElementById('glp1Ativo')?.checked,
+        glp1_medicamento: getStr('glp1Medicamento'),
+        glp1_dose: getStr('glp1Dose'),
+        glp1_dia_semana: getInt('glp1DiaSemana'),
         updated_at: new Date().toISOString()
       };
 
@@ -5581,6 +5592,88 @@ const VITALE_CORE = {
   // =====================================================
   // BACKUP JSON
   // =====================================================
+  // ===== v5.16 — PROTOCOLO GLP-1: lembrete e confirmação em 1 toque =====
+  _diasSemana: ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'],
+
+  renderDoseGLP1() {
+    const el = document.getElementById('doseGlp1Card');
+    if (!el) return;
+    const hp = this.state.healthProfile || {};
+    if (!hp.glp1_ativo || hp.glp1_dia_semana == null) { el.style.display = 'none'; return; }
+
+    const med = hp.glp1_medicamento || 'GLP-1';
+    const dose = hp.glp1_dose || '';
+    const diaAlvo = parseInt(hp.glp1_dia_semana, 10);
+    const hoje = this._hojeSP();
+    const hojeDow = new Date(hoje + 'T12:00:00').getDay();
+
+    // já aplicou hoje?
+    const aplicouHoje = (this.state.doses || []).some(d => this._normData(d.data) === hoje);
+
+    // última dose registrada
+    const ord = [...(this.state.doses || [])].sort((a, b) => a.data < b.data ? 1 : -1);
+    const ultima = ord[0] || null;
+    const diasDesdeUltima = ultima ? Math.round((new Date(hoje + 'T12:00:00') - new Date(this._normData(ultima.data) + 'T12:00:00')) / 86400000) : null;
+
+    // dias até a próxima aplicação
+    let faltam = (diaAlvo - hojeDow + 7) % 7;
+
+    let html = '';
+    if (aplicouHoje) {
+      html = `<div style="background:rgba(39,196,125,0.07);border:1px solid rgba(39,196,125,0.25);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:14px">
+        <div style="font-size:26px">✅</div>
+        <div><div style="font-size:15px;color:var(--text);font-weight:600">Dose de hoje registrada</div>
+        <div style="font-size:13px;color:var(--textm)">${this._escapeHtml(med)}${dose ? ' · ' + this._escapeHtml(dose) : ''} — próxima em 7 dias</div></div></div>`;
+    } else if (hojeDow === diaAlvo) {
+      html = `<div style="background:linear-gradient(135deg,rgba(74,157,232,0.12),rgba(74,157,232,0.04));border:1px solid rgba(74,157,232,0.35);border-radius:14px;padding:18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="font-size:28px">💉</div>
+          <div><div style="font-size:16px;color:var(--text);font-weight:600">Hoje é dia da sua dose</div>
+          <div style="font-size:13.5px;color:var(--textm)">${this._escapeHtml(med)}${dose ? ' · <strong style="color:var(--cyan)">' + this._escapeHtml(dose) + '</strong>' : ''}</div></div>
+        </div>
+        <button class="btn btn-primary" onclick="VITALE_CORE.confirmarDoseHoje()" style="width:100%;padding:13px">✓ Apliquei agora</button>
+      </div>`;
+    } else if (diasDesdeUltima != null && diasDesdeUltima > 8) {
+      // atrasado: passou mais de 8 dias da última aplicação
+      html = `<div style="background:rgba(232,146,74,0.08);border:1px solid rgba(232,146,74,0.3);border-radius:14px;padding:16px 18px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <div style="font-size:24px">⏰</div>
+          <div><div style="font-size:15px;color:var(--text);font-weight:600">Faz ${diasDesdeUltima} dias da sua última dose</div>
+          <div style="font-size:13px;color:var(--textm)">Aplicou e esqueceu de registrar? Marque abaixo.</div></div>
+        </div>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.confirmarDoseHoje()">Registrar dose de hoje</button>
+      </div>`;
+    } else {
+      html = `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:17px">💉</span>
+        <span style="font-size:13.5px;color:var(--textm)">Próxima dose: <strong style="color:var(--text)">${this._diasSemana[diaAlvo]}</strong>${faltam === 1 ? ' (amanhã)' : faltam > 1 ? ` (em ${faltam} dias)` : ''}${dose ? ' · ' + this._escapeHtml(dose) : ''}</span>
+      </div>`;
+    }
+    el.innerHTML = html;
+    el.style.display = 'block';
+  },
+
+  async confirmarDoseHoje() {
+    const hp = this.state.healthProfile || {};
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return this.showAlert('error', 'Sessão expirada.');
+    try {
+      const reg = {
+        user_id: user.id, data: this._hojeSP(),
+        medicamento: hp.glp1_medicamento || 'GLP-1',
+        dose: hp.glp1_dose || '', nota: 'confirmada no lembrete'
+      };
+      const { data: novo, error } = await window.sb.from('doses_medicacao').insert(reg).select().single();
+      if (error) throw error;
+      (this.state.doses = this.state.doses || []).unshift(novo);
+      this.renderDoseGLP1();
+      try { this.renderDosesList(); } catch (e) {}
+      this._invalidateCoachCache();
+      this.showAlert('success', '💉 Dose registrada! Isso alimenta o gráfico de resposta ao tratamento.');
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('dose_confirmada');
+    } catch (e) { this.showAlert('error', '❌ ' + e.message); }
+  },
+
   // ===== v5.10 — CONSENTIMENTO LGPD =====
   // Grava no perfil o aceite marcado no cadastro (index.html deixa um marcador
   // em localStorage). Idempotente: só escreve se ainda não houver aceite da versão.

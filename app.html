@@ -89,6 +89,9 @@
     <!-- Dica diária da IA -->
     <div id="dicaDiaria" style="display:none;background:rgba(74,157,232,0.06);border:1px solid rgba(74,157,232,0.18);border-radius:12px;padding:12px 16px;margin-bottom:20px"></div>
 
+    <!-- DOSE GLP-1 (v5.16) — lembrete no dia e confirmação em um toque -->
+    <div id="doseGlp1Card" style="display:none;margin-bottom:20px"></div>
+
     <div class="card" id="cardRegistrar" style="border-color:rgba(212,168,67,0.3)">
       <h3>✍️ Registrar</h3>
       <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px">Conte em uma frase — a IA separa cada dado e você confirma. Ex: <em>"pesei 88,4, tomei a dose de 7,5, almocei frango com arroz e caminhei 40 min"</em>. Peso, dose, refeição, treino e contexto entram de uma vez.</p>
@@ -99,25 +102,23 @@
       </div>
       <div id="diarioResult" style="margin-top:10px"></div>
     </div>
+    <!-- COACH + ANÁLISE COMPLETA (unificados na v5.16) -->
     <div class="coach-card" data-flag="dashboard">
       <div class="coach-header">
         <div class="coach-avatar">🤖</div>
-        <div><div class="coach-name">VITALE COACH IA</div><div class="coach-role">Análise Personalizada</div></div>
+        <div><div class="coach-name">VITALE COACH IA</div><div class="coach-role">Sua leitura do momento</div></div>
       </div>
       <div class="coach-message" id="coachMessage">Carregando...</div>
       <div class="coach-footer" id="coachFooter"></div>
+      <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
+        <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px;line-height:1.6">Quer o mergulho completo? A IA cruza peso, composição, alimentação, exercício, GLP-1, exames e contexto como um conjunto.</p>
+        <button class="btn btn-primary btn-small" id="btnAnaliseCompleta" onclick="VITALE_CORE.pedirAnaliseCompleta()" style="width:100%">🧠 Gerar análise mais completa</button>
+        <div id="analiseResultado" style="margin-top:14px"></div>
+      </div>
     </div>
 
     <!-- FASE A — Balanço Calórico -->
     <div class="card" id="balancoCard" style="display:none"></div>
-
-    <!-- ANÁLISE COMPLETA — mergulho profundo da IA na pessoa inteira -->
-    <div class="card" id="analiseCard">
-      <h3 style="margin-bottom:6px">🧠 Análise Completa</h3>
-      <p style="font-size:13px;color:var(--textm);margin-bottom:14px">A IA analisa todo o seu histórico — peso, composição, alimentação, exercício, GLP-1, exames e contexto — como um conjunto, não números soltos.</p>
-      <button class="btn btn-primary" id="btnAnaliseCompleta" onclick="VITALE_CORE.pedirAnaliseCompleta()" style="width:100%">🧠 Gerar Análise Completa</button>
-      <div id="analiseResultado" style="margin-top:16px"></div>
-    </div>
     <!-- BLOCO B — Diário Rápido -->
     <div class="card" id="moodCard" data-editando="0" data-flag="dashboard"><span style="color:var(--textm)">📔 Carregando diário…</span></div>
     <div class="imc-card">
@@ -383,6 +384,37 @@
     </div>
 
     <button class="save-btn-mega" onclick="VITALE_CORE.salvarHealthProfile()">💾 SALVAR PERFIL DE SAÚDE</button>
+
+    <!-- ===== PROTOCOLO GLP-1 (v5.16) — lembrete semanal de dose ===== -->
+    <div class="card" style="margin-top:16px;border-color:rgba(74,157,232,0.25)">
+      <h3>💉 Meu protocolo GLP-1</h3>
+      <p style="font-size:13px;color:var(--textm);margin:6px 0 16px;line-height:1.7">Configure sua aplicação semanal. No dia certo o app lembra e você confirma com um toque — sem precisar digitar nada.</p>
+      <label style="display:flex;gap:10px;align-items:center;font-size:14px;color:var(--text);margin-bottom:14px;cursor:pointer">
+        <input type="checkbox" id="glp1Ativo" style="width:20px;height:20px;accent-color:var(--em)">
+        <span>Estou em uso de GLP-1</span>
+      </label>
+      <div class="form-group" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+        <div><label>Medicamento</label>
+          <select id="glp1Medicamento">
+            <option value="">Selecione...</option>
+            <option value="Tirzepatida (Mounjaro)">Tirzepatida (Mounjaro)</option>
+            <option value="Semaglutida (Ozempic)">Semaglutida (Ozempic)</option>
+            <option value="Semaglutida (Wegovy)">Semaglutida (Wegovy)</option>
+            <option value="Liraglutida (Saxenda)">Liraglutida (Saxenda)</option>
+            <option value="Outro">Outro</option>
+          </select></div>
+        <div><label>Dose atual</label><input type="text" id="glp1Dose" placeholder="ex: 7,5 mg"></div>
+        <div><label>Dia da aplicação</label>
+          <select id="glp1DiaSemana">
+            <option value="">Selecione...</option>
+            <option value="0">Domingo</option><option value="1">Segunda</option>
+            <option value="2">Terça</option><option value="3">Quarta</option>
+            <option value="4">Quinta</option><option value="5">Sexta</option>
+            <option value="6">Sábado</option>
+          </select></div>
+      </div>
+      <p style="font-size:11.5px;color:var(--textm);margin-top:10px">Salvo junto com o Perfil de Saúde, no botão acima.</p>
+    </div>
 
     <!-- ===== MEUS MÉDICOS (v5.8) — controle de compartilhamento (LGPD) ===== -->
     <div class="card" style="margin-top:16px;border-color:rgba(39,196,125,0.25)">
@@ -1190,13 +1222,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Cálculos+Testes (A18)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Dose GLP-1 (A19)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A18"></script>
+<script src="/assets/js/vitale-calc.js?v=A19"></script>
 <script src="/assets/js/supabase-client.js?v=A17"></script>
 <script src="/assets/js/feature-flags.js?v=A17"></script>
-<script src="/assets/js/vitale-core.js?v=A18"></script>
+<script src="/assets/js/vitale-core.js?v=A19"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1214,7 +1246,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.14') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.16') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();

@@ -513,8 +513,12 @@ async function loadMedicos() {
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px">
         <div>
           <strong style="font-size:16px">${esc(m.nome)}</strong>
-          <div style="font-size:13px;color:var(--textm);margin-top:2px">CRM ${esc(m.crm)}/${esc(m.crm_uf)}${m.especialidade ? ' · ' + esc(m.especialidade) : ''}</div>
-          <div style="font-size:12px;color:var(--textm)">Solicitado em ${new Date(m.created_at).toLocaleDateString('pt-BR')}</div>
+          <div style="font-size:13px;color:var(--textm);margin-top:2px">CRM ${esc(m.crm)}/${esc(m.crm_uf)}${m.rqe ? ' · RQE ' + esc(m.rqe) : ''}${m.especialidade ? ' · ' + esc(m.especialidade) : ''}</div>
+          ${m.email ? `<div style="font-size:12.5px;color:var(--textm)">${esc(m.email)}${m.telefone ? ' · ' + esc(m.telefone) : ''}</div>` : ''}
+          ${(m.consultorio_nome || m.consultorio_cidade) ? `<div style="font-size:12.5px;color:var(--textm);margin-top:4px">🏥 ${esc(m.consultorio_nome || '')}${m.consultorio_endereco ? ' — ' + esc(m.consultorio_endereco) : ''}${m.consultorio_numero ? ', ' + esc(m.consultorio_numero) : ''}${m.consultorio_bairro ? ' · ' + esc(m.consultorio_bairro) : ''}${m.consultorio_cidade ? ' · ' + esc(m.consultorio_cidade) : ''}${m.consultorio_uf ? '/' + esc(m.consultorio_uf) : ''}</div>` : ''}
+          ${(m.site || m.instagram) ? `<div style="font-size:12.5px;color:var(--textm)">${m.site ? '🌐 ' + esc(m.site) + ' ' : ''}${m.instagram ? '📷 ' + esc(m.instagram) : ''}</div>` : ''}
+          <div style="font-size:12px;color:var(--textm);margin-top:4px">Solicitado em ${new Date(m.created_at).toLocaleDateString('pt-BR')}</div>
+          <a href="https://portal.cfm.org.br/busca-medicos/" target="_blank" style="font-size:12px;color:var(--gold)">🔎 Conferir CRM no portal do CFM →</a>
         </div>
       </div>
       <input type="text" id="nota_${m.id}" placeholder="Nota de verificação (ex: CRM conferido no CFM em 21/07)" style="width:100%;margin:12px 0 10px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px;color:var(--text);font-family:inherit;font-size:13px">
