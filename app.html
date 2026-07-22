@@ -482,12 +482,28 @@
       </div>
 
       <div id="meusMedicosLista"></div>
+
+      <!-- v5.29 · P0 — trilha de auditoria visível ao paciente.
+           Quem acessou, o quê e quando. Registro imutável: nem o médico
+           nem você conseguem apagar. -->
+      <div id="medAcessosBox" style="display:none;margin-top:18px;border-top:1px solid var(--border);padding-top:16px">
+        <label style="font-size:12px;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;display:block">Quem acessou seus dados</label>
+        <p style="font-size:12px;color:var(--textm);margin-bottom:12px">Toda abertura de ficha e exportação de relatório fica registrada. O registro não pode ser apagado — nem por você, nem pelo médico.</p>
+        <div id="medAcessosLista"></div>
+      </div>
+    </div>
+
+    <!-- v5.29 · P1b — dispositivos conectados -->
+    <div class="card" style="margin-top:16px">
+      <h3>📱 Dispositivos conectados</h3>
+      <p style="font-size:13px;color:var(--textm);margin-bottom:14px;line-height:1.7">Aparelhos e navegadores que já entraram nesta conta. Se algum não for seu, troque sua senha.</p>
+      <div id="dispositivosLista"></div>
     </div>
 
     <!-- Botão: Refazer questionário inicial -->
     <div class="card" style="margin-top:16px;background:rgba(74,157,232,0.04);border-color:rgba(74,157,232,0.15)">
       <h3 style="color:var(--cyan)">🔄 Refazer Questionário Inicial</h3>
-      <p style="font-size:13px;color:var(--textm);margin-bottom:14px;line-height:1.7">Reabre o wizard de 6 telas <strong>pré-preenchido com seus dados atuais</strong>. Útil pra revisar tudo de uma vez de forma guiada.</p>
+      <p style="font-size:13px;color:var(--textm);margin-bottom:14px;line-height:1.7">Reabre o questionário <strong>pré-preenchido com seus dados atuais</strong>. Útil pra revisar tudo de uma vez de forma guiada.</p>
       <button class="btn btn-secondary" onclick="VITALE_CORE.reabrirOnboarding()" style="width:100%;padding:14px">🔄 ABRIR QUESTIONÁRIO</button>
     </div>
   </div>

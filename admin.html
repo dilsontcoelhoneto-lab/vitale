@@ -613,6 +613,86 @@ function showToast(msg) {
   setTimeout(() => t.remove(), 3000);
 }
 
+// ===== v5.29 · P1a — 2FA obrigatório na Torre =====
+// A Torre lê a base inteira. É a conta de maior impacto do sistema.
+function _telaMfa(html) {
+  document.getElementById('initLoader')?.remove();
+  document.body.insertAdjacentHTML('afterbegin',
+    `<div id="mfaGate" style="position:fixed;inset:0;z-index:10000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px">
+      <div style="max-width:420px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px">${html}</div>
+    </div>`);
+}
+function _mfaMsg(t, cor) {
+  const el = document.getElementById('mfaMsg');
+  if (el) { el.textContent = t || ''; el.style.color = cor || 'var(--red)'; }
+}
+
+async function garantirMfaAdmin() {
+  let niveis;
+  try { niveis = (await window.sb.auth.mfa.getAuthenticatorAssuranceLevel()).data; }
+  catch (e) { console.warn('MFA indisponível:', e); return true; }
+  if (!niveis || niveis.currentLevel === 'aal2') return true;
+
+  if (niveis.nextLevel === 'aal2') {
+    _telaMfa(`<h2 style="color:var(--gold);font-size:22px;margin-bottom:8px">Verificação em duas etapas</h2>
+      <p style="font-size:13px;color:var(--textm);margin-bottom:18px">Informe os 6 dígitos do seu aplicativo autenticador.</p>
+      <input id="mfaCod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"
+        style="width:100%;text-align:center;letter-spacing:8px;font-family:monospace;font-size:20px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text)">
+      <p id="mfaMsg" style="font-size:12px;margin-top:10px;min-height:16px"></p>
+      <button class="btn btn-primary" onclick="mfaVerificarAdmin()" style="width:100%;margin-top:8px">Entrar</button>`);
+    document.getElementById('mfaCod')?.focus();
+    return false;
+  }
+
+  // Sem fator cadastrado → enrolamento obrigatório
+  try {
+    const { data: lista } = await window.sb.auth.mfa.listFactors();
+    for (const f of (lista?.all || [])) if (f.status !== 'verified') await window.sb.auth.mfa.unenroll({ factorId: f.id });
+  } catch (e) {}
+  const { data, error } = await window.sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'VITALE Torre ' + Date.now() });
+  if (error) {
+    _telaMfa(`<h2 style="color:var(--red);font-size:20px;margin-bottom:8px">MFA indisponível</h2>
+      <p style="font-size:13px;color:var(--textm)">${esc(error.message)}</p>
+      <p style="font-size:12px;color:var(--textm);margin-top:12px">Verifique se o MFA (TOTP) está habilitado em Authentication → Multi-Factor no Supabase.</p>`);
+    return false;
+  }
+  window._mfaFactorId = data.id;
+  _telaMfa(`<h2 style="color:var(--gold);font-size:22px;margin-bottom:8px">Ative a verificação em duas etapas</h2>
+    <p style="font-size:13px;color:var(--textm);margin-bottom:16px">A Torre acessa dados de todos os usuários. Escaneie o código com Google Authenticator, Authy ou 1Password.</p>
+    <div style="text-align:center"><img src="${data.totp.qr_code}" alt="QR code" style="width:190px;height:190px;background:#fff;padding:8px;border-radius:8px"></div>
+    <p style="font-family:monospace;font-size:11px;color:var(--textm);word-break:break-all;margin:12px 0;text-align:center">${esc(data.totp.secret)}</p>
+    <input id="mfaCod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"
+      style="width:100%;text-align:center;letter-spacing:8px;font-family:monospace;font-size:20px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text)">
+    <p id="mfaMsg" style="font-size:12px;margin-top:10px;min-height:16px"></p>
+    <button class="btn btn-primary" onclick="mfaCadastrarAdmin()" style="width:100%;margin-top:8px">Ativar e entrar</button>`);
+  return false;
+}
+
+async function mfaCadastrarAdmin() {
+  const code = (document.getElementById('mfaCod').value || '').replace(/\D/g, '');
+  if (code.length !== 6) return _mfaMsg('Informe os 6 dígitos.');
+  _mfaMsg('Verificando…', 'var(--textm)');
+  const { data: ch, error: e1 } = await window.sb.auth.mfa.challenge({ factorId: window._mfaFactorId });
+  if (e1) return _mfaMsg(e1.message);
+  const { error: e2 } = await window.sb.auth.mfa.verify({ factorId: window._mfaFactorId, challengeId: ch.id, code });
+  if (e2) return _mfaMsg('Código incorreto ou expirado. Tente o próximo.');
+  location.reload();
+}
+
+async function mfaVerificarAdmin() {
+  const code = (document.getElementById('mfaCod').value || '').replace(/\D/g, '');
+  if (code.length !== 6) return _mfaMsg('Informe os 6 dígitos.');
+  _mfaMsg('Verificando…', 'var(--textm)');
+  const { data: lista } = await window.sb.auth.mfa.listFactors();
+  const f = (lista?.totp || []).find(x => x.status === 'verified');
+  if (!f) return _mfaMsg('Nenhum autenticador ativo.');
+  const { data: ch, error: e1 } = await window.sb.auth.mfa.challenge({ factorId: f.id });
+  if (e1) return _mfaMsg(e1.message);
+  const { error: e2 } = await window.sb.auth.mfa.verify({ factorId: f.id, challengeId: ch.id, code });
+  if (e2) return _mfaMsg('Código incorreto ou expirado. Tente o próximo.');
+  location.reload();
+}
+
 // ===== INIT =====
 (async () => {
   // Selo de versão (diagnóstico, igual ao app)
@@ -621,6 +701,8 @@ function showToast(msg) {
   try {
     const profile = await window.VitaleAuth.requireAdmin();
     if (!profile) return;
+    // v5.29 · P1a — a Torre vê TODOS os usuários. Exige segundo fator.
+    if (!await garantirMfaAdmin()) return;
     const loader = document.getElementById('initLoader');
     if (loader) { loader.classList.add('hidden'); setTimeout(() => loader.remove(), 500); }
     loadOverview();

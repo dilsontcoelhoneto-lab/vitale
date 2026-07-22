@@ -252,6 +252,50 @@ table.lab td{padding:11px 10px}
   </div>
 
   <!-- PENDENTE -->
+  <!-- ===== v5.29 · 2FA obrigatório (P1a) =====
+       O médico vê dados de N pacientes. Uma senha vazada aqui não expõe
+       uma pessoa — expõe a carteira inteira. Por isso o segundo fator é
+       obrigatório neste portal, e opcional no app do paciente. -->
+  <div id="telaMfaCadastro" class="card oculto login">
+    <div class="sec" style="border:0;padding:0">Segurança da conta</div>
+    <h2 style="font-size:24px">Ative a verificação em duas etapas</h2>
+    <p style="color:var(--tinta2);font-size:14.5px;margin-top:10px;line-height:1.6">
+      Este portal exibe dados de saúde de terceiros. Antes de continuar, vincule
+      um aplicativo autenticador — <b>Google Authenticator</b>, <b>Authy</b>,
+      <b>1Password</b> ou o gerenciador de senhas do seu celular.
+    </p>
+    <ol style="color:var(--tinta2);font-size:14px;margin:16px 0 16px 18px;line-height:1.9">
+      <li>Abra o aplicativo autenticador</li>
+      <li>Escaneie o código abaixo</li>
+      <li>Digite os 6 dígitos que aparecerem</li>
+    </ol>
+    <div id="mfaQr" style="text-align:center;margin:18px 0;min-height:180px"></div>
+    <details style="margin-bottom:16px">
+      <summary style="font-size:13px;color:var(--tinta2);cursor:pointer">Não consigo escanear — mostrar código manual</summary>
+      <p id="mfaSegredo" style="font-family:'JetBrains Mono',monospace;font-size:13px;word-break:break-all;background:var(--papel2);padding:10px;border-radius:6px;margin-top:8px"></p>
+    </details>
+    <label>Código de 6 dígitos</label>
+    <input id="mfaCodigoCad" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="letter-spacing:6px;text-align:center;font-family:'JetBrains Mono',monospace">
+    <div id="mfaCadMsg"></div>
+    <button class="btn" onclick="PORTAL.mfaConfirmarCadastro()" style="width:100%;margin-top:12px">Ativar e continuar</button>
+    <p style="font-size:12px;color:var(--tinta2);margin-top:14px">
+      Guarde o acesso ao autenticador. Se perder o aparelho, será preciso
+      solicitar a remoção do fator pelo suporte, com confirmação de identidade.
+    </p>
+    <p style="text-align:center;margin-top:12px"><a href="#" onclick="PORTAL.sair();return false" style="font-size:13px">Sair</a></p>
+  </div>
+
+  <div id="telaMfaDesafio" class="card oculto login">
+    <div class="sec" style="border:0;padding:0">Verificação em duas etapas</div>
+    <h2 style="font-size:24px">Digite o código do autenticador</h2>
+    <p style="color:var(--tinta2);font-size:14.5px;margin-top:10px">Abra seu aplicativo autenticador e informe os 6 dígitos atuais.</p>
+    <label style="margin-top:16px">Código de 6 dígitos</label>
+    <input id="mfaCodigoDes" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" style="letter-spacing:6px;text-align:center;font-family:'JetBrains Mono',monospace">
+    <div id="mfaDesMsg"></div>
+    <button class="btn" onclick="PORTAL.mfaVerificar()" style="width:100%;margin-top:12px">Entrar</button>
+    <p style="text-align:center;margin-top:12px"><a href="#" onclick="PORTAL.sair();return false" style="font-size:13px">Sair</a></p>
+  </div>
+
   <div id="telaPendente" class="card oculto login">
     <div class="sec" style="border:0;padding:0">Cadastro em análise</div>
     <h2 style="font-size:24px">Aguardando verificação</h2>
@@ -400,12 +444,81 @@ const PORTAL = {
     if(session)await this.posLogin();
   },
 
-  // alterna telas públicas (login / cadastro / recuperação)
+  // alterna telas públicas (login / cadastro / recuperação / 2FA)
   tela(id){
-    ['telaLogin','telaCadastro','telaRecuperar','telaNovaSenha'].forEach(t=>{
+    ['telaLogin','telaCadastro','telaRecuperar','telaNovaSenha','telaMfaCadastro','telaMfaDesafio'].forEach(t=>{
       const el=document.getElementById(t); if(el) el.classList.toggle('oculto', t!==id);
     });
     window.scrollTo(0,0);
+  },
+
+  // ===== v5.29 — 2FA (TOTP) obrigatório no portal do médico =====
+  // Retorna true se o acesso está liberado; false se parou numa tela de 2FA.
+  async _garantirMfa(){
+    let niveis;
+    try{
+      niveis = (await this.sb.auth.mfa.getAuthenticatorAssuranceLevel()).data;
+    }catch(e){
+      // MFA indisponível no projeto — não trava o portal, mas registra.
+      console.warn('MFA indisponível:',e); return true;
+    }
+    if(!niveis) return true;
+
+    // Já autenticado no nível 2 nesta sessão
+    if(niveis.currentLevel==='aal2') return true;
+
+    // Tem fator cadastrado → precisa do desafio
+    if(niveis.nextLevel==='aal2'){ this.tela('telaMfaDesafio'); setTimeout(()=>document.getElementById('mfaCodigoDes')?.focus(),150); return false; }
+
+    // Não tem fator → cadastro obrigatório
+    await this._mfaIniciarCadastro();
+    return false;
+  },
+
+  async _mfaIniciarCadastro(){
+    this.tela('telaMfaCadastro');
+    this._msg('mfaCadMsg','');
+    const qr=document.getElementById('mfaQr');
+    qr.innerHTML='<p style="color:var(--tinta2);font-size:14px">Gerando código…</p>';
+
+    // Remove fatores não verificados de tentativas anteriores (senão o
+    // enroll acumula lixo e o Supabase recusa por nome duplicado).
+    try{
+      const {data:lista}=await this.sb.auth.mfa.listFactors();
+      for(const f of (lista?.all||[])) if(f.status!=='verified') await this.sb.auth.mfa.unenroll({factorId:f.id});
+    }catch(e){}
+
+    const {data,error}=await this.sb.auth.mfa.enroll({factorType:'totp',friendlyName:'VITALE '+Date.now()});
+    if(error){ qr.innerHTML=''; return this._msg('mfaCadMsg','Não foi possível gerar o código: '+error.message); }
+    this._mfaFactorId=data.id;
+    qr.innerHTML=`<img src="${data.totp.qr_code}" alt="QR code do autenticador" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:8px">`;
+    document.getElementById('mfaSegredo').textContent=data.totp.secret;
+  },
+
+  async mfaConfirmarCadastro(){
+    const code=(document.getElementById('mfaCodigoCad').value||'').replace(/\D/g,'');
+    if(code.length!==6) return this._msg('mfaCadMsg','Informe os 6 dígitos.');
+    this._msg('mfaCadMsg','Verificando…','ok');
+    const {data:ch,error:e1}=await this.sb.auth.mfa.challenge({factorId:this._mfaFactorId});
+    if(e1) return this._msg('mfaCadMsg','Falha: '+e1.message);
+    const {error:e2}=await this.sb.auth.mfa.verify({factorId:this._mfaFactorId,challengeId:ch.id,code});
+    if(e2) return this._msg('mfaCadMsg','Código incorreto ou expirado. Tente o próximo que o app gerar.');
+    this._msg('mfaCadMsg','Verificação ativada.','ok');
+    await this.posLogin();
+  },
+
+  async mfaVerificar(){
+    const code=(document.getElementById('mfaCodigoDes').value||'').replace(/\D/g,'');
+    if(code.length!==6) return this._msg('mfaDesMsg','Informe os 6 dígitos.');
+    this._msg('mfaDesMsg','Verificando…','ok');
+    const {data:lista}=await this.sb.auth.mfa.listFactors();
+    const fator=(lista?.totp||[]).find(f=>f.status==='verified');
+    if(!fator) return this._msg('mfaDesMsg','Nenhum autenticador ativo. Saia e entre novamente.');
+    const {data:ch,error:e1}=await this.sb.auth.mfa.challenge({factorId:fator.id});
+    if(e1) return this._msg('mfaDesMsg','Falha: '+e1.message);
+    const {error:e2}=await this.sb.auth.mfa.verify({factorId:fator.id,challengeId:ch.id,code});
+    if(e2) return this._msg('mfaDesMsg','Código incorreto ou expirado. Tente o próximo.');
+    await this.posLogin();
   },
 
   // ===== v5.25 — MEU PERFIL =====
@@ -617,7 +730,12 @@ const PORTAL = {
     document.getElementById('telaLogin').classList.add('oculto');
     document.getElementById('btnSair').classList.remove('oculto');
     document.getElementById('topoUser').innerHTML=`<b>${this._esc(med.nome)}</b>CRM ${this._esc(med.crm)}/${this._esc(med.crm_uf)}${med.especialidade?' · '+this._esc(med.especialidade):''}`;
-    if(med.status!=='verificado'){document.getElementById('telaPendente').classList.remove('oculto');return;}
+    if(med.status!=='verificado'){this.tela('');document.getElementById('telaPendente').classList.remove('oculto');return;}
+
+    // v5.29 — a partir daqui há dado de paciente na tela: exige 2FA.
+    if(!await this._garantirMfa()) return;
+    ['telaMfaCadastro','telaMfaDesafio'].forEach(t=>document.getElementById(t)?.classList.add('oculto'));
+
     document.getElementById('btnPerfil').classList.remove('oculto');
     this._aplicarMetasCustom();
     document.getElementById('telaLista').classList.remove('oculto');

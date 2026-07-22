@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.28 · Onboarding Curto (2 telas) · 2026-07-22';
+const VITALE_VERSION = 'v5.29 · Auditoria de Acesso + 2FA + Dispositivos · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -144,6 +144,9 @@ const VITALE_CORE = {
       try { this.renderBadgeResumo(); } catch (e) { console.warn('renderBadgeResumo', e); }
 
       try { window.VitaleAnalytics.track('app_open'); } catch (e) {}
+
+      // v5.29 — registra o dispositivo e avisa se for o primeiro acesso dele
+      this.registrarDispositivo();
 
       // Esconde loader
       const loader = document.getElementById('initLoader');
@@ -376,6 +379,118 @@ const VITALE_CORE = {
         <button class="btn btn-danger btn-small" onclick="VITALE_CORE.revogarMedico(${c.id})" style="margin-top:12px">🚫 Revogar acesso</button>
       </div>`;
     }).join('');
+  },
+
+  // ===== v5.29 · P0 — trilha de auditoria vista pelo paciente =====
+  async loadAcessosMedicos() {
+    const box = document.getElementById('medAcessosBox');
+    const el = document.getElementById('medAcessosLista');
+    if (!box || !el) return;
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return;
+    const { data, error } = await window.sb.from('acessos_medico')
+      .select('acao, detalhe, created_at, medicos(nome, crm, crm_uf)')
+      .eq('paciente_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error || !data || !data.length) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+
+    const rotulo = {
+      abriu_paciente: 'abriu sua ficha',
+      exportou_pdf: 'exportou seu relatório em PDF',
+      viu_exames: 'consultou seus exames'
+    };
+    el.innerHTML = data.map(a => {
+      const m = a.medicos || {};
+      const quando = new Date(a.created_at);
+      const dt = quando.toLocaleDateString('pt-BR') + ' às ' +
+                 quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const destaque = a.acao === 'exportou_pdf';
+      return `<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)">
+        <span style="color:${destaque ? 'var(--gold)' : 'var(--textm)'};font-size:14px;line-height:1.3">${destaque ? '⬇' : '•'}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text)">${this._escapeHtml(m.nome || 'Médico')} ${rotulo[a.acao] || this._escapeHtml(a.acao)}</div>
+          <div style="font-size:11px;color:var(--textm)">${dt}${m.crm ? ' · CRM ' + this._escapeHtml(m.crm) + '/' + this._escapeHtml(m.crm_uf || '') : ''}</div>
+        </div>
+      </div>`;
+    }).join('');
+  },
+
+  // ===== v5.29 · P1b — dispositivos de login =====
+  // Impressão digital estável e SEM dado sensível: só características do
+  // navegador. Não usamos IP nem geolocalização de propósito — geo-IP em
+  // celular aponta a cidade da operadora e gera alarme falso, além de
+  // adicionar mais um processador de dados pessoais na cadeia (LGPD).
+  async _fingerprintDispositivo() {
+    const base = [
+      navigator.userAgent,
+      navigator.language,
+      screen.width + 'x' + screen.height,
+      new Date().getTimezoneOffset(),
+      navigator.hardwareConcurrency || ''
+    ].join('|');
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(base));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  },
+
+  _rotuloDispositivo() {
+    const ua = navigator.userAgent;
+    const nav = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera'
+      : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox'
+      : /Safari\//.test(ua) ? 'Safari' : 'Navegador';
+    const so = /iPhone|iPad/.test(ua) ? 'iPhone/iPad' : /Android/.test(ua) ? 'Android'
+      : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows'
+      : /Linux/.test(ua) ? 'Linux' : 'sistema desconhecido';
+    return nav + ' no ' + so;
+  },
+
+  async registrarDispositivo() {
+    try {
+      const fp = await this._fingerprintDispositivo();
+      const { data: novo, error } = await window.sb.rpc('registrar_dispositivo', {
+        p_fingerprint: fp, p_rotulo: this._rotuloDispositivo()
+      });
+      if (error) { console.warn('registrar_dispositivo', error); return; }
+      if (novo) {
+        // Aviso in-app. O e-mail depende de provedor de envio ainda não
+        // configurado — ver docs/SEGURANCA_prioridades.md.
+        this.showAlert('info', '🔐 Primeiro acesso a partir de ' + this._rotuloDispositivo() +
+          '. Se não foi você, troque sua senha em Configurações.');
+      }
+    } catch (e) { console.warn('registrarDispositivo', e); }
+  },
+
+  async loadDispositivos() {
+    const el = document.getElementById('dispositivosLista');
+    if (!el) return;
+    const atual = await this._fingerprintDispositivo().catch(() => null);
+    const { data, error } = await window.sb.from('dispositivos_login')
+      .select('id, fingerprint, rotulo, primeiro_em, ultimo_em')
+      .order('ultimo_em', { ascending: false });
+    if (error || !data || !data.length) {
+      el.innerHTML = '<p style="font-size:13px;color:var(--textm)">Nenhum dispositivo registrado ainda.</p>';
+      return;
+    }
+    el.innerHTML = data.map(d => {
+      const eu = d.fingerprint === atual;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="min-width:0">
+          <div style="font-size:13.5px;color:var(--text)">${this._escapeHtml(d.rotulo || 'Dispositivo')}${eu ? ' <span style="color:var(--em);font-size:11px">· este aparelho</span>' : ''}</div>
+          <div style="font-size:11px;color:var(--textm)">Último acesso ${this.fmt(d.ultimo_em.slice(0, 10))} · conhecido desde ${this.fmt(d.primeiro_em.slice(0, 10))}</div>
+        </div>
+        ${eu ? '' : `<button class="btn btn-danger btn-small" onclick="VITALE_CORE.esquecerDispositivo(${d.id})">Esquecer</button>`}
+      </div>`;
+    }).join('');
+  },
+
+  async esquecerDispositivo(id) {
+    if (!confirm('Esquecer este dispositivo? Ele será tratado como novo no próximo acesso.')) return;
+    try {
+      const { error } = await window.sb.from('dispositivos_login').delete().eq('id', id);
+      if (error) throw error;
+      await this.loadDispositivos();
+    } catch (e) { this.showAlert('error', '❌ ' + e.message); }
   },
 
   async revogarMedico(id) {
@@ -6020,9 +6135,12 @@ const VITALE_CORE = {
     if (tabName === 'medic') {
       try { this.renderGlp1Forms(); this.renderDosesList(); this.renderEfeitosList(); } catch (err) { console.warn('glp1', err); }
     }
-    // Ao abrir Saúde, carrega a lista de médicos vinculados (v5.8)
+    // Ao abrir Saúde: médicos vinculados (v5.8) + trilha de acesso e
+    // dispositivos (v5.29). Cada um em try próprio para não derrubar os outros.
     if (tabName === 'saude') {
       try { this.loadMeusMedicos(); } catch (err) { console.warn('meusMedicos', err); }
+      try { this.loadAcessosMedicos(); } catch (err) { console.warn('acessosMedicos', err); }
+      try { this.loadDispositivos(); } catch (err) { console.warn('dispositivos', err); }
     }
     // Ao abrir Exames, renderiza forms, lista e gráficos; preenche data com hoje
     if (tabName === 'exames') {
