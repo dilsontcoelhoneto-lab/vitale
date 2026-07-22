@@ -987,232 +987,141 @@
     <div id="onbProgressBar" style="display:flex;gap:6px;margin-bottom:24px">
       <div class="onb-step current" data-step="1"></div>
       <div class="onb-step" data-step="2"></div>
-      <div class="onb-step" data-step="3"></div>
-      <div class="onb-step" data-step="4"></div>
-      <div class="onb-step" data-step="5"></div>
-      <div class="onb-step" data-step="6"></div>
-      <div class="onb-step" data-step="7"></div>
     </div>
 
+    <!-- ============================================================
+         v5.28 — ONBOARDING CURTO (2 telas)
+         Antes eram 7. Tudo que saiu daqui (sinais vitais, medicacoes,
+         condicoes, atividade/sono/stress, telefone, estado) ja existe
+         na aba Saude e pode ser preenchido a qualquer momento.
+         Ficam aqui SO os campos sem os quais o app calcula errado
+         (altura, peso, nascimento, sexo) + objetivo + aceite LGPD.
+         ============================================================ -->
     <div class="onb-tela" data-tela="1">
-      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">Bem-vindo ao VITALE 🎉</h2>
-      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Vamos configurar seu perfil em 5 telinhas (2 minutos). <strong>Tudo é opcional</strong> — pule o que quiser e complete depois na aba Saúde.</p>
-      <div style="margin-bottom:16px">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">Bem-vindo ao VITALE</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:22px;line-height:1.7">Sao <strong>4 campos e um objetivo</strong>. Menos de um minuto. Sem eles o app nao calcula seu IMC nem seu gasto calorico — e prefiro nao te dar numero errado.</p>
+
+      <div style="margin-bottom:14px">
         <label>Como devemos te chamar?</label>
-        <input type="text" id="onbNome" placeholder="Seu primeiro nome">
+        <input type="text" id="onbNome" placeholder="Seu primeiro nome" autocomplete="given-name">
       </div>
       <div class="form-group">
-        <div><label>Altura (m)</label><input type="text" id="onbAltura" placeholder="1.75"></div>
-        <div><label>Peso atual (kg)</label><input type="text" id="onbPeso" placeholder="80.0"></div>
+        <div><label>Altura (m)</label><input type="text" inputmode="decimal" id="onbAltura" placeholder="1.75"></div>
+        <div><label>Peso atual (kg)</label><input type="text" inputmode="decimal" id="onbPeso" placeholder="80.0"></div>
       </div>
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:22px">
         <div><label>Data de nascimento</label><input type="date" id="onbDataNasc"></div>
         <div>
-          <label>Sexo biológico</label>
+          <label>Sexo biologico</label>
           <select id="onbSexo">
             <option value="">Selecione...</option>
             <option value="M">Masculino</option>
             <option value="F">Feminino</option>
-            <option value="outro">Prefiro não informar</option>
+            <option value="outro">Prefiro nao informar</option>
           </select>
         </div>
       </div>
-      <div class="form-group">
-        <div><label>WhatsApp / Telefone</label><input type="tel" id="onbTelefone" placeholder="(41) 99999-9999"></div>
-        <div>
-          <label>Estado</label>
-          <select id="onbEstado">
-            <option value="">Selecione...</option>
-            <option>AC</option><option>AL</option><option>AP</option><option>AM</option><option>BA</option><option>CE</option><option>DF</option><option>ES</option><option>GO</option><option>MA</option><option>MT</option><option>MS</option><option>MG</option><option>PA</option><option>PB</option><option>PR</option><option>PE</option><option>PI</option><option>RJ</option><option>RN</option><option>RS</option><option>RO</option><option>RR</option><option>SC</option><option>SP</option><option>SE</option><option>TO</option>
-          </select>
-        </div>
-      </div>
-      <div style="margin-top:4px">
-        <label>Como conheceu o VITALE?</label>
-        <select id="onbComoConheceu">
-          <option value="">Selecione...</option>
-          <option value="indicacao_medica">Indicação médica</option>
-          <option value="instagram">Instagram</option>
-          <option value="grupo">Grupo / comunidade</option>
-          <option value="amigo">Indicação de amigo</option>
-          <option value="google">Busca no Google</option>
-          <option value="outro">Outro</option>
-        </select>
-      </div>
-    </div>
 
-    <div class="onb-tela" data-tela="2" style="display:none">
-      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🩺 Sinais Vitais</h2>
-      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Se não souber agora, <strong>pule</strong> — pode preencher depois na aba Saúde.</p>
-      <div class="form-group">
-        <div><label>Pressão Sistólica</label><input type="number" id="onbPaSist" placeholder="120"></div>
-        <div><label>Pressão Diastólica</label><input type="number" id="onbPaDiast" placeholder="80"></div>
-      </div>
-      <div class="form-group">
-        <div><label>Glicemia em jejum (mg/dL)</label><input type="number" id="onbGlicemia" placeholder="92" step="0.1"></div>
-        <div><label>FC em repouso (bpm)</label><input type="number" id="onbFc" placeholder="68"></div>
-      </div>
-    </div>
-
-    <div class="onb-tela" data-tela="3" style="display:none">
-      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">💉 Medicações em Uso</h2>
-      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Marque tudo que se aplica. Ajuda a IA a personalizar suas projeções e dicas.</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label class="check-card"><input type="checkbox" id="onbMedGlp1" onchange="document.getElementById('onbMedGlp1Wrap').style.display=this.checked?'block':'none'"><span class="check-content"><strong>💉 GLP-1</strong><small>Mounjaro, Ozempic, Wegovy...</small></span></label>
-        <label class="check-card"><input type="checkbox" id="onbMedAntiHip"><span class="check-content"><strong>🫀 Anti-hipertensivo</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbMedEstatina"><span class="check-content"><strong>🧪 Estatina (colesterol)</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbMedMetformina"><span class="check-content"><strong>💊 Metformina</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbMedInsulina"><span class="check-content"><strong>💉 Insulina</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbMedTireoide"><span class="check-content"><strong>🦋 Tireoide</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbMedVitaminas"><span class="check-content"><strong>🌿 Vitaminas/Suplementos</strong></span></label>
-      </div>
-      <div id="onbMedGlp1Wrap" style="display:none;margin-top:14px">
-        <label>Qual GLP-1 e dose?</label>
-        <input type="text" id="onbMedGlp1Nome" placeholder="Ex: Mounjaro 5mg semanal">
-      </div>
-    </div>
-
-    <div class="onb-tela" data-tela="4" style="display:none">
-      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🩻 Condições de Saúde</h2>
-      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Apenas diagnósticos confirmados pelo médico.</p>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <label class="check-card"><input type="checkbox" id="onbCondDt2"><span class="check-content"><strong>Diabetes Tipo 2</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbCondDt1"><span class="check-content"><strong>Diabetes Tipo 1</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbCondHip"><span class="check-content"><strong>Hipertensão</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbCondHipoT"><span class="check-content"><strong>Hipotireoidismo</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbCondDisli"><span class="check-content"><strong>Dislipidemia</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbCondApneia"><span class="check-content"><strong>Apneia do Sono</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbCondSop"><span class="check-content"><strong>SOP</strong></span></label>
-        <label class="check-card"><input type="checkbox" id="onbCondEsteatose"><span class="check-content"><strong>Esteatose Hepática</strong></span></label>
-      </div>
-    </div>
-
-    <div class="onb-tela" data-tela="5" style="display:none">
-      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🏃 Estilo de Vida</h2>
-      <p style="color:var(--textm);font-size:14px;margin-bottom:24px;line-height:1.7">Última tela — para o coach IA ajustar conselhos.</p>
-      <div class="form-group">
-        <div>
-          <label>Nível de Atividade</label>
-          <select id="onbNivelAtividade">
-            <option value="">Selecione...</option>
-            <option value="sedentario">Sedentário</option>
-            <option value="leve">Leve (1-2x/sem)</option>
-            <option value="moderado">Moderado (3-4x/sem)</option>
-            <option value="intenso">Intenso (5-6x/sem)</option>
-            <option value="muito_intenso">Muito Intenso</option>
-          </select>
-        </div>
-        <div><label>Treinos/semana</label><input type="number" id="onbFreqTreino" min="0" max="14" placeholder="3"></div>
-      </div>
-      <div class="form-group">
-        <div><label>Horas de sono (média)</label><input type="number" id="onbSono" step="0.5" placeholder="7.5"></div>
-        <div>
-          <label>Stress (1-5)</label>
-          <select id="onbStress">
-            <option value="">Selecione...</option>
-            <option value="1">1 - Muito baixo</option>
-            <option value="2">2 - Baixo</option>
-            <option value="3">3 - Moderado</option>
-            <option value="4">4 - Alto</option>
-            <option value="5">5 - Muito alto</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <!-- TELA 6: OBJETIVO (Bloco A.1) -->
-    <div class="onb-tela" data-tela="6" style="display:none">
-      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">🎯 Seu Objetivo Principal</h2>
-      <p style="color:var(--textm);font-size:14px;margin-bottom:20px;line-height:1.7">Pra IA ajustar feedback e gerar metas relevantes. <strong>Escolha um:</strong></p>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <label style="display:block;margin-bottom:10px">Qual seu objetivo principal?</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
         <div class="objetivo-card" data-objetivo="emagrecimento" onclick="VITALE_CORE.selectObjetivo(this,'emagrecimento')">
-          <div class="obj-icon">⚖️</div>
+          <div class="obj-icon">&#9878;&#65039;</div>
           <div class="obj-title">Emagrecimento</div>
           <div class="obj-sub">Perder peso (gordura)</div>
         </div>
         <div class="objetivo-card" data-objetivo="recomposicao" onclick="VITALE_CORE.selectObjetivo(this,'recomposicao')">
-          <div class="obj-icon">💪</div>
-          <div class="obj-title">Recomposição</div>
-          <div class="obj-sub">Perder gordura + ganhar músculo</div>
+          <div class="obj-icon">&#128170;</div>
+          <div class="obj-title">Recomposicao</div>
+          <div class="obj-sub">Perder gordura + ganhar musculo</div>
         </div>
         <div class="objetivo-card" data-objetivo="hipertrofia" onclick="VITALE_CORE.selectObjetivo(this,'hipertrofia')">
-          <div class="obj-icon">🏋️</div>
+          <div class="obj-icon">&#127947;&#65039;</div>
           <div class="obj-title">Hipertrofia</div>
           <div class="obj-sub">Ganhar massa muscular</div>
         </div>
         <div class="objetivo-card" data-objetivo="saude" onclick="VITALE_CORE.selectObjetivo(this,'saude')">
-          <div class="obj-icon">❤️</div>
-          <div class="obj-title">Saúde Geral</div>
+          <div class="obj-icon">&#10084;&#65039;</div>
+          <div class="obj-title">Saude Geral</div>
           <div class="obj-sub">PA, glicemia, colesterol</div>
         </div>
         <div class="objetivo-card" data-objetivo="manutencao" onclick="VITALE_CORE.selectObjetivo(this,'manutencao')">
-          <div class="obj-icon">🧘</div>
-          <div class="obj-title">Manutenção</div>
+          <div class="obj-icon">&#129496;</div>
+          <div class="obj-title">Manutencao</div>
           <div class="obj-sub">Manter peso atual</div>
         </div>
         <div class="objetivo-card" data-objetivo="outro" onclick="VITALE_CORE.selectObjetivo(this,'outro')">
-          <div class="obj-icon">🎯</div>
+          <div class="obj-icon">&#127919;</div>
           <div class="obj-title">Outro / Misto</div>
-          <div class="obj-sub">Descrever depois</div>
+          <div class="obj-sub">Descrever abaixo</div>
         </div>
       </div>
 
-      <!-- Sub-pergunta: urgência (só pra emagrecimento) -->
-      <div id="onbUrgenciaWrap" style="display:none;background:rgba(212,168,67,0.04);border:1px solid rgba(212,168,67,0.15);border-radius:10px;padding:16px;margin-bottom:14px">
-        <label style="font-size:12px;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Qual sua urgência?</label>
+      <div id="onbUrgenciaWrap" style="display:none;background:rgba(212,168,67,0.04);border:1px solid rgba(212,168,67,0.15);border-radius:10px;padding:16px;margin-bottom:12px">
+        <label style="font-size:12px;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px">Qual sua urgencia?</label>
         <div style="display:flex;flex-direction:column;gap:8px">
           <div class="urgencia-card" data-urgencia="sem_pressa" onclick="VITALE_CORE.selectUrgencia(this,'sem_pressa')">
-            <strong>🐢 Sem pressa</strong>
-            <small>~ 0,3-0,5 kg/sem (mais sustentável)</small>
+            <strong>Sem pressa</strong>
+            <small>~ 0,3-0,5 kg/sem (mais sustentavel)</small>
           </div>
           <div class="urgencia-card" data-urgencia="moderada" onclick="VITALE_CORE.selectUrgencia(this,'moderada')">
-            <strong>🚶 Moderada</strong>
+            <strong>Moderada</strong>
             <small>~ 0,5-0,7 kg/sem (recomendado)</small>
           </div>
           <div class="urgencia-card" data-urgencia="acelerada" onclick="VITALE_CORE.selectUrgencia(this,'acelerada')">
-            <strong>🏃 Acelerada ⚠️</strong>
-            <small>~ 0,7-1,0 kg/sem · requer acompanhamento médico</small>
+            <strong>Acelerada</strong>
+            <small>~ 0,7-1,0 kg/sem &middot; requer acompanhamento medico</small>
           </div>
         </div>
       </div>
 
-      <!-- Outro: campo texto livre -->
       <div id="onbObjetivoOutroWrap" style="display:none">
         <label>Descreva seu objetivo:</label>
         <textarea id="onbObjetivoOutro" placeholder="Ex: voltar a correr 10km confortavelmente..." style="min-height:60px"></textarea>
       </div>
-
-      <p style="font-size:11px;color:var(--textm);margin-top:14px;line-height:1.6">
-        💡 Se escolher <strong>Emagrecimento</strong> e seu IMC for ≥ 25, vou perguntar se quer <strong>gerar submetas automáticas em cascata</strong> (sair de Obesidade III → II → I → Sobrepeso → Normal).
-      </p>
     </div>
 
-    <!-- TELA 7 — Termos e Consentimento (LGPD) -->
-    <div class="onb-tela" data-tela="7" style="display:none">
-      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">📜 Termos e Privacidade</h2>
-      <p style="color:var(--textm);font-size:14px;margin-bottom:20px;line-height:1.7">Pra finalizar, precisamos do seu aceite. Seus dados de saúde são tratados com cuidado e <strong>nunca vendidos</strong>.</p>
+    <!-- TELA 2 — Termos e Consentimento (LGPD).
+         Fica separada de proposito: aceite tem que ser um ato deliberado,
+         nao um checkbox perdido no meio de um formulario. -->
+    <div class="onb-tela" data-tela="2" style="display:none">
+      <h2 style="color:var(--gold);font-size:26px;margin-bottom:8px">Termos e Privacidade</h2>
+      <p style="color:var(--textm);font-size:14px;margin-bottom:20px;line-height:1.7">Pra finalizar, precisamos do seu aceite. Seus dados de saude sao tratados com cuidado e <strong>nunca vendidos</strong>.</p>
 
       <div style="background:rgba(232,80,74,0.06);border:1px solid rgba(232,80,74,0.2);border-radius:10px;padding:14px;margin-bottom:18px">
-        <p style="font-size:12.5px;color:var(--text);line-height:1.6">⚕️ O VITALE é uma ferramenta de <strong>acompanhamento</strong> e <strong>não substitui orientação médica</strong>. Estimativas (calorias, projeções) são aproximadas.</p>
+        <p style="font-size:12.5px;color:var(--text);line-height:1.6">O VITALE e uma ferramenta de <strong>acompanhamento</strong> e <strong>nao substitui orientacao medica</strong>. Estimativas (calorias, projecoes) sao aproximadas.</p>
       </div>
 
       <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;cursor:pointer">
         <input type="checkbox" id="onbAceiteTermos" style="margin-top:3px;width:18px;height:18px;flex-shrink:0">
-        <span style="font-size:13px;color:var(--text);line-height:1.5">Li e aceito os <a href="#" onclick="VITALE_CORE.verTermos(event)" style="color:var(--gold);text-decoration:underline">Termos de Uso e Política de Privacidade</a>. <span style="color:var(--red)">*</span></span>
+        <span style="font-size:13px;color:var(--text);line-height:1.5">Li e aceito os <a href="#" onclick="VITALE_CORE.verTermos(event)" style="color:var(--gold);text-decoration:underline">Termos de Uso e Politica de Privacidade</a>. <span style="color:var(--red)">*</span></span>
       </label>
 
       <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;cursor:pointer">
         <input type="checkbox" id="onbConsentEssencial" checked style="margin-top:3px;width:18px;height:18px;flex-shrink:0">
-        <span style="font-size:13px;color:var(--text);line-height:1.5">Aceito receber comunicações essenciais sobre minha conta e lembretes que eu ativar.</span>
+        <span style="font-size:13px;color:var(--text);line-height:1.5">Aceito receber comunicacoes essenciais sobre minha conta e lembretes que eu ativar.</span>
       </label>
 
-      <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:8px;cursor:pointer">
+      <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:18px;cursor:pointer">
         <input type="checkbox" id="onbConsentMarketing" style="margin-top:3px;width:18px;height:18px;flex-shrink:0">
-        <span style="font-size:13px;color:var(--text);line-height:1.5">Quero receber dicas, novidades e promoções do VITALE por e-mail/WhatsApp. Posso cancelar quando quiser.</span>
+        <span style="font-size:13px;color:var(--text);line-height:1.5">Quero receber dicas, novidades e promocoes do VITALE por e-mail/WhatsApp. Posso cancelar quando quiser.</span>
       </label>
 
-      <p id="onbAceiteAviso" style="font-size:12px;color:var(--red);margin-top:10px;display:none">⚠️ É necessário aceitar os Termos para continuar.</p>
+      <div style="border-top:1px solid var(--border);padding-top:16px">
+        <label>Como conheceu o VITALE? <span style="color:var(--textm);font-weight:400">(opcional)</span></label>
+        <select id="onbComoConheceu">
+          <option value="">Selecione...</option>
+          <option value="indicacao_medica">Indicacao medica</option>
+          <option value="instagram">Instagram</option>
+          <option value="grupo">Grupo / comunidade</option>
+          <option value="amigo">Indicacao de amigo</option>
+          <option value="google">Busca no Google</option>
+          <option value="outro">Outro</option>
+        </select>
+      </div>
+
+      <p id="onbAceiteAviso" style="font-size:12px;color:var(--red);margin-top:12px;display:none">E necessario aceitar os Termos para continuar.</p>
+
+      <p style="font-size:11.5px;color:var(--textm);margin-top:16px;line-height:1.6">Depois voce pode completar medicacoes, condicoes, pressao, glicemia, sono e rotina na aba <strong>Saude</strong> — quando quiser.</p>
     </div>
 
     <!-- BOTÕES DE NAVEGAÇÃO DO WIZARD -->

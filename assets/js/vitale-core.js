@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.27 · Saída do Onboarding + Altura sem default · 2026-07-22';
+const VITALE_VERSION = 'v5.28 · Onboarding Curto (2 telas) · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -5136,7 +5136,7 @@ const VITALE_CORE = {
   // ONBOARDING WIZARD — 6 telas (Bloco A.1: + Objetivos)
   // =====================================================
   onbCurrentStep: 1,
-  ONB_TOTAL_STEPS: 7,
+  ONB_TOTAL_STEPS: 2,   // v5.28: eram 7. O resto migrou para a aba Saúde.
 
   showOnboarding(prePreenchido = false) {
     try {
@@ -5264,8 +5264,10 @@ const VITALE_CORE = {
     const avancar = document.getElementById('onbAvancar');
     if (avancar) avancar.textContent = this.onbCurrentStep === this.ONB_TOTAL_STEPS ? 'Finalizar 🎉' : 'Continuar →';
 
+    // v5.28: "Pular" saiu. Com 2 telas não há etapa opcional — e na tela de
+    // termos ele burlava o aceite (chamava onbFinalizar direto). Buraco de LGPD.
     const pular = document.getElementById('onbPular');
-    if (pular) pular.style.display = this.onbCurrentStep === 1 ? 'none' : 'inline';
+    if (pular) pular.style.display = 'none';
   },
 
   onbVoltar() {
@@ -5309,10 +5311,11 @@ const VITALE_CORE = {
       if (!nome) return this.showAlert('error', 'Como devemos te chamar?');
       if (isNaN(altura) || altura < 1.2 || altura > 2.5) return this.showAlert('error', 'Altura inválida (ex: 1.75)');
       if (isNaN(peso) || peso < 30 || peso > 500) return this.showAlert('error', 'Peso inválido');
+      if (!this.state.objetivoEscolhido) return this.showAlert('error', 'Escolha seu objetivo principal.');
     }
 
-    // Tela 7: aceite dos termos é obrigatório
-    if (this.onbCurrentStep === 7) {
+    // Última tela: aceite dos termos é obrigatório
+    if (this.onbCurrentStep === this.ONB_TOTAL_STEPS) {
       const aceitou = document.getElementById('onbAceiteTermos')?.checked;
       if (!aceitou) {
         const aviso = document.getElementById('onbAceiteAviso');
@@ -5590,10 +5593,14 @@ const VITALE_CORE = {
   async onbFinalizar() {
     try {
       const user = await window.VitaleAuth.getUser();
-      const getNum = (id) => { const v = document.getElementById(id)?.value; return v ? parseFloat(v.replace(',', '.')) : null; };
-      const getInt = (id) => { const v = document.getElementById(id)?.value; return v ? parseInt(v) : null; };
-      const getStr = (id) => { const v = document.getElementById(id)?.value?.trim(); return v || null; };
-      const getCheck = (id) => !!document.getElementById(id)?.checked;
+      // v5.28 — os campos clínicos saíram do wizard e vivem na aba Saúde.
+      // Se o elemento NÃO existe, devolvemos undefined e a chave é removida
+      // do upsert. Sem isso, "Refazer onboarding" gravaria false/null por cima
+      // das medicações e condições que a pessoa já tinha preenchido.
+      const getNum = (id) => { const el = document.getElementById(id); if (!el) return undefined; return el.value ? parseFloat(el.value.replace(',', '.')) : null; };
+      const getInt = (id) => { const el = document.getElementById(id); if (!el) return undefined; return el.value ? parseInt(el.value) : null; };
+      const getStr = (id) => { const el = document.getElementById(id); if (!el) return undefined; return el.value?.trim() || null; };
+      const getCheck = (id) => { const el = document.getElementById(id); if (!el) return undefined; return !!el.checked; };
 
       // 1) profile
       const nome = document.getElementById('onbNome').value.trim();
@@ -5652,6 +5659,8 @@ const VITALE_CORE = {
         urgencia,
         updated_at: new Date().toISOString()
       };
+      // Remove as chaves cujos campos não existem mais nesta tela
+      Object.keys(hpData).forEach(k => { if (hpData[k] === undefined) delete hpData[k]; });
       await window.sb.from('health_profile').upsert(hpData);
 
       // 3) Primeiro peso (INSERT, não upsert — múltiplos/dia OK)
@@ -5675,7 +5684,8 @@ const VITALE_CORE = {
 
       // 5) Reload completo do state
       this.state.profile = { ...this.state.profile, nome, altura };
-      this.state.healthProfile = hpData;
+      // merge, não substituição — hpData agora é parcial (v5.28)
+      this.state.healthProfile = { ...(this.state.healthProfile || {}), ...hpData };
       this.state.weights = await this.loadWeights();
       this.state.weightsRaw = await this.loadWeightsRaw();
 
