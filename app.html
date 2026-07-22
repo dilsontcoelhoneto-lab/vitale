@@ -1221,6 +1221,13 @@
       <span id="onbPular" style="color:var(--textm);font-size:12px;cursor:pointer" onclick="VITALE_CORE.onbPular()">Pular esta etapa →</span>
       <button id="onbAvancar" class="btn btn-primary" onclick="VITALE_CORE.onbAvancar()" style="padding:14px 28px">Continuar →</button>
     </div>
+
+    <!-- Saída de emergência: sem isto o onboarding vira um beco sem saída
+         para quem entrou com a conta errada (ex.: login social). -->
+    <div style="text-align:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+      <span id="onbContaAtual" style="display:block;font-size:11px;color:var(--textm);margin-bottom:6px"></span>
+      <a href="#" onclick="VITALE_CORE.sairDoOnboarding();return false" style="font-size:12px;color:var(--textm);text-decoration:underline">Não é você? Entrar com outra conta</a>
+    </div>
   </div>
 </div>
 

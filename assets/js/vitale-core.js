@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.24 · TMB sem Dupla Contagem · 2026-07-21';
+const VITALE_VERSION = 'v5.27 · Saída do Onboarding + Altura sem default · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -47,6 +47,17 @@ const VITALE_CORE = {
   // =====================================================
   async init() {
     try {
+      // v5.27 — ESCAPE HATCH: /app.html?sair=1 força logout mesmo que o app
+      // esteja travado num modal. Sem isso, um usuário preso no onboarding
+      // não tem como voltar para a tela de login (a sessão persiste no
+      // localStorage e reabre o modal a cada refresh).
+      if (/[?&]sair=1/.test(window.location.search)) {
+        try { await window.sb.auth.signOut(); } catch (e) {}
+        try { localStorage.clear(); } catch (e) {}
+        window.location.replace('/');
+        return;
+      }
+
       const user = await window.VitaleAuth.requireAuth();
       if (!user) return;
 
@@ -144,7 +155,12 @@ const VITALE_CORE = {
       }
 
       // Primeiro acesso → onboarding
-      if ((!val[0]?.altura || val[0].altura === 1.70) && this.state.weights.length === 0) {
+      // v5.27: não usa mais "altura === 1.70" como sinal de perfil vazio.
+      // 1,70 é uma altura real e o default da coluna era 1.70 — quem tem
+      // essa altura reabria o onboarding pra sempre. Sinal correto: sem nome
+      // no perfil E sem nenhum peso registrado.
+      const perfilVazio = !val[0]?.nome && !this.state.healthProfile?.data_nascimento;
+      if (perfilVazio && this.state.weights.length === 0) {
         this.showOnboarding();
       }
 
@@ -5131,6 +5147,13 @@ const VITALE_CORE = {
       this.state.objetivoEscolhido = null;
       if (prePreenchido) this._prefillOnboardingFromState();
       this.onbRenderStep();
+      // Mostra com qual e-mail a pessoa entrou — evita descobrir só no fim
+      // que logou com a conta errada (Google x e-mail).
+      const lbl = document.getElementById('onbContaAtual');
+      if (lbl) {
+        const em = this.state.profile?.email || '';
+        lbl.textContent = em ? 'Você entrou como ' + em : '';
+      }
       const modal = document.getElementById('modalOnboarding');
       if (modal) modal.classList.add('active');
     } catch (e) {
@@ -5142,6 +5165,16 @@ const VITALE_CORE = {
       const modal = document.getElementById('modalOnboarding');
       if (modal) modal.classList.add('active');
     }
+  },
+
+  // v5.27 — saída do onboarding sem precisar preencher nada.
+  // Limpa a sessão E o localStorage (o token do Supabase fica lá; sem limpar,
+  // fechar o navegador não resolve — o app volta direto para o modal).
+  async sairDoOnboarding() {
+    if (!confirm('Sair desta conta e voltar para a tela de login?')) return;
+    try { await window.sb.auth.signOut(); } catch (e) {}
+    try { localStorage.clear(); } catch (e) {}
+    window.location.replace('/');
   },
 
   // Reabre o onboarding pré-preenchido com dados atuais (botão "Refazer")
