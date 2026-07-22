@@ -9,11 +9,47 @@
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains
 
+# -----------------------------------------------------
+# HTML — sempre revalidar.
+# O HTML é quem carrega os assets com ?v=. Se ele ficar em cache,
+# o navegador continua pedindo a versão ANTIGA dos scripts mesmo
+# depois de um deploy. Foi exatamente isso que quebrou a navegação
+# da v5.30: o app.html novo pedia vitale-core.js?v=A26, e esse
+# ?v=A26 ainda estava guardado por 24h com o core v5.24.
+# -----------------------------------------------------
+/
+  Cache-Control: no-cache
+
+/*.html
+  Cache-Control: no-cache
+
+# O service worker também precisa revalidar, senão a versão antiga
+# dele sobrevive a deploys e continua decidindo o que é servido.
+/sw.js
+  Cache-Control: no-cache
+
+/manifest.json
+  Cache-Control: no-cache
+
+# -----------------------------------------------------
+# Assets versionados por query string (?v=A31).
+# Como a URL muda a cada release, o cache pode ser longo e imutável.
+# A ÚNICA regra a lembrar: subir o ?v= em TODOS os HTMLs a cada
+# release. O app.html tem um guarda (CORE_ESPERADO) que mostra
+# aviso na tela se o HTML e o core estiverem dessincronizados.
+# -----------------------------------------------------
 /assets/css/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=31536000, immutable
 
 /assets/js/*
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=31536000, immutable
+
+/icons/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Credenciais: nunca em cache compartilhado.
+/config.js
+  Cache-Control: no-store
 
 /api/*
   Cache-Control: no-store, no-cache, must-revalidate
