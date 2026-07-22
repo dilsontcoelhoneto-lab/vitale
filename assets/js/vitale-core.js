@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.16 · Protocolo GLP-1 · 2026-07-21';
+const VITALE_VERSION = 'v5.18 · Balanço do Dia · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1463,61 +1463,102 @@ const VITALE_CORE = {
     return { valor: tmb, fonte: 'estimada por fórmula (Mifflin-St Jeor)' };
   },
 
+  // v5.18 — Balanço do dia: consumo × gasto, proteína e leitura POR OBJETIVO.
+  // Nunca some da tela: sem TMB, mostra o que dá e ensina como completar.
   renderBalancoCalorico() {
     const el = document.getElementById('balancoCard');
     if (!el) return;
-    const tmbInfo = this._getTMB();
-    if (!tmbInfo) { el.style.display = 'none'; return; }
     el.style.display = '';
 
     const hp = this.state.healthProfile || {};
-    const fator = hp.fator_atividade || 1.4; // sedentário-leve por padrão
     const hoje = this._hojeSP();
+    const refsHoje = (this.state.refeicoes || []).filter(r => this._normData(r.data) === hoje);
+    const consumido = refsHoje.reduce((s, r) => s + (r.calorias || 0), 0);
+    const proteina = refsHoje.reduce((s, r) => s + (r.proteina_g || 0), 0);
+    const exHoje = (this.state.exercicios || []).filter(e => this._normData(e.data) === hoje)
+      .reduce((s, e) => s + (e.calorias || 0), 0);
 
-    // Consumido = refeições de hoje
-    const consumido = (this.state.refeicoes || []).filter(r => r.data === hoje).reduce((s, r) => s + (r.calorias || 0), 0);
-    // Exercícios de hoje
-    const exHoje = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
-    // Gasto = TMB × fator + exercícios extras
-    const gasto = Math.round(tmbInfo.valor * fator + exHoje);
-    const saldo = consumido - gasto;
-    const emDeficit = saldo < 0;
+    const tmbInfo = this._getTMB();
+    const fator = hp.fator_atividade || 1.4;
+    const gasto = tmbInfo ? Math.round(tmbInfo.valor * fator + exHoje) : null;
+    const saldo = gasto != null ? consumido - gasto : null;
 
-    const corSaldo = emDeficit ? 'var(--em)' : 'var(--orange)';
-    const rotuloSaldo = emDeficit ? 'Déficit' : 'Superávit';
-    // Barras proporcionais: a maior das duas vira 100%
-    const maxVal = Math.max(consumido, gasto, 1);
-    const pctConsumido = (consumido / maxVal) * 100;
-    const pctGasto = (gasto / maxVal) * 100;
+    // Meta de proteína: 1,6 g/kg do peso atual (preservação de massa magra em GLP-1)
+    const sorted = this.getSorted();
+    const pesoAtual = sorted.length ? sorted[sorted.length - 1].peso : null;
+    const metaProt = pesoAtual ? Math.round(pesoAtual * 1.6) : null;
+    const pctProt = (metaProt && proteina) ? Math.min((proteina / metaProt) * 100, 100) : 0;
+
+    // Leitura conforme o OBJETIVO (não assume emagrecimento)
+    const obj = this.objetivo;
+    let leitura = '', cor = 'var(--textm)';
+    if (saldo != null) {
+      const dif = Math.abs(saldo);
+      if (obj === 'hipertrofia') {
+        if (saldo > 100) { cor = 'var(--em)'; leitura = `Superávit de ${dif} kcal — favorável ao ganho de massa.`; }
+        else if (saldo < -100) { cor = 'var(--orange)'; leitura = `Déficit de ${dif} kcal — dificulta o ganho de massa hoje.`; }
+        else { cor = 'var(--gold)'; leitura = 'Perto do equilíbrio — para hipertrofia, um superávit leve ajuda.'; }
+      } else if (obj === 'manutencao' || obj === 'saude' || obj === 'recomposicao') {
+        if (dif <= 150) { cor = 'var(--em)'; leitura = 'Equilibrado — é exatamente o alvo deste objetivo.'; }
+        else if (saldo < 0) { cor = 'var(--gold)'; leitura = `Déficit de ${dif} kcal.`; }
+        else { cor = 'var(--gold)'; leitura = `Superávit de ${dif} kcal.`; }
+      } else { // emagrecimento / outro
+        if (saldo < 0) { cor = 'var(--em)'; leitura = `Déficit de ${dif} kcal — favorável à perda de peso.`; }
+        else { cor = 'var(--orange)'; leitura = `Superávit de ${dif} kcal — acima do gasto de hoje.`; }
+      }
+    }
+
+    const maxV = Math.max(consumido, gasto || 0, 1);
+    const barra = (rot, val, cor2) => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:11px;color:${cor2};width:74px;text-align:right">${rot}</span>
+        <div style="flex:1;height:16px;background:rgba(255,255,255,0.04);border-radius:8px;overflow:hidden">
+          <div style="height:100%;width:${(val / maxV) * 100}%;background:${cor2};border-radius:8px;transition:width .5s"></div></div>
+        <span style="font-size:12.5px;color:${cor2};width:52px;font-variant-numeric:tabular-nums">${val}</span>
+      </div>`;
+
+    const semDados = !consumido && !exHoje;
 
     el.innerHTML = `
-      <h3 style="margin-bottom:14px">⚖️ Balanço Calórico de Hoje</h3>
-      <div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:16px">
-        <div><div style="font-size:22px;font-weight:700;color:var(--cyan)">${consumido}</div><div style="font-size:10px;color:var(--textm)">CONSUMIDO</div></div>
-        <div style="align-self:center;font-size:18px;color:var(--textm)">−</div>
-        <div><div style="font-size:22px;font-weight:700;color:var(--gold)">${gasto}</div><div style="font-size:10px;color:var(--textm)">GASTO</div></div>
-        <div style="align-self:center;font-size:18px;color:var(--textm)">=</div>
-        <div><div style="font-size:22px;font-weight:700;color:${corSaldo}">${saldo > 0 ? '+' : ''}${saldo}</div><div style="font-size:10px;color:${corSaldo}">${rotuloSaldo.toUpperCase()}</div></div>
-      </div>
-      <!-- Barras comparativas -->
-      <div style="margin-bottom:6px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:10px;color:var(--cyan);width:70px;text-align:right">Consumido</span>
-          <div style="flex:1;height:14px;background:rgba(255,255,255,0.04);border-radius:7px;overflow:hidden"><div style="height:100%;width:${pctConsumido}%;background:var(--cyan);border-radius:7px;transition:width .5s"></div></div>
-          <span style="font-size:11px;color:var(--cyan);width:46px">${consumido}</span>
+      <h3 style="margin-bottom:4px">⚖️ Balanço de hoje</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:14px">O que você comeu × o que gastou${obj !== 'emagrecimento' ? ` · lido para <strong style="color:var(--gold)">${obj}</strong>` : ''}</p>
+
+      ${semDados ? `<div style="text-align:center;padding:14px 10px;background:rgba(255,255,255,0.03);border-radius:10px;margin-bottom:12px">
+          <p style="font-size:13px;color:var(--textm);margin-bottom:10px">Nada registrado hoje ainda.</p>
+          <button class="btn btn-gold btn-small" onclick="VITALE_CORE.irRegistrar()">✍️ Registrar refeição ou treino</button>
+        </div>` : `
+        <div style="display:flex;justify-content:space-around;text-align:center;margin-bottom:16px">
+          <div><div style="font-size:24px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums">${consumido}</div><div style="font-size:10px;color:var(--textm);letter-spacing:1px">CONSUMIDO</div></div>
+          <div style="align-self:center;font-size:18px;color:var(--textm)">−</div>
+          <div><div style="font-size:24px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums">${gasto != null ? gasto : '—'}</div><div style="font-size:10px;color:var(--textm);letter-spacing:1px">GASTO</div></div>
+          <div style="align-self:center;font-size:18px;color:var(--textm)">=</div>
+          <div><div style="font-size:24px;font-weight:700;color:${cor};font-variant-numeric:tabular-nums">${saldo != null ? (saldo > 0 ? '+' : '') + saldo : '—'}</div><div style="font-size:10px;color:${cor};letter-spacing:1px">SALDO</div></div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:10px;color:var(--gold);width:70px;text-align:right">Gasto</span>
-          <div style="flex:1;height:14px;background:rgba(255,255,255,0.04);border-radius:7px;overflow:hidden"><div style="height:100%;width:${pctGasto}%;background:var(--gold);border-radius:7px;transition:width .5s"></div></div>
-          <span style="font-size:11px;color:var(--gold);width:46px">${gasto}</span>
-        </div>
-      </div>
-      <div style="text-align:center;margin-top:12px;padding:8px;border-radius:8px;background:${emDeficit ? 'rgba(39,196,125,0.08)' : 'rgba(232,146,74,0.08)'}">
-        <span style="font-size:12px;color:${corSaldo};font-weight:600">${emDeficit ? '🎯 Em déficit de ' + Math.abs(saldo) + ' kcal — favorável à perda de peso' : '⚠️ Superávit de ' + saldo + ' kcal — acima do gasto hoje'}</span>
-      </div>
-      <p style="font-size:10px;color:var(--textm);text-align:center;margin-top:10px">
-        Gasto = TMB (${tmbInfo.valor} kcal, ${tmbInfo.fonte}) × ${fator} atividade${exHoje ? ` + ${exHoje} kcal exercício` : ''}
-      </p>`;
+        ${barra('Consumido', consumido, 'var(--cyan)')}
+        ${gasto != null ? barra('Gasto', gasto, 'var(--gold)') : ''}
+      `}
+
+      ${metaProt ? `
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <span style="font-size:12.5px;color:var(--text)">🥩 Proteína hoje</span>
+            <span style="font-size:12.5px;color:${proteina >= metaProt ? 'var(--em)' : 'var(--textm)'};font-variant-numeric:tabular-nums"><strong>${proteina}</strong> / ${metaProt} g</span>
+          </div>
+          <div style="height:8px;background:rgba(255,255,255,0.04);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${pctProt}%;background:${proteina >= metaProt ? 'var(--em)' : 'var(--purple,#9b59e8)'};border-radius:4px;transition:width .5s"></div></div>
+          <p style="font-size:10.5px;color:var(--textm);margin-top:5px">Meta de 1,6 g/kg — proteína preserva massa magra durante o uso de GLP-1.</p>
+        </div>` : ''}
+
+      ${leitura ? `<div style="text-align:center;margin-top:14px;padding:9px;border-radius:8px;background:rgba(255,255,255,0.03)">
+        <span style="font-size:12.5px;color:${cor};font-weight:600">${leitura}</span></div>` : ''}
+
+      ${tmbInfo ? `<p style="font-size:10px;color:var(--textm);text-align:center;margin-top:10px">
+          Gasto = TMB (${tmbInfo.valor} kcal, ${tmbInfo.fonte}) × ${fator} atividade${exHoje ? ` + ${exHoje} kcal de exercício` : ''}
+        </p>`
+      : `<div style="margin-top:12px;padding:10px 12px;background:rgba(212,168,67,0.07);border:1px solid rgba(212,168,67,0.2);border-radius:8px">
+          <p style="font-size:12px;color:var(--gold);line-height:1.6">Para calcular seu gasto diário preciso de <strong>sexo</strong> e <strong>data de nascimento</strong> — sem eles não estimo (evita conta errada).
+          <a href="#" onclick="VITALE_CORE.switchTab({currentTarget:document.querySelector('[onclick*=saude]')},'saude');return false" style="color:var(--gold);text-decoration:underline">Completar no perfil →</a></p>
+        </div>`}`;
   },
 
   // Hoje no fuso de São Paulo (evita salvar no dia errado perto da meia-noite)
