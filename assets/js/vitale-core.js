@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.18 · Balanço do Dia · 2026-07-21';
+const VITALE_VERSION = 'v5.19 · Data do Exame · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -2163,7 +2163,9 @@ const VITALE_CORE = {
       const regs = auto.peso.registros;
       if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">⚖️ <strong>Identifiquei ${regs.length} registro(s) de peso.</strong><br><span style="color:var(--textm);font-size:12px">Use a seção "Peso (histórico de app)" logo abaixo com esta mesma imagem para importar todos com validação.</span></div>`;
     } else if (cat === 'exame_lab' && auto.exame_lab && (auto.exame_lab.itens || []).length) {
-      const dataColeta = auto.exame_lab.data_coleta || this._hojeSP();
+      // v5.19 — a data vem do laudo. Se a IA não achou, sinalizamos em vez de assumir hoje.
+      const dataDetectada = auto.exame_lab.data_coleta || null;
+      const dataColeta = dataDetectada || this._hojeSP();
       const reconhecidos = auto.exame_lab.itens
         .map(i => ({ ...i, id: this._matchMarcador(i.nome) }))
         .filter(i => i.id);
@@ -2173,7 +2175,12 @@ const VITALE_CORE = {
         return;
       }
       const lista = reconhecidos.map(i => `<li>${this._escapeHtml(this._marcInfo(i.id).nome)}: <strong>${i.valor}</strong></li>`).join('');
-      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">🔬 <strong>Identifiquei um exame de sangue</strong> (${this.fmt(dataColeta)}) com ${reconhecidos.length} marcador(es) do catálogo:<ul style="margin:8px 0 8px 18px;line-height:1.8">${lista}</ul><button class="btn btn-gold btn-small" onclick="VITALE_CORE.lancarExamesDetectados()">✅ Lançar todos</button> <span style="color:var(--textm);font-size:11px">Confira os valores antes.</span></div>`;
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.06);border:1px solid rgba(39,196,125,0.25);border-radius:10px;padding:12px 14px;font-size:13px">🔬 <strong>Identifiquei um exame de sangue</strong> com ${reconhecidos.length} marcador(es) do catálogo:
+      <div style="margin:8px 0;padding:8px 10px;border-radius:8px;background:${dataDetectada ? 'rgba(39,196,125,0.08)' : 'rgba(232,146,74,0.1)'}">
+        <span style="font-size:12.5px;color:${dataDetectada ? 'var(--em)' : 'var(--orange)'}">
+        ${dataDetectada ? '📅 Data da coleta lida do laudo: <strong>' + this.fmt(dataColeta) + '</strong>' : '⚠️ <strong>Não encontrei a data no laudo.</strong> Confirme abaixo — usar a data errada distorce sua evolução.'}</span>
+        <div style="margin-top:6px"><input type="date" id="exameDataConfirm" value="${dataColeta}" style="font-size:13px;padding:6px 8px"></div>
+      </div><ul style="margin:8px 0 8px 18px;line-height:1.8">${lista}</ul><button class="btn btn-gold btn-small" onclick="VITALE_CORE.lancarExamesDetectados()">✅ Lançar todos</button> <span style="color:var(--textm);font-size:11px">Confira os valores antes.</span></div>`;
     } else {
       if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🤔 Não consegui identificar essa imagem como treino, refeição, balança, peso ou exame. Tente uma foto mais nítida ou use as seções específicas abaixo.</p>';
     }
@@ -2309,6 +2316,9 @@ const VITALE_CORE = {
   async lancarExamesDetectados() {
     const pack = this._autoExames;
     if (!pack || !pack.itens.length) return;
+    // v5.19 — respeita a data confirmada pelo usuário no cartão
+    const dConf = document.getElementById('exameDataConfirm')?.value;
+    if (dConf && /^\d{4}-\d{2}-\d{2}$/.test(dConf)) pack.data = dConf;
     const user = await window.VitaleAuth.getUser();
     if (!user) return this.showAlert('error', 'Sessão expirada.');
     let ok = 0, falhas = 0;
@@ -3807,6 +3817,16 @@ const VITALE_CORE = {
             if (el) { el.value = m[c]; achou++; }
           }
         });
+        // v5.19 — DATA do relatório extraída pela IA (não deixa o usuário adivinhar)
+        let dataMsg = '';
+        if (m.data) {
+          const elD = document.getElementById('comp_data');
+          if (elD) { elD.value = m.data; dataMsg = ` · data do exame: <strong>${this.fmt(m.data)}</strong>`; }
+        } else {
+          const elD = document.getElementById('comp_data');
+          if (elD && !elD.value) elD.value = this._hojeSP();
+          dataMsg = ' · <strong style="color:var(--orange)">data não encontrada no print — confira o campo Data</strong>';
+        }
         // Detecta a fonte do aparelho (InBody / Xiaomi) e preenche o select — editável depois
         if (m.fonte) {
           const fEl = document.getElementById('comp_fonte');
@@ -3814,7 +3834,7 @@ const VITALE_CORE = {
         }
         if (achou > 0) {
           const fonteTxt = m.fonte ? ` (detectado: ${m.fonte === 'inbody' ? 'InBody' : m.fonte === 'xiaomi' ? 'Xiaomi' : m.fonte})` : '';
-          ocrDiv.innerHTML = `<div class="alert alert-success" style="margin-bottom:10px">✅ IA preencheu ${achou} campo(s)${fonteTxt}. Revise a fonte e os valores abaixo.</div>
+          ocrDiv.innerHTML = `<div class="alert alert-success" style="margin-bottom:10px">✅ IA preencheu ${achou} campo(s)${fonteTxt}${dataMsg}. Revise antes de salvar.</div>
             <button class="btn btn-primary" onclick="VITALE_CORE.salvarComposicao()" style="width:100%;font-size:15px;padding:14px">✅ Confirmar e Salvar Composição</button>`;
           document.getElementById('comp_peso')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         } else {

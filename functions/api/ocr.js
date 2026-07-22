@@ -303,7 +303,8 @@ Extração por categoria:
 - alimento: {"descricao":"...","calorias":0,"peso_g":0} (estimativa realista)
 - composicao: {"peso":null,"gordura_pct":null,"massa_gordura":null,"massa_muscular":null,"agua_corporal":null,"gordura_visceral":null,"tmb":null,"imc":null,"data":null,"fonte":"inbody|xiaomi|outro"} — "data" é a data do relatório se visível (aplique a REGRA DE DATAS)
 - peso: {"registros":[{"date":"YYYY-MM-DD","peso":123.4}]} (converta lbs→kg; "ontem/hoje" pela data atual)
-- exame_lab: {"data_coleta":"YYYY-MM-DD ou null","itens":[{"nome":"nome do marcador como aparece","valor":0,"unidade":"..."}]} — extraia até 25 marcadores numéricos visíveis
+- exame_lab: {"data_coleta":"YYYY-MM-DD ou null","itens":[{"nome":"nome do marcador como aparece","valor":0,"unidade":"..."}]} — extraia até 25 marcadores numéricos visíveis.
+  DATA DO EXAME (importante): procure por "Data da coleta", "Coletado em", "Coleta:", "Data do exame", "Atendimento em". PREFIRA sempre a data de COLETA sobre a de emissão/impressão/liberação do laudo. Laudos brasileiros usam DD/MM/AAAA. Se houver várias datas, use a da coleta do material. Se realmente não houver data visível, retorne null — NÃO invente e NÃO use a data de hoje.
 
 Responda APENAS com JSON puro, sem markdown:
 {"categoria":"...","exercicio":null,"alimento":null,"composicao":null,"peso":null,"exame_lab":null}
