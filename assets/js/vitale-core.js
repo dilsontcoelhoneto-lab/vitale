@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.32 · E-mail de Segurança + Impressão da Ficha · A32 · 2026-07-22';
+const VITALE_VERSION = 'v5.33 · Proteína Somada + Gasto Detalhado · A33 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1511,7 +1511,11 @@ const VITALE_CORE = {
     const corte = d.toISOString().slice(0, 10);
     const { data, error } = await window.sb
       .from('refeicoes')
-      .select('id, data, tipo, descricao, calorias, peso_g, origem')
+      // v5.33 — proteina_g FALTAVA aqui. Como o campo não vinha do banco,
+      // toda proteína virava 0 ao recarregar. Só o item recém-salvo pelo
+      // diário aparecia certo, porque esse vinha do .select() do insert —
+      // era o sintoma "só conta a última refeição".
+      .select('id, data, tipo, descricao, calorias, proteina_g, peso_g, origem')
       .eq('user_id', user.id)
       .gte('data', corte)
       .order('created_at', { ascending: true });
@@ -1672,14 +1676,39 @@ const VITALE_CORE = {
       }
     }
 
+    // v5.33 — a barra de gasto virou empilhada: dá para ver quanto do gasto
+    // é o corpo parado (basal), quanto é a rotina e quanto foi conquistado
+    // no treino. Antes era uma barra sólida que escondia essa diferença.
+    const basalV  = tmbInfo ? tmbInfo.valor : 0;
+    const rotinaV = tmbInfo ? Math.round(tmbInfo.valor * (fator - 1)) : 0;
     const maxV = Math.max(consumido, gasto || 0, 1);
     const barra = (rot, val, cor2) => `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="font-size:11px;color:${cor2};width:74px;text-align:right">${rot}</span>
+        <span style="font-size:11.5px;color:${cor2};width:74px;text-align:right">${rot}</span>
         <div style="flex:1;height:16px;background:rgba(255,255,255,0.04);border-radius:8px;overflow:hidden">
           <div style="height:100%;width:${(val / maxV) * 100}%;background:${cor2};border-radius:8px;transition:width .5s"></div></div>
         <span style="font-size:12.5px;color:${cor2};width:52px;font-variant-numeric:tabular-nums">${val}</span>
       </div>`;
+
+    const barraGasto = () => {
+      if (gasto == null) return '';
+      const pct = (v) => (v / maxV) * 100;
+      return `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="font-size:11.5px;color:var(--gold);width:74px;text-align:right">Gasto</span>
+        <div style="flex:1;height:16px;background:rgba(255,255,255,0.04);border-radius:8px;overflow:hidden;display:flex">
+          <div title="Basal ${basalV} kcal"    style="height:100%;width:${pct(basalV)}%;background:var(--gold);opacity:.85"></div>
+          <div title="Rotina ${rotinaV} kcal"  style="height:100%;width:${pct(rotinaV)}%;background:var(--gold);opacity:.40"></div>
+          <div title="Exercício ${exHoje} kcal" style="height:100%;width:${pct(exHoje)}%;background:var(--em)"></div>
+        </div>
+        <span style="font-size:12.5px;color:var(--gold);width:52px;font-variant-numeric:tabular-nums">${gasto}</span>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin:0 0 10px 84px;font-size:10.5px;color:var(--textm)">
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--gold);opacity:.85;margin-right:4px"></span>Basal ${basalV}</span>
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--gold);opacity:.40;margin-right:4px"></span>Rotina ${rotinaV}</span>
+        <span><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--em);margin-right:4px"></span>Exercício ${exHoje}${exHoje ? '' : ' — nada hoje'}</span>
+      </div>`;
+    };
 
     const semDados = !consumido && !exHoje;
 
@@ -1699,7 +1728,7 @@ const VITALE_CORE = {
           <div><div style="font-size:24px;font-weight:700;color:${cor};font-variant-numeric:tabular-nums">${saldo != null ? (saldo > 0 ? '+' : '') + saldo : '—'}</div><div style="font-size:10px;color:${cor};letter-spacing:1px">SALDO</div></div>
         </div>
         ${barra('Consumido', consumido, 'var(--cyan)')}
-        ${gasto != null ? barra('Gasto', gasto, 'var(--gold)') : ''}
+        ${barraGasto()}
       `}
 
       ${metaProt ? `
@@ -2557,14 +2586,48 @@ const VITALE_CORE = {
       } catch (err) { console.warn('diario exerc', err); }
     }
     // Refeições
+    // v5.33 — guarda contra duplicata. Se a pessoa reescreve o dia inteiro no
+    // diário (coisa natural: "hoje comi X, Y e agora Z"), a IA devolve tudo de
+    // novo e o dia era contado em dobro. Pulamos o que já existe com a mesma
+    // data, tipo e descrição.
+    let pulados = 0;
+    const chave = (x) => [this._normData(x.data), x.tipo, (x.descricao || '').trim().toLowerCase()].join('|');
+    const jaTem = new Set((this.state.refeicoes || []).map(chave));
+
+    // Descrição igual pega pouco: ao reescrever o dia, a IA parafraseia
+    // ("sanduíche de pão de forma" vira "2 sanduíches de pão de forma") e a
+    // duplicata passa batido. Café, almoço e jantar são únicos no dia — se já
+    // houver um, perguntamos antes de somar de novo. Lanche pode repetir.
+    const UNICOS = ['cafe', 'almoco', 'jantar'];
+    const rotuloRef = { cafe: 'café da manhã', almoco: 'almoço', jantar: 'jantar' };
+    const refeicoesFiltradas = [];
     for (const r of (d.refeicoes || [])) {
+      if (UNICOS.includes(r.tipo)) {
+        const existente = (this.state.refeicoes || []).find(x =>
+          this._normData(x.data) === this._normData(r.data) && x.tipo === r.tipo);
+        if (existente && chave(existente) !== chave(r)) {
+          const manter = confirm(
+            `Você já tem um ${rotuloRef[r.tipo]} registrado em ${this.fmt(r.data)}:\n\n` +
+            `  "${existente.descricao}" — ${existente.calorias || '?'} kcal\n\n` +
+            `E agora chegou:\n\n  "${r.descricao}" — ${r.calorias || '?'} kcal\n\n` +
+            `Somar os dois? \n\nOK = somar (você comeu as duas coisas)\n` +
+            `Cancelar = ignorar o novo (é a mesma refeição, escrita de outro jeito)`
+          );
+          if (!manter) { pulados++; continue; }
+        }
+      }
+      refeicoesFiltradas.push(r);
+    }
+
+    for (const r of refeicoesFiltradas) {
       try {
+        if (jaTem.has(chave(r))) { pulados++; continue; }
         const { data: novo, error } = await window.sb.from('refeicoes').insert({
           user_id: user.id, data: r.data, tipo: r.tipo, descricao: r.descricao,
           calorias: r.calorias, proteina_g: r.proteina_g ?? null, peso_g: null, origem: 'diario'
         }).select().single();
         if (error) throw error;
-        this.state.refeicoes.push(novo); ok++;
+        this.state.refeicoes.push(novo); jaTem.add(chave(novo)); ok++;
       } catch (err) { console.warn('diario ref', err); }
     }
     // Eventos → memória da IA (entra na Análise Completa)
@@ -2581,7 +2644,7 @@ const VITALE_CORE = {
     this._diarioPend = null;
     const dt = document.getElementById('diarioTexto'); if (dt) dt.value = '';
     const res = document.getElementById('diarioResult');
-    if (res) res.innerHTML = `<p style="color:var(--em);font-size:13px">✅ ${ok} registro(s) salvo(s). Tudo isso entra na sua próxima Análise Completa.</p>`;
+    if (res) res.innerHTML = `<p style="color:var(--em);font-size:13px">✅ ${ok} registro(s) salvo(s).${pulados ? ` <span style="color:var(--textm)">${pulados} refeição(ões) já estavam registradas e foram ignoradas.</span>` : ''} Tudo isso entra na sua próxima Análise Completa.</p>`;
     try { this.renderExercicios(); this.renderRefeicoes(); this.renderBalancoCalorico(); } catch (e) {}
     if (mexeuPeso) { try { this.state.weights = await this.loadWeights(); this.updateDashboard(); } catch (e) {} }
     if ((d.doses || []).length) { try { this.renderDosesList(); } catch (e) {} }
@@ -2639,20 +2702,82 @@ const VITALE_CORE = {
     const ctxB = document.getElementById('panBalanco');
     if (ctxB) {
       destroy('bal');
-      const consumo = dias14.map(d => (this.state.refeicoes || []).filter(r => r.data === d).reduce((s, r) => s + (r.calorias || 0), 0));
-      const exercDia = dias14.map(d => (this.state.exercicios || []).filter(e => (e.data || '').slice(0, 10) === d).reduce((s, e) => s + (e.calorias || 0), 0));
+      // v5.33 — o gasto deixou de ser um número só. Agora é uma barra
+      // EMPILHADA: basal (o que o corpo gasta parado) + rotina + exercício.
+      // Ver os três separados responde a pergunta que o número único não
+      // respondia: "quanto disso eu realmente conquistei me mexendo?"
+      const norm = (v) => this._normData ? this._normData(v) : (v || '').slice(0, 10);
+      const consumo  = dias14.map(d => (this.state.refeicoes || []).filter(r => norm(r.data) === d).reduce((s, r) => s + (r.calorias || 0), 0));
+      const proteina = dias14.map(d => (this.state.refeicoes || []).filter(r => norm(r.data) === d).reduce((s, r) => s + (r.proteina_g || 0), 0));
+      const exercDia = dias14.map(d => (this.state.exercicios || []).filter(e => norm(e.data) === d).reduce((s, e) => s + (e.calorias || 0), 0));
+
       const tmb = this._tmb();
-      const gasto = tmb ? exercDia.map(e => Math.round(tmb * 1.3 + e)) : null;
+      const fator = (this.state.healthProfile || {}).fator_atividade || 1.3;
+      const basal   = tmb ? dias14.map(() => tmb) : null;
+      const rotina  = tmb ? dias14.map(() => Math.round(tmb * (fator - 1))) : null;
+
+      const datasets = [
+        { type: 'bar', label: 'Consumido', data: consumo, backgroundColor: 'rgba(74,157,232,0.65)', borderRadius: 4, stack: 'entrada', order: 3 }
+      ];
+      if (basal) {
+        datasets.push(
+          { type: 'bar', label: 'Basal (TMB)',       data: basal,   backgroundColor: 'rgba(212,168,67,0.50)', borderRadius: 0, stack: 'saida', order: 3 },
+          { type: 'bar', label: 'Rotina do dia',     data: rotina,  backgroundColor: 'rgba(212,168,67,0.22)', borderRadius: 0, stack: 'saida', order: 3 }
+        );
+      }
+      datasets.push({ type: 'bar', label: 'Exercício', data: exercDia, backgroundColor: 'rgba(39,196,125,0.75)', borderRadius: 4, stack: 'saida', order: 3 });
+
+      // Proteína em eixo próprio: a escala é gramas, não calorias.
+      // Misturar as duas no mesmo eixo achataria a linha até sumir.
+      const temProt = proteina.some(p => p > 0);
+      if (temProt) {
+        datasets.push({
+          type: 'line', label: 'Proteína (g)', data: proteina, yAxisID: 'yProt',
+          borderColor: '#9b59e8', backgroundColor: 'rgba(155,89,232,0.12)',
+          pointRadius: 3, pointBackgroundColor: '#9b59e8', tension: 0.3, fill: false, order: 1
+        });
+        const sortedP = this.getSorted();
+        const pesoP = sortedP.length ? sortedP[sortedP.length - 1].peso : null;
+        if (pesoP) {
+          const alvo = Math.round(pesoP * 1.6);
+          datasets.push({
+            type: 'line', label: `Meta proteína (${alvo} g)`, data: dias14.map(() => alvo), yAxisID: 'yProt',
+            borderColor: 'rgba(155,89,232,0.45)', borderDash: [5, 4], pointRadius: 0, fill: false, order: 2
+          });
+        }
+      }
+
       const nota = document.getElementById('panBalancoNota');
-      if (nota) nota.textContent = tmb
-        ? `Gasto estimado = metabolismo basal (~${tmb} kcal, Mifflin-St Jeor) × 1,3 (rotina leve) + exercício do dia. Barras abaixo da linha = déficit calórico.`
-        : 'Complete data de nascimento e sexo no Perfil para eu estimar seu gasto basal — sem ele, mostro só o exercício.';
-      const datasets = [{ type: 'bar', label: 'Consumido (kcal)', data: consumo, backgroundColor: 'rgba(212,168,67,0.55)', borderRadius: 4 }];
-      if (gasto) datasets.push({ type: 'line', label: 'Gasto estimado (kcal)', data: gasto, borderColor: '#27c47d', pointRadius: 2, tension: 0.3, fill: false });
-      else datasets.push({ type: 'bar', label: 'Exercício (kcal)', data: exercDia, backgroundColor: 'rgba(39,196,125,0.5)', borderRadius: 4 });
+      if (nota) nota.innerHTML = tmb
+        ? `Barra azul = o que você comeu. Barra dourada+verde = o que gastou, dividido em <strong style="color:#d4a843">basal</strong> (${tmb} kcal, o corpo parado), <strong style="color:#d4a843;opacity:.7">rotina</strong> e <strong style="color:#27c47d">exercício</strong>.${temProt ? ' A linha <strong style="color:#9b59e8">roxa</strong> é a proteína, em gramas, no eixo da direita.' : ''} Azul menor que a pilha = déficit no dia.`
+        : 'Complete data de nascimento e sexo no Perfil para eu estimar seu gasto basal — sem isso mostro só o exercício.';
+
       this._panCharts.bal = new Chart(ctxB, {
         data: { labels: dias14.map(d => this.fmt(d)), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8c8880', font: { size: 10 } } } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 8 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { color: '#a5a096', font: { size: 10 }, boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: (c) => c.dataset.label + ': ' + c.parsed.y + (c.dataset.yAxisID === 'yProt' ? ' g' : ' kcal'),
+                footer: (itens) => {
+                  const i = itens[0].dataIndex;
+                  const totalGasto = (basal ? basal[i] + rotina[i] : 0) + exercDia[i];
+                  if (!totalGasto || !consumo[i]) return '';
+                  const s = consumo[i] - totalGasto;
+                  return (s < 0 ? 'Déficit de ' : 'Superávit de ') + Math.abs(s) + ' kcal';
+                }
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true, ticks: { color: '#a5a096', font: { size: 8 } }, grid: { display: false } },
+            y: { stacked: true, position: 'left', title: { display: true, text: 'kcal', color: '#a5a096', font: { size: 10 } }, ticks: { color: '#a5a096', font: { size: 9 } } },
+            ...(temProt ? { yProt: { position: 'right', title: { display: true, text: 'proteína (g)', color: '#9b59e8', font: { size: 10 } }, ticks: { color: '#9b59e8', font: { size: 9 } }, grid: { drawOnChartArea: false }, beginAtZero: true } } : {})
+          }
+        }
       });
     }
 
