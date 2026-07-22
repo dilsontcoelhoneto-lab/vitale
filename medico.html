@@ -154,6 +154,21 @@ table.lab td{padding:11px 10px}
     <label>Senha</label>
     <input type="password" id="loginSenha" autocomplete="current-password" onkeydown="if(event.key==='Enter')PORTAL.entrar()">
     <button class="btn" style="width:100%" onclick="PORTAL.entrar()">Entrar</button>
+    <div style="display:flex;align-items:center;gap:12px;margin:18px 0">
+      <div style="flex:1;height:1px;background:var(--linha)"></div>
+      <span style="font-size:11.5px;color:var(--suave);letter-spacing:1px">OU</span>
+      <div style="flex:1;height:1px;background:var(--linha)"></div>
+    </div>
+    <button onclick="PORTAL.entrarCom('google')" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+      background:#fff;color:#1f1f1f;border:1px solid var(--linha2);border-radius:8px;padding:12px;font-size:15px;
+      font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:9px">
+      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.1 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.4-4.7 7l7.6 5.9c4.4-4.1 6.8-10.1 6.8-17.4z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.8-6.1C1 16.4 0 20.1 0 24s1 7.6 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.4 0-11.7-3.7-13.6-9.8l-7.8 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+      Continuar com Google</button>
+    <button onclick="PORTAL.entrarCom('apple')" style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;
+      background:#000;color:#fff;border:0;border-radius:8px;padding:12px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">
+      <svg width="16" height="19" viewBox="0 0 384 512" fill="#fff"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+      Continuar com Apple</button>
+    <p style="font-size:12px;color:var(--suave);margin-top:12px;line-height:1.55">Primeiro acesso pelo Google/Apple? Você será levado ao formulário de cadastro profissional.</p>
     <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:13.5px">
       <a href="#" onclick="PORTAL.tela('telaCadastro');return false" style="color:var(--ambar)">Criar conta profissional</a>
       <a href="#" onclick="PORTAL.tela('telaRecuperar');return false" style="color:var(--suave)">Esqueci minha senha</a>
@@ -500,16 +515,22 @@ const PORTAL = {
     const g=id=>(document.getElementById(id)?.value||'').trim();
     const email=g('cadEmail'), senha=document.getElementById('cadSenha').value;
     const nome=g('cadNome'), crm=g('cadCrm'), uf=g('cadCrmUf').toUpperCase(), esp=g('cadEspecialidade');
-    if(!email||senha.length<8) return this._msg('cadMsg','Informe e-mail válido e senha de no mínimo 8 caracteres.');
+    if(!email) return this._msg('cadMsg','Informe um e-mail válido.');
+    if(!this._socialSemCadastro && senha.length<8) return this._msg('cadMsg','A senha precisa ter no mínimo 8 caracteres.');
     if(!nome||!crm||!uf||!esp) return this._msg('cadMsg','Preencha nome, especialidade, CRM e UF.');
     if(uf.length!==2) return this._msg('cadMsg','UF do CRM deve ter 2 letras (ex: PR).');
     if(!document.getElementById('cadTermo').checked) return this._msg('cadMsg','É preciso aceitar os termos para se cadastrar.');
 
     this._msg('cadMsg','Enviando…','ok');
-    // 1) cria a conta de acesso
-    const {data:auth,error:eAuth}=await this.sb.auth.signUp({email,password:senha});
-    if(eAuth) return this._msg('cadMsg','Não foi possível criar a conta: '+eAuth.message);
-    const uid=auth?.user?.id;
+    let uid=null;
+    if(this._socialSemCadastro){
+      const {data:{user:u}}=await this.sb.auth.getUser();
+      uid=u?.id;
+    } else {
+      const {data:auth,error:eAuth}=await this.sb.auth.signUp({email,password:senha});
+      if(eAuth) return this._msg('cadMsg','Não foi possível criar a conta: '+eAuth.message);
+      uid=auth?.user?.id;
+    }
     if(!uid) return this._msg('cadMsg','Conta criada. Confirme seu e-mail e depois entre para concluir o cadastro.','ok');
 
     // 2) grava o registro profissional como PENDENTE
@@ -566,11 +587,32 @@ const PORTAL = {
   },
   async sair(){await this.sb.auth.signOut();location.reload();},
 
+  // v5.26 — login social do médico
+  async entrarCom(provedor){
+    this._msg('loginMsg','Abrindo '+(provedor==='google'?'Google':'Apple')+'…','ok');
+    const {error}=await this.sb.auth.signInWithOAuth({
+      provider:provedor,
+      options:{redirectTo:window.location.origin+'/medico.html'}
+    });
+    if(error) this._msg('loginMsg','Não foi possível entrar: '+error.message);
+  },
+
   async posLogin(){
     const {data:{user}}=await this.sb.auth.getUser();
     if(!user)return;
     const {data:med}=await this.sb.from('medicos').select('*').eq('id',user.id).maybeSingle();
-    if(!med){this._msg('loginMsg','Esta conta não possui cadastro profissional. Fale com o administrador.');await this.sb.auth.signOut();return;}
+    if(!med){
+      // v5.26 — entrou por Google/Apple sem cadastro: leva ao formulário
+      this.tela('telaCadastro');
+      const setv=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
+      setv('cadEmail', user.email);
+      setv('cadNome', user.user_metadata?.full_name || user.user_metadata?.name || '');
+      const bloco=document.getElementById('cadSenha')?.closest('div');
+      if(bloco) bloco.style.display='none';   // já autenticado, não precisa de senha
+      this._msg('cadMsg','Você entrou com sucesso. Complete seu cadastro profissional para liberar o acesso.','ok');
+      this._socialSemCadastro = true;
+      return;
+    }
     this.medico=med;
     document.getElementById('telaLogin').classList.add('oculto');
     document.getElementById('btnSair').classList.remove('oculto');

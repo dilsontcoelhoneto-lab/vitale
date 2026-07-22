@@ -35,6 +35,27 @@
       <div class="sub">Coach de Saúde Pessoal</div>
     </div>
 
+    <!-- v5.26 — entrada social (menos atrito) -->
+    <div style="margin-bottom:20px">
+      <button onclick="entrarCom('google')" style="width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+        background:#fff;color:#1f1f1f;border:0;border-radius:10px;padding:13px;font-size:15px;font-weight:600;
+        cursor:pointer;font-family:inherit;margin-bottom:10px">
+        <svg width="19" height="19" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.1 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.2 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.4-4.7 7l7.6 5.9c4.4-4.1 6.8-10.1 6.8-17.4z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.8-6.1C1 16.4 0 20.1 0 24s1 7.6 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.4 0-11.7-3.7-13.6-9.8l-7.8 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
+        Continuar com Google
+      </button>
+      <button onclick="entrarCom('apple')" style="width:100%;display:flex;align-items:center;justify-content:center;gap:9px;
+        background:#000;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:13px;font-size:15px;
+        font-weight:600;cursor:pointer;font-family:inherit">
+        <svg width="17" height="20" viewBox="0 0 384 512" fill="#fff"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>
+        Continuar com Apple
+      </button>
+      <div style="display:flex;align-items:center;gap:12px;margin:18px 0 4px">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:11.5px;color:var(--textm);letter-spacing:1px">OU COM E-MAIL</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+    </div>
+
     <div class="auth-tabs">
       <button class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
       <button class="auth-tab" onclick="switchAuthTab('signup')">Criar Conta</button>
@@ -91,7 +112,11 @@
       <button class="btn btn-primary" onclick="doMagicLink()" style="width:100%;padding:14px">ENVIAR LINK</button>
     </div>
 
-    <p style="margin-top:32px;text-align:center;font-size:11px;color:var(--textm);letter-spacing:0.5px">
+    <p style="text-align:center;font-size:11px;color:var(--textm);line-height:1.6;margin-top:18px">
+      Ao continuar, você concorda com os <a href="/termos.html" target="_blank" style="color:var(--gold)">Termos</a> e a
+      <a href="/privacidade.html" target="_blank" style="color:var(--gold)">Política de Privacidade</a>, incluindo o tratamento dos seus dados de saúde.
+    </p>
+    <p style="margin-top:20px;text-align:center;font-size:11px;color:var(--textm);letter-spacing:0.5px">
       VITALE v4 • Hospedado em vitale.acacianegocios.com.br
     </p>
   </div>
@@ -124,6 +149,20 @@ async function doLogin() {
 }
 
 const TERMO_VERSAO = '1.0';
+
+// v5.26 — login social. Marca o consentimento antes de sair da página,
+// para que o app registre o aceite no 1º acesso (mesma regra do cadastro).
+async function entrarCom(provedor) {
+  try {
+    localStorage.setItem('vitale_consent_pendente', JSON.stringify({ versao: TERMO_VERSAO, em: new Date().toISOString() }));
+  } catch (e) {}
+  showAlert('info', '⏳ Abrindo ' + (provedor === 'google' ? 'Google' : 'Apple') + '...');
+  const { error } = await window.sb.auth.signInWithOAuth({
+    provider: provedor,
+    options: { redirectTo: window.location.origin + '/app.html' }
+  });
+  if (error) showAlert('error', 'Não foi possível entrar com ' + provedor + ': ' + error.message);
+}
 
 async function doSignup() {
   const email = document.getElementById('signupEmail').value.trim();
