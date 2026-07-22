@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.11 · Registrar Único · 2026-07-21';
+const VITALE_VERSION = 'v5.13 · Papel Clínico · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,

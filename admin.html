@@ -4,11 +4,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — Torre de Comando</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A12">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A17">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- v5.13 — TORRE em tema "papel clínico" (override do vitale.css) -->
+<style>
+  :root{
+    --bg:#F4F0E8;--bg1:#FBF8F3;--bg2:#F4F0E8;--card:#FFFEFB;--card2:#F4F0E8;
+    --border:#E4DFD4;--border2:#CFC9BC;
+    --gold:#C79A35;--gold2:#8F6E22;--em:#166B45;--em2:#1E8F5C;
+    --red:#A02E22;--orange:#8F6E22;--cyan:#31597F;--purple:#5B4B8A;
+    --text:#1C1B18;--textm:#8A8578;--muted:#CFC9BC;
+  }
+  body{font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
+  h1,h2,h3,h4,.logo h1{font-family:'Fraunces',serif!important;font-weight:600!important}
+  header{background:var(--bg1)!important}
+  .card{background:var(--card)!important;border:1px solid var(--border)!important;box-shadow:none!important}
+  table td,table th{border-color:var(--border)!important}
+  .num,td,th{font-variant-numeric:tabular-nums}
+  code,.mono,[style*="monospace"]{font-family:'JetBrains Mono',monospace!important}
+  /* números e dados operacionais com serifada nos destaques */
+  .header-stat-val,.big-num,.stat-val{font-family:'Fraunces',serif!important}
+</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A12"></script>
+<script src="/config.js?v=A17"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">VERIFICANDO ACESSO ADMIN...</p></div>

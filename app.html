@@ -4,18 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A16">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A17">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300&family=Fraunces:opsz,wght@9..144,500;9..144,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- v5.13 — refino tipográfico: números-herói em Fraunces, algarismos tabulares -->
+<style>
+  .header-stat-val, #hdrPeso, #hdrIMC, #hdrPerda { font-family:'Fraunces',serif; font-variant-numeric:tabular-nums; letter-spacing:0 }
+  .kpi-value, .stat-value, .big-num, .coach-stat-val { font-family:'Fraunces',serif; font-variant-numeric:tabular-nums }
+  /* algarismos alinhados em todas as tabelas de dados */
+  table td, table th { font-variant-numeric:tabular-nums }
+</style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A16"></script>
+<script src="/config.js?v=A17"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -1183,12 +1190,12 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Registrar (A16)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Papel Clínico (A17)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A16"></script>
-<script src="/assets/js/feature-flags.js?v=A16"></script>
-<script src="/assets/js/vitale-core.js?v=A16"></script>
+<script src="/assets/js/supabase-client.js?v=A17"></script>
+<script src="/assets/js/feature-flags.js?v=A17"></script>
+<script src="/assets/js/vitale-core.js?v=A17"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1206,7 +1213,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.11') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.13') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();
