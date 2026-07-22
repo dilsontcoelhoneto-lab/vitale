@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A33">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A34">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A33"></script>
+<script src="/config.js?v=A34"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -1183,6 +1183,18 @@
   </div>
 </div>
 
+<!-- v5.34 — edição de qualquer registro (refeição, exercício, dose, efeito) -->
+<div id="modalEditar" class="modal">
+  <div class="modal-content" style="max-width:420px">
+    <div class="modal-header"><h2 id="editarTitulo" style="font-size:20px;margin:0">Editar</h2><button class="modal-close" onclick="VITALE_CORE.closeModal('modalEditar')">✕</button></div>
+    <div id="editarCampos"></div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn btn-gold" onclick="VITALE_CORE.salvarEdicao()" style="flex:1">Salvar</button>
+      <button class="btn btn-secondary" onclick="VITALE_CORE.closeModal('modalEditar')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalSettings" class="modal">
   <div class="modal-content">
     <div class="modal-header"><h2 style="font-size:22px;margin:0"><span class="ico">⚙️</span> Configurações</h2><button class="modal-close" onclick="VITALE_CORE.closeModal('modalSettings')">✕</button></div>
@@ -1278,13 +1290,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">A33</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">A34</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A33"></script>
-<script src="/assets/js/supabase-client.js?v=A33"></script>
-<script src="/assets/js/feature-flags.js?v=A33"></script>
-<script src="/assets/js/vitale-core.js?v=A33"></script>
+<script src="/assets/js/vitale-calc.js?v=A34"></script>
+<script src="/assets/js/supabase-client.js?v=A34"></script>
+<script src="/assets/js/feature-flags.js?v=A34"></script>
+<script src="/assets/js/vitale-core.js?v=A34"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1301,7 +1313,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.33';
+  const CORE_ESPERADO = 'v5.34';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;

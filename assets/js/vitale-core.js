@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.33 · Proteína Somada + Gasto Detalhado · A33 · 2026-07-22';
+const VITALE_VERSION = 'v5.34 · Edição de Registros + Preview Editável · A34 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1096,7 +1096,7 @@ const VITALE_CORE = {
           <p>⏱ ${e.duracao_min} min${e.distancia_km ? ` · 📏 ${e.distancia_km} km` : ''} · ${intLabel}${e.calorias ? ` · 🔥 ${e.calorias} kcal` : ''}${e.fc_media ? ` · ❤️ ${e.fc_media} bpm` : ''}${e.distancia_km && e.duracao_min ? ` · 🏃 ${this._fmtPace(e.duracao_min, e.distancia_km)}` : ''}</p>
           <p style="font-size:11px;color:var(--textm)">${this.fmt(e.data)}${notaTxt}</p>
         </div>
-        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('exercicios',${e.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
       </div>`;
     }).join('');
   },
@@ -1559,6 +1559,91 @@ const VITALE_CORE = {
     }
   },
 
+  // =====================================================
+  // v5.34 — EDIÇÃO DE REGISTROS (correção pós-salvamento)
+  // =====================================================
+  // Um modal único edita qualquer registro. A IA NÃO edita por conta própria
+  // (adivinhar "qual pão corrigir" grava número errado sem o usuário ver);
+  // aqui a correção é explícita e previsível — você abre, muda, salva.
+  _edicaoConfig: {
+    refeicoes: {
+      titulo: 'Editar refeição', state: 'refeicoes', render: 'renderRefeicoes',
+      campos: [
+        { k: 'descricao', label: 'Descrição', tipo: 'text' },
+        { k: 'calorias', label: 'Calorias (kcal)', tipo: 'number' },
+        { k: 'proteina_g', label: 'Proteína (g)', tipo: 'number' }
+      ]
+    },
+    exercicios: {
+      titulo: 'Editar exercício', state: 'exercicios', render: 'renderExercicios',
+      campos: [
+        { k: 'duracao_min', label: 'Duração (min)', tipo: 'number' },
+        { k: 'calorias', label: 'Calorias gastas (kcal)', tipo: 'number' },
+        { k: 'nota', label: 'Observação', tipo: 'text' }
+      ]
+    },
+    doses_medicacao: {
+      titulo: 'Editar dose', state: 'doses', render: 'renderDosesList',
+      campos: [
+        { k: 'medicamento', label: 'Medicamento', tipo: 'text' },
+        { k: 'dose', label: 'Dose', tipo: 'text' },
+        { k: 'nota', label: 'Observação', tipo: 'text' }
+      ]
+    },
+    efeitos_colaterais: {
+      titulo: 'Editar efeito', state: 'efeitos', render: 'renderEfeitosList',
+      campos: [{ k: 'nota', label: 'Observação', tipo: 'text' }]
+    }
+  },
+
+  abrirEdicao(tabela, id) {
+    const cfg = this._edicaoConfig[tabela];
+    if (!cfg) return;
+    const item = (this.state[cfg.state] || []).find(x => x.id === id);
+    if (!item) return this.showAlert('error', 'Registro não encontrado — recarregue a página.');
+    this._edicaoAtual = { tabela, id };
+    document.getElementById('editarTitulo').textContent = cfg.titulo;
+    document.getElementById('editarCampos').innerHTML = cfg.campos.map(c => {
+      const v = item[c.k] == null ? '' : item[c.k];
+      const attrs = c.tipo === 'number' ? 'inputmode="decimal"' : '';
+      return `<div style="margin-bottom:12px">
+        <label>${c.label}</label>
+        <input id="edt_${c.k}" type="${c.tipo === 'number' ? 'text' : 'text'}" ${attrs} value="${this._escapeHtml(String(v))}">
+      </div>`;
+    }).join('');
+    document.getElementById('modalEditar').classList.add('active');
+  },
+
+  async salvarEdicao() {
+    const ctx = this._edicaoAtual;
+    if (!ctx) return;
+    const cfg = this._edicaoConfig[ctx.tabela];
+    const patch = {};
+    for (const c of cfg.campos) {
+      const raw = (document.getElementById('edt_' + c.k)?.value ?? '').trim();
+      if (c.tipo === 'number') {
+        if (raw === '') { patch[c.k] = null; continue; }
+        const n = parseFloat(raw.replace(',', '.'));
+        if (isNaN(n) || n < 0) return this.showAlert('error', `Valor inválido em "${c.label}".`);
+        patch[c.k] = Math.round(n);
+      } else {
+        patch[c.k] = raw || null;
+      }
+    }
+    try {
+      const { error } = await window.sb.from(ctx.tabela).update(patch).eq('id', ctx.id);
+      if (error) throw error;
+      const item = (this.state[cfg.state] || []).find(x => x.id === ctx.id);
+      if (item) Object.assign(item, patch);
+      this.closeModal('modalEditar');
+      this._edicaoAtual = null;
+      try { this[cfg.render](); } catch (e) {}
+      try { this.renderBalancoCalorico(); this.updateDashboard(); } catch (e) {}
+      this._invalidateCoachCache();
+      this.showAlert('success', 'Registro atualizado.');
+    } catch (e) { this.showAlert('error', '❌ ' + (e.message || e)); }
+  },
+
   async removerRefeicao(id) {
     if (!confirm('Remover esta refeição?')) return;
     const { error } = await window.sb.from('refeicoes').delete().eq('id', id);
@@ -1604,7 +1689,7 @@ const VITALE_CORE = {
       return `<div class="med-item">
         <div class="med-info"><h4 style="font-size:13px">${t.icone} ${t.nome}${og}</h4>
         <p style="margin-top:3px;color:var(--textm)">${r.descricao ? this._escapeHtml(r.descricao) + ' · ' : ''}${r.calorias || 0} kcal${r.peso_g ? ' · ' + r.peso_g + 'g' : ''}</p></div>
-        <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerRefeicao(${r.id})">🗑️</button>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('refeicoes',${r.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerRefeicao(${r.id})">🗑️</button>
       </div>`;
     }).join('');
   },
@@ -2527,22 +2612,57 @@ const VITALE_CORE = {
       const data = await resp.json();
       const d = data.diario || {};
       this._diarioPend = d;
-      const chips = [];
-      (d.pesos || []).forEach(w => chips.push(`⚖️ <b>${w.peso} kg</b> <span style="color:var(--textm)">(${this.fmt(w.data)})</span>`));
-      (d.doses || []).forEach(x => chips.push(`💉 ${this._escapeHtml(x.medicamento || 'Dose')} ${this._escapeHtml(x.dose || '')} <span style="color:var(--textm)">(${this.fmt(x.data)})</span>`));
-      (d.exercicios || []).forEach(e => chips.push(`🏃 ${e.tipo}${e.duracao_min ? ' ' + e.duracao_min + 'min' : ''} <span style="color:var(--textm)">(${this.fmt(e.data)})</span>`));
-      (d.refeicoes || []).forEach(r => chips.push(`🍽️ ${this._escapeHtml(r.descricao)}${r.calorias ? ' ~' + r.calorias + ' kcal' : ''}${r.proteina_g ? ' · ' + r.proteina_g + 'g prot' : ''} <span style="color:var(--textm)">(${this.fmt(r.data)})</span>`));
-      (d.eventos || []).forEach(ev => chips.push(`📝 ${this._escapeHtml(ev.descricao)}`));
-      const temAlgo = chips.length > 0;
-      if (res) res.innerHTML = `<div style="background:rgba(212,168,67,0.05);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:14px 16px;font-size:13px">
-        <p style="margin-bottom:10px;color:var(--text)">${this._escapeHtml(d.resposta || '')}</p>
-        ${temAlgo ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">${chips.map(c => `<span style="background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:6px 10px">${c}</span>`).join('')}</div>
-        <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioConfirmar()">✅ Confirmar e salvar tudo</button>
-        <button class="btn btn-secondary btn-small" onclick="document.getElementById('diarioResult').innerHTML='';VITALE_CORE._diarioPend=null">Descartar</button>` : '<p style="color:var(--textm);font-size:12px">Não identifiquei registros para salvar — mas anotei o contexto se houver.</p>'}
-      </div>`;
+      this._renderDiarioPreview();
     } catch (e) {
       if (res) res.innerHTML = `<p style="color:var(--red,#e8504a);font-size:13px">❌ ${this._escapeHtml(e.message || 'Erro')}</p>`;
     }
+  },
+
+  // v5.34 — preview do diário agora é editável ANTES de salvar: cada item
+  // pode ser removido, e refeição/exercício têm o valor ajustável na hora.
+  // É aqui que "a IA entendeu 7 pães, eram 4" se resolve na origem.
+  _renderDiarioPreview() {
+    const res = document.getElementById('diarioResult');
+    const d = this._diarioPend;
+    if (!res || !d) return;
+    const cats = [
+      ['pesos', '⚖️', (w, i) => `<b>${w.peso} kg</b> <span style="color:var(--textm)">${this.fmt(w.data)}</span>`],
+      ['doses', '💉', (x) => `${this._escapeHtml(x.medicamento || 'Dose')} ${this._escapeHtml(x.dose || '')} <span style="color:var(--textm)">${this.fmt(x.data)}</span>`],
+      ['exercicios', '🏃', (e, i) => `${this._escapeHtml(e.tipo)} · <input type="text" inputmode="numeric" value="${e.duracao_min || ''}" onchange="VITALE_CORE._diarioEditar('exercicios',${i},'duracao_min',this.value)" style="width:52px;text-align:center;padding:3px;font-size:12px"> min${e.calorias ? ` · ~${e.calorias} kcal` : ''}`],
+      ['refeicoes', '🍽️', (r, i) => `${this._escapeHtml(r.descricao || '')} · <input type="text" inputmode="numeric" value="${r.calorias || ''}" onchange="VITALE_CORE._diarioEditar('refeicoes',${i},'calorias',this.value)" style="width:56px;text-align:center;padding:3px;font-size:12px"> kcal · <input type="text" inputmode="numeric" value="${r.proteina_g || ''}" onchange="VITALE_CORE._diarioEditar('refeicoes',${i},'proteina_g',this.value)" style="width:44px;text-align:center;padding:3px;font-size:12px">g prot`],
+      ['eventos', '📝', (ev) => this._escapeHtml(ev.descricao || '')]
+    ];
+    const linhas = [];
+    for (const [cat, icone, fmt] of cats) {
+      (d[cat] || []).forEach((item, i) => {
+        linhas.push(`<div style="display:flex;align-items:center;gap:8px;background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:7px 10px">
+          <span style="flex-shrink:0">${icone}</span>
+          <span style="flex:1;font-size:12.5px">${fmt(item, i)}</span>
+          <button onclick="VITALE_CORE._diarioRemover('${cat}',${i})" title="Remover este item" style="background:none;border:0;color:var(--textm);cursor:pointer;font-size:16px;line-height:1;flex-shrink:0">×</button>
+        </div>`);
+      });
+    }
+    const temAlgo = linhas.length > 0;
+    res.innerHTML = `<div style="background:rgba(212,168,67,0.05);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:14px 16px;font-size:13px">
+      <p style="margin-bottom:10px;color:var(--text)">${this._escapeHtml(d.resposta || '')}</p>
+      ${temAlgo ? `<p style="font-size:11px;color:var(--textm);margin-bottom:8px">Confira os valores — dá pra ajustar ou remover antes de salvar.</p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">${linhas.join('')}</div>
+      <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioConfirmar()">✅ Confirmar e salvar</button>
+      <button class="btn btn-secondary btn-small" onclick="document.getElementById('diarioResult').innerHTML='';VITALE_CORE._diarioPend=null">Descartar</button>`
+      : '<p style="color:var(--textm);font-size:12px">Não identifiquei registros para salvar — mas anotei o contexto se houver.</p>'}
+    </div>`;
+  },
+
+  _diarioEditar(cat, i, campo, valor) {
+    if (!this._diarioPend?.[cat]?.[i]) return;
+    const n = parseFloat(String(valor).replace(',', '.'));
+    this._diarioPend[cat][i][campo] = isNaN(n) ? null : Math.round(n);
+  },
+
+  _diarioRemover(cat, i) {
+    if (!this._diarioPend?.[cat]) return;
+    this._diarioPend[cat].splice(i, 1);
+    this._renderDiarioPreview();
   },
 
   async diarioConfirmar() {
@@ -4770,7 +4890,7 @@ const VITALE_CORE = {
           return `<div class="med-item">
             <div class="med-info"><h4 style="font-size:13px">${ex.icone} ${ex.nome} ${this._origemBadge(e.origem || 'manual')}</h4>
             <p style="margin-top:4px;color:var(--textm)">${this.fmt(e.data)} · ${e.duracao_min}min · ${e.calorias || 0} kcal</p></div>
-            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
+            <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('exercicios',${e.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerExercicio(${e.id})">🗑️</button>
           </div>`;
         }).join('');
     }
@@ -4817,7 +4937,7 @@ const VITALE_CORE = {
           return `${cab}<div class="med-item">
             <div class="med-info"><h4 style="font-size:13px">${t.icone} ${this._escapeHtml(r.descricao || t.nome)} ${this._origemBadge(r.origem || 'manual')}</h4>
             <p style="margin-top:3px;font-size:12px;color:var(--textm)">${r.calorias ? r.calorias + ' kcal' : '—'}${r.peso_g ? ' · ' + r.peso_g + 'g' : ''}</p></div>
-            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerRefeicao(${r.id})">🗑️</button>
+            <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('refeicoes',${r.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerRefeicao(${r.id})">🗑️</button>
           </div>`;
         }).join('');
       }
@@ -4832,7 +4952,7 @@ const VITALE_CORE = {
         : ds2.map(d => `<div class="med-item">
             <div class="med-info"><h4 style="font-size:13px">💉 ${this._escapeHtml(d.medicamento)} — ${this._escapeHtml(d.dose)}</h4>
             <p style="margin-top:3px;font-size:12px;color:var(--textm)">${this.fmt(d.data)}</p></div>
-            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerDose(${d.id})">🗑️</button>
+            <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('doses_medicacao',${d.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerDose(${d.id})">🗑️</button>
           </div>`).join('');
     }
 
@@ -4846,7 +4966,7 @@ const VITALE_CORE = {
         : es.map(e => `<div class="med-item">
             <div class="med-info"><h4 style="font-size:13px">${nomes[e.tipo] || e.tipo} · intensidade ${e.intensidade}/5</h4>
             <p style="margin-top:3px;font-size:12px;color:var(--textm)">${this.fmt(e.data)}</p></div>
-            <button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerEfeito(${e.id})">🗑️</button>
+            <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('efeitos_colaterais',${e.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerEfeito(${e.id})">🗑️</button>
           </div>`).join('');
     }
   },
@@ -5803,7 +5923,7 @@ const VITALE_CORE = {
     const ds = this.state.doses || [];
     if (!ds.length) { el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center">Nenhuma dose registrada ainda.</p>'; return; }
     el.innerHTML = ds.map(d =>
-      `<div class="med-item"><div class="med-info"><h4 style="font-size:14px">${this._escapeHtml(d.medicamento)} — ${this._escapeHtml(d.dose)}</h4><div style="font-size:12px;color:var(--textm)">${this.fmt(d.data)}</div></div><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerDose(${d.id})">🗑️</button></div>`).join('');
+      `<div class="med-item"><div class="med-info"><h4 style="font-size:14px">${this._escapeHtml(d.medicamento)} — ${this._escapeHtml(d.dose)}</h4><div style="font-size:12px;color:var(--textm)">${this.fmt(d.data)}</div></div><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('doses_medicacao',${d.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerDose(${d.id})">🗑️</button></div>`).join('');
   },
 
   async removerDose(id) {
@@ -5840,7 +5960,7 @@ const VITALE_CORE = {
     if (!es.length) { el.innerHTML = '<p style="color:var(--textm);font-size:13px;text-align:center">Nenhum sintoma registrado.</p>'; return; }
     const nomes = {}; this._efeitoTipos.forEach(t => nomes[t.id] = t.label);
     el.innerHTML = es.slice(0, 20).map(e =>
-      `<div class="med-item"><div class="med-info"><h4 style="font-size:14px">${nomes[e.tipo] || e.tipo} <span style="color:var(--gold)">·</span> intensidade ${e.intensidade}/5</h4><div style="font-size:12px;color:var(--textm)">${this.fmt(e.data)}</div></div><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerEfeito(${e.id})">🗑️</button></div>`).join('');
+      `<div class="med-item"><div class="med-info"><h4 style="font-size:14px">${nomes[e.tipo] || e.tipo} <span style="color:var(--gold)">·</span> intensidade ${e.intensidade}/5</h4><div style="font-size:12px;color:var(--textm)">${this.fmt(e.data)}</div></div><button class="btn btn-secondary btn-small" onclick="VITALE_CORE.abrirEdicao('efeitos_colaterais',${e.id})">✏️</button><button class="btn btn-danger btn-small" onclick="VITALE_CORE.removerEfeito(${e.id})">🗑️</button></div>`).join('');
   },
 
   async removerEfeito(id) {
