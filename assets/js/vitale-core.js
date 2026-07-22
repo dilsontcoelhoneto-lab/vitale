@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.9 · Exclusão de Conta · 2026-07-21';
+const VITALE_VERSION = 'v5.10 · Consentimento LGPD · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -102,6 +102,9 @@ const VITALE_CORE = {
       this.state.memoria = val[14] || [];
       this.state.exames = val[15] || [];
       this.state.exameArquivos = val[16] || [];
+
+      // v5.10 — grava o aceite dos termos no perfil (LGPD), no 1º acesso após cadastro
+      try { await this.registrarConsentimentoPendente(); } catch (e) { console.warn('consentimento', e); }
 
       // Feature flags — também isolado
       try { await window.VitaleFlags.applyToUI(); } catch (e) { console.warn('[VITALE] flags falharam:', e); }
@@ -5538,6 +5541,26 @@ const VITALE_CORE = {
   // =====================================================
   // BACKUP JSON
   // =====================================================
+  // ===== v5.10 — CONSENTIMENTO LGPD =====
+  // Grava no perfil o aceite marcado no cadastro (index.html deixa um marcador
+  // em localStorage). Idempotente: só escreve se ainda não houver aceite da versão.
+  TERMO_VERSAO_ATUAL: '1.0',
+  async registrarConsentimentoPendente() {
+    const hp = this.state.healthProfile || {};
+    if (hp.consent_termos && hp.termo_versao === this.TERMO_VERSAO_ATUAL) return; // já aceito
+    let pend = null;
+    try { pend = JSON.parse(localStorage.getItem('vitale_consent_pendente') || 'null'); } catch (e) {}
+    if (!pend) return; // sem marcador (login antigo) — não força aqui
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return;
+    const upd = { id: user.id, consent_termos: true, termo_versao: pend.versao || this.TERMO_VERSAO_ATUAL, consent_termos_em: pend.em || new Date().toISOString() };
+    const { error } = await window.sb.from('health_profile').upsert(upd);
+    if (!error) {
+      this.state.healthProfile = { ...hp, ...upd };
+      try { localStorage.removeItem('vitale_consent_pendente'); } catch (e) {}
+    }
+  },
+
   // ===== v5.9 — EXCLUSÃO DE CONTA (LGPD art.18 · Apple 5.1.1(v)) =====
   abrirExclusaoConta() {
     const inp = document.getElementById('confirmarExclusao');

@@ -68,10 +68,14 @@
         <label>E-mail</label>
         <input type="email" id="signupEmail" placeholder="voce@email.com" autocomplete="email">
       </div>
-      <div style="margin-bottom:20px">
+      <div style="margin-bottom:16px">
         <label>Senha (mínimo 8 caracteres)</label>
         <input type="password" id="signupSenha" placeholder="••••••••" autocomplete="new-password">
       </div>
+      <label style="display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--textm);line-height:1.6;margin-bottom:18px;cursor:pointer">
+        <input type="checkbox" id="signupConsent" style="width:18px;height:18px;margin-top:1px;accent-color:var(--gold);flex-shrink:0">
+        <span>Li e concordo com os <a href="/termos.html" target="_blank" style="color:var(--gold)">Termos de Uso e Política de Privacidade</a>, e <strong style="color:var(--text)">autorizo o VITALE a tratar meus dados de saúde</strong> (peso, exames, medicações) para o acompanhamento — conforme a LGPD (art. 11).</span>
+      </label>
       <button class="btn btn-primary" onclick="doSignup()" style="width:100%;padding:14px">CRIAR CONTA</button>
     </div>
 
@@ -119,10 +123,15 @@ async function doLogin() {
   window.location.href = '/app.html';
 }
 
+const TERMO_VERSAO = '1.0';
+
 async function doSignup() {
   const email = document.getElementById('signupEmail').value.trim();
   const senha = document.getElementById('signupSenha').value;
   if (!email || senha.length < 8) return showAlert('error', 'E-mail válido e senha de no mínimo 8 caracteres');
+  if (!document.getElementById('signupConsent')?.checked) return showAlert('error', 'É preciso aceitar os Termos para criar a conta.');
+  // Marca o aceite localmente; o app grava no perfil (com versão e data) no 1º acesso.
+  try { localStorage.setItem('vitale_consent_pendente', JSON.stringify({ versao: TERMO_VERSAO, em: new Date().toISOString() })); } catch (e) {}
   showAlert('info', '⏳ Criando conta...');
   const { data, error } = await window.VitaleAuth.signUpWithPassword(email, senha);
   if (error) return showAlert('error', error.message);
