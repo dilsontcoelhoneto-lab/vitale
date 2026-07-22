@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Política de Privacidade — VITALE</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#040608; --card:#0d1223; --gold:#d4a843; --text:#ede8e0; --textm:#8c8880; --border:rgba(255,255,255,0.08); --em:#27c47d; --red:#e8504a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',-apple-system,system-ui,sans-serif; line-height:1.75; padding:28px 20px 60px; }
+  .wrap { max-width:780px; margin:0 auto; }
+  h1 { font-family:'Cormorant Garamond',Georgia,serif; color:var(--gold); font-size:36px; margin-bottom:4px; }
+  h2 { font-family:'Cormorant Garamond',Georgia,serif; color:var(--gold); font-size:24px; margin:30px 0 10px; }
+  p, li { color:var(--text); font-size:15.5px; margin-bottom:10px; }
+  ul { padding-left:22px; margin-bottom:10px; }
+  .meta { color:var(--textm); font-size:13px; margin-bottom:22px; }
+  .box { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin:16px 0; }
+  .box.alerta { background:rgba(232,80,74,0.07); border-color:rgba(232,80,74,0.25); }
+  .box.ok { background:rgba(39,196,125,0.06); border-color:rgba(39,196,125,0.22); }
+  strong { color:var(--gold); }
+  a { color:var(--gold); }
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:14px; }
+  th { text-align:left; color:var(--gold); font-size:11px; letter-spacing:1px; text-transform:uppercase; padding:8px 10px; border-bottom:1px solid var(--border); }
+  td { padding:9px 10px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:top; color:var(--text); }
+  .voltar { display:inline-block; margin-top:34px; color:var(--gold); text-decoration:none; border:1px solid var(--gold); padding:10px 20px; border-radius:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Política de Privacidade</h1>
+  <p class="meta">VITALE · Versão 1.0 · Operado por Acacia Negócios · Última atualização: julho de 2026</p>
+
+  <div class="box">
+    <p style="margin:0">Esta política explica quais dados o VITALE coleta, por que, com quem compartilha e como você os controla. Escrita em conformidade com a <strong>LGPD (Lei 13.709/2018)</strong> e com os requisitos de privacidade da App Store (Apple) e da Google Play.</p>
+  </div>
+
+  <h2>1. Quem somos</h2>
+  <p>O VITALE é um aplicativo de acompanhamento de saúde metabólica operado por <strong>Acacia Negócios</strong>. Para questões de privacidade e para exercer seus direitos, contate: <strong>privacidade@acacianegocios.com.br</strong>.</p>
+
+  <h2>2. Que dados coletamos</h2>
+  <p>Coletamos apenas o que você registra ou o mínimo necessário para o serviço funcionar:</p>
+  <table>
+    <tr><th>Categoria</th><th>Exemplos</th><th>Finalidade</th></tr>
+    <tr><td>Identificação</td><td>E-mail, nome, altura, data de nascimento, sexo</td><td>Criar sua conta e calcular indicadores (IMC, gasto basal)</td></tr>
+    <tr><td><strong>Saúde</strong> (dado sensível)</td><td>Peso, composição corporal, exames laboratoriais, medicações, doses de GLP-1, efeitos colaterais, medidas, humor</td><td>Acompanhamento e análise que você solicita</td></tr>
+    <tr><td>Uso e conteúdo</td><td>Refeições, exercícios, fotos que você envia para leitura por IA, textos do diário</td><td>Registrar sua rotina e estimar dados</td></tr>
+    <tr><td>Técnicos</td><td>Registros de erro e de uso do app</td><td>Estabilidade e melhoria (anonimizados)</td></tr>
+  </table>
+  <div class="box alerta">
+    <p style="margin:0">⚕️ <strong>Dados de saúde são sensíveis</strong> (LGPD art. 11). Só os tratamos com o seu <strong>consentimento específico</strong>, dado no cadastro, e apenas para as finalidades acima. Nunca os usamos para publicidade.</p>
+  </div>
+
+  <h2>3. Como usamos a inteligência artificial</h2>
+  <p>Quando você envia uma foto (balança, exame, prato de comida) ou escreve no diário, o conteúdo é processado por um modelo de IA (Anthropic Claude) apenas para <strong>extrair e organizar os dados</strong>. A IA <strong>não toma decisões de saúde</strong>, não diagnostica e não prescreve. Você sempre confirma antes de salvar.</p>
+
+  <h2>4. Com quem compartilhamos</h2>
+  <p>Não vendemos seus dados. Compartilhamos apenas com:</p>
+  <ul>
+    <li><strong>Prestadores de infraestrutura</strong>, que processam dados em nosso nome sob contrato: <strong>Supabase</strong> (banco de dados e autenticação), <strong>Cloudflare</strong> (hospedagem) e <strong>Anthropic</strong> (processamento de IA das imagens e textos que você envia).</li>
+    <li><strong>Médicos que você autorizar</strong>: apenas os profissionais para quem você conceder acesso, apenas nas categorias que você escolher, e só enquanto a autorização estiver ativa. Você vê cada acesso e pode revogar a qualquer momento.</li>
+  </ul>
+  <div class="box ok">
+    <p style="margin:0">O compartilhamento com médicos é <strong>sempre iniciado por você</strong>. Nenhum profissional vê seus dados sem a sua autorização expressa.</p>
+  </div>
+
+  <h2>5. Seus direitos (LGPD)</h2>
+  <p>A qualquer momento você pode, pelo próprio app ou pelo e-mail acima:</p>
+  <ul>
+    <li><strong>Acessar e exportar</strong> seus dados (Configurações → Exportar meus dados).</li>
+    <li><strong>Corrigir</strong> informações incorretas.</li>
+    <li><strong>Revogar</strong> o acesso de qualquer médico.</li>
+    <li><strong>Excluir sua conta e todos os dados</strong>, de forma definitiva (Configurações → Zona de risco → Excluir minha conta). A exclusão é imediata e irreversível.</li>
+  </ul>
+
+  <h2>6. Por quanto tempo guardamos</h2>
+  <p>Guardamos seus dados enquanto sua conta existir. Ao excluir a conta, os dados pessoais são apagados imediatamente; registros de uso e erro são anonimizados (perdem qualquer vínculo com você) e podem ser mantidos de forma agregada para estatística.</p>
+
+  <h2>7. Segurança</h2>
+  <p>Os dados trafegam criptografados (HTTPS) e são isolados por usuário no banco de dados por regras de acesso em nível de linha — cada pessoa só acessa os próprios dados. As chaves de IA nunca ficam expostas no aplicativo.</p>
+
+  <h2>8. Menores de idade</h2>
+  <p>O VITALE não se destina a menores de 18 anos sem o consentimento e a supervisão de um responsável legal. Não coletamos intencionalmente dados de crianças.</p>
+
+  <h2>9. Alterações</h2>
+  <p>Se esta política mudar de forma relevante, avisaremos no app e pediremos novo consentimento quando exigido por lei. A versão vigente é sempre a publicada nesta página.</p>
+
+  <a class="voltar" href="/">← Voltar ao VITALE</a>
+</div>
+</body>
+</html>
