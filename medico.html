@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A19"></script>
+<script src="/config.js?v=A26"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -137,6 +137,7 @@ table.lab td{padding:11px 10px}
   <div class="marca">VITALE<span class="fio"></span><small>Portal do Médico</small></div>
   <div style="display:flex;align-items:center">
     <div class="user" id="topoUser"></div>
+    <button class="sair oculto" id="btnPerfil" onclick="PORTAL.abrirPerfil()">Meu perfil</button>
     <button class="sair oculto" id="btnSair" onclick="PORTAL.sair()">Sair</button>
   </div>
 </div></div>
@@ -264,6 +265,80 @@ table.lab td{padding:11px 10px}
     </div>
   </div>
 
+  <!-- MEU PERFIL (v5.25) -->
+  <div id="telaPerfil" class="oculto">
+    <button class="btn sec sm" onclick="PORTAL.voltarPerfil()" style="margin-bottom:18px">← Voltar</button>
+    <div class="bloco">
+      <div class="sec">Meu perfil<span>como o paciente te vê</span></div>
+      <div id="perfilMsg"></div>
+
+      <div class="card">
+        <div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap">
+          <div style="text-align:center">
+            <div id="fotoPreview" style="width:110px;height:110px;border-radius:50%;background:var(--papel2);
+              border:1px solid var(--linha2);display:flex;align-items:center;justify-content:center;
+              font-size:34px;color:var(--suave);overflow:hidden">👤</div>
+            <label style="display:block;margin-top:10px;font-size:12.5px;color:var(--ambar);cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400">
+              Trocar foto<input type="file" accept="image/*" onchange="PORTAL.enviarFoto(this,'foto')" style="display:none"></label>
+          </div>
+          <div style="flex:1;min-width:260px">
+            <label>Nome completo</label><input type="text" id="pfNome">
+            <label>Apresentação (aparece para o paciente)</label>
+            <textarea id="pfBio" rows="3" placeholder="Ex: Endocrinologista com foco em obesidade e síndrome metabólica. Atendo em Curitiba desde 2010."
+              style="width:100%;background:var(--papel);border:1px solid var(--linha2);border-radius:8px;padding:13px;color:var(--tinta);font-family:inherit;font-size:15px;resize:vertical"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sec" style="font-size:11px;border:0;padding:0;margin-bottom:14px">Dados profissionais</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div><label>Especialidade</label><input type="text" id="pfEspecialidade"></div>
+          <div><label>RQE</label><input type="text" id="pfRqe"></div>
+          <div><label>Telefone</label><input type="text" id="pfTelefone"></div>
+          <div><label>E-mail de contato</label><input type="email" id="pfEmail"></div>
+        </div>
+        <p class="ref" style="margin-top:6px">CRM e UF não podem ser alterados após a verificação. Precisa corrigir? Fale com o administrador.</p>
+      </div>
+
+      <div class="card">
+        <div class="sec" style="font-size:11px;border:0;padding:0;margin-bottom:14px">Consultório</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px">
+          <div style="grid-column:1/-1"><label>Nome do consultório</label><input type="text" id="pfConsNome"></div>
+          <div><label>CEP</label><input type="text" id="pfCep"></div>
+          <div style="grid-column:span 2"><label>Endereço</label><input type="text" id="pfEndereco"></div>
+          <div><label>Número</label><input type="text" id="pfNumero"></div>
+          <div><label>Complemento</label><input type="text" id="pfComplemento"></div>
+          <div><label>Bairro</label><input type="text" id="pfBairro"></div>
+          <div><label>Cidade</label><input type="text" id="pfCidade"></div>
+          <div><label>UF</label><input type="text" id="pfUf" maxlength="2" style="text-transform:uppercase"></div>
+          <div><label>Site</label><input type="text" id="pfSite"></div>
+          <div><label>Instagram</label><input type="text" id="pfInstagram"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="sec" style="font-size:11px;border:0;padding:0;margin-bottom:8px">Metas de otimização</div>
+        <p style="font-size:14px;color:var(--tinta2);margin-bottom:16px">Estes são os alvos usados para colorir o retrato laboratorial dos seus pacientes. Ajuste conforme sua conduta — vale só para os seus pacientes.</p>
+        <div id="metasCustom" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px"></div>
+        <p class="ref" style="margin-top:10px">Deixe em branco para usar o valor padrão. A referência do laboratório continua sendo exibida sempre.</p>
+      </div>
+
+      <div class="card">
+        <div class="sec" style="font-size:11px;border:0;padding:0;margin-bottom:14px">Assinatura para relatórios</div>
+        <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+          <div id="assinaturaPreview" style="width:220px;height:80px;background:var(--papel2);border:1px dashed var(--linha2);
+            border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--suave)">sem assinatura</div>
+          <label style="font-size:13.5px;color:var(--ambar);cursor:pointer;text-transform:none;letter-spacing:0;font-weight:400">
+            Enviar imagem da assinatura<input type="file" accept="image/*" onchange="PORTAL.enviarFoto(this,'assinatura')" style="display:none"></label>
+        </div>
+        <p class="ref" style="margin-top:10px">Aparece no rodapé dos relatórios que você exportar. Use PNG com fundo transparente para melhor resultado.</p>
+      </div>
+
+      <button class="btn" style="width:100%;padding:14px" onclick="PORTAL.salvarPerfil()">Salvar perfil</button>
+    </div>
+  </div>
+
   <!-- FICHA -->
   <div id="telaFicha" class="oculto">
     <button class="btn sec sm" onclick="PORTAL.voltar()" style="margin-bottom:18px">← Voltar à lista</button>
@@ -316,6 +391,108 @@ const PORTAL = {
       const el=document.getElementById(t); if(el) el.classList.toggle('oculto', t!==id);
     });
     window.scrollTo(0,0);
+  },
+
+  // ===== v5.25 — MEU PERFIL =====
+  abrirPerfil(){
+    ['telaLista','telaFicha'].forEach(t=>document.getElementById(t)?.classList.add('oculto'));
+    document.getElementById('telaPerfil').classList.remove('oculto');
+    window.scrollTo(0,0);
+    this.preencherPerfil();
+  },
+  voltarPerfil(){
+    document.getElementById('telaPerfil').classList.add('oculto');
+    document.getElementById('telaLista').classList.remove('oculto');
+    window.scrollTo(0,0);
+  },
+
+  preencherPerfil(){
+    const m=this.medico||{};
+    const v=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val??'';};
+    v('pfNome',m.nome); v('pfBio',m.bio); v('pfEspecialidade',m.especialidade); v('pfRqe',m.rqe);
+    v('pfTelefone',m.telefone); v('pfEmail',m.email); v('pfConsNome',m.consultorio_nome);
+    v('pfCep',m.consultorio_cep); v('pfEndereco',m.consultorio_endereco); v('pfNumero',m.consultorio_numero);
+    v('pfComplemento',m.consultorio_complemento); v('pfBairro',m.consultorio_bairro);
+    v('pfCidade',m.consultorio_cidade); v('pfUf',m.consultorio_uf); v('pfSite',m.site); v('pfInstagram',m.instagram);
+
+    const fp=document.getElementById('fotoPreview');
+    if(fp) fp.innerHTML = m.foto_url ? `<img src="${this._esc(m.foto_url)}" style="width:100%;height:100%;object-fit:cover">` : '👤';
+    const ap=document.getElementById('assinaturaPreview');
+    if(ap) ap.innerHTML = m.assinatura_url ? `<img src="${this._esc(m.assinatura_url)}" style="max-width:100%;max-height:100%">` : 'sem assinatura';
+
+    // metas ajustáveis
+    const cont=document.getElementById('metasCustom');
+    if(cont){
+      const custom=m.metas_custom||{};
+      cont.innerHTML=Object.entries(this.metas).map(([mid,def])=>{
+        const atual=custom[mid];
+        const val=atual? (atual.max ?? atual.min ?? '') : '';
+        const tipo=def.max!=null?'máx':'mín';
+        return `<div><label>${this._esc(this.nomes[mid]||mid)} <span style="text-transform:none;font-weight:400">(${tipo})</span></label>
+          <input type="number" step="0.01" id="meta_${mid}" value="${val}" placeholder="padrão: ${this._esc(def.t)}"></div>`;
+      }).join('');
+    }
+  },
+
+  async enviarFoto(input,tipo){
+    const file=input.files&&input.files[0]; if(!file)return;
+    if(file.size>3*1024*1024) return this._msg('perfilMsg','Imagem muito grande (máx 3MB).');
+    this._msg('perfilMsg','Enviando imagem…','ok');
+    try{
+      const ext=(file.name.split('.').pop()||'png').toLowerCase();
+      const caminho=`${this.medico.id}/${tipo}.${ext}`;
+      const {error:eUp}=await this.sb.storage.from('medicos').upload(caminho,file,{upsert:true});
+      if(eUp) throw eUp;
+      const {data:pub}=this.sb.storage.from('medicos').getPublicUrl(caminho);
+      const url=pub.publicUrl+'?t='+Date.now();
+      const campo = tipo==='foto' ? 'foto_url' : 'assinatura_url';
+      const {error:eDb}=await this.sb.from('medicos').update({[campo]:url}).eq('id',this.medico.id);
+      if(eDb) throw eDb;
+      this.medico[campo]=url;
+      this.preencherPerfil();
+      this._msg('perfilMsg','Imagem atualizada.','ok');
+    }catch(e){ this._msg('perfilMsg','Erro ao enviar: '+(e.message||e)); }
+  },
+
+  async salvarPerfil(){
+    const g=id=>(document.getElementById(id)?.value||'').trim();
+    if(!g('pfNome')) return this._msg('perfilMsg','O nome não pode ficar vazio.');
+    // metas ajustadas pelo médico
+    const custom={};
+    Object.entries(this.metas).forEach(([mid,def])=>{
+      const val=parseFloat(document.getElementById('meta_'+mid)?.value);
+      if(!isNaN(val)) custom[mid] = def.max!=null ? {max:val,t:'ajustada'} : {min:val,t:'ajustada'};
+    });
+    const upd={
+      nome:g('pfNome'), bio:g('pfBio')||null, especialidade:g('pfEspecialidade')||null,
+      rqe:g('pfRqe')||null, telefone:g('pfTelefone')||null, email:g('pfEmail')||null,
+      consultorio_nome:g('pfConsNome')||null, consultorio_cep:g('pfCep')||null,
+      consultorio_endereco:g('pfEndereco')||null, consultorio_numero:g('pfNumero')||null,
+      consultorio_complemento:g('pfComplemento')||null, consultorio_bairro:g('pfBairro')||null,
+      consultorio_cidade:g('pfCidade')||null, consultorio_uf:g('pfUf')?g('pfUf').toUpperCase():null,
+      site:g('pfSite')||null, instagram:g('pfInstagram')||null,
+      metas_custom: Object.keys(custom).length?custom:null
+    };
+    this._msg('perfilMsg','Salvando…','ok');
+    const {error}=await this.sb.from('medicos').update(upd).eq('id',this.medico.id);
+    if(error) return this._msg('perfilMsg','Erro: '+error.message);
+    this.medico={...this.medico,...upd};
+    this._aplicarMetasCustom();
+    document.getElementById('topoUser').innerHTML=`<b>${this._esc(this.medico.nome)}</b>CRM ${this._esc(this.medico.crm)}/${this._esc(this.medico.crm_uf)}${this.medico.especialidade?' · '+this._esc(this.medico.especialidade):''}`;
+    this._msg('perfilMsg','Perfil salvo.','ok');
+  },
+
+  // aplica as metas do médico sobre o catálogo padrão
+  _aplicarMetasCustom(){
+    if(!this._metasPadrao) this._metasPadrao=JSON.parse(JSON.stringify(this.metas));
+    this.metas=JSON.parse(JSON.stringify(this._metasPadrao));
+    const c=this.medico?.metas_custom;
+    if(!c)return;
+    Object.entries(c).forEach(([mid,def])=>{
+      if(!this.metas[mid])return;
+      if(def.max!=null){this.metas[mid].max=def.max;this.metas[mid].t='< '+def.max;}
+      if(def.min!=null){this.metas[mid].min=def.min;this.metas[mid].t='> '+def.min;}
+    });
   },
 
   // ===== CADASTRO PROFISSIONAL (autocadastro → status pendente) =====
@@ -399,6 +576,8 @@ const PORTAL = {
     document.getElementById('btnSair').classList.remove('oculto');
     document.getElementById('topoUser').innerHTML=`<b>${this._esc(med.nome)}</b>CRM ${this._esc(med.crm)}/${this._esc(med.crm_uf)}${med.especialidade?' · '+this._esc(med.especialidade):''}`;
     if(med.status!=='verificado'){document.getElementById('telaPendente').classList.remove('oculto');return;}
+    document.getElementById('btnPerfil').classList.remove('oculto');
+    this._aplicarMetasCustom();
     document.getElementById('telaLista').classList.remove('oculto');
     await this.carregarPacientes();
     this.mostrarCodigo();
@@ -657,7 +836,7 @@ const PORTAL = {
     out.innerHTML=`<div class="codigo"><div class="c">${this._esc(cod)}</div><div style="font-size:13px;color:var(--suave);margin-top:8px">Válido enquanto sua conta estiver ativa</div></div>`;
   },
 
-  voltar(){document.getElementById('telaFicha').classList.add('oculto');document.getElementById('telaLista').classList.remove('oculto');window.scrollTo(0,0);},
+  voltar(){document.getElementById('telaFicha').classList.add('oculto');document.getElementById('telaPerfil')?.classList.add('oculto');document.getElementById('telaLista').classList.remove('oculto');window.scrollTo(0,0);},
   _fmt(s){return s?new Date(s+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';},
   _esc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 };
