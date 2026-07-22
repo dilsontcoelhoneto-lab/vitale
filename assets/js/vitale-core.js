@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.20 · Dados Básicos no Perfil · 2026-07-21';
+const VITALE_VERSION = 'v5.21 · Importar PDF · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -2104,16 +2104,64 @@ const VITALE_CORE = {
     return null;
   },
 
+  // ===== v5.21 — PDF → imagem (laudos costumam vir em PDF) =====
+  // Carrega pdf.js só quando precisa, converte a 1ª página em JPEG e devolve
+  // um dataURL — o resto do fluxo de OCR continua igual.
+  async _carregarPdfJs() {
+    if (window.pdfjsLib) return window.pdfjsLib;
+    await new Promise((ok, err) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      sc.onload = ok; sc.onerror = () => err(new Error('Não consegui carregar o leitor de PDF'));
+      document.head.appendChild(sc);
+    });
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    return window.pdfjsLib;
+  },
+
+  async _pdfParaImagem(file, pagina = 1) {
+    const lib = await this._carregarPdfJs();
+    if (!lib) throw new Error('Leitor de PDF indisponível');
+    const buf = await file.arrayBuffer();
+    const pdf = await lib.getDocument({ data: buf }).promise;
+    const nPag = Math.min(pagina, pdf.numPages);
+    const page = await pdf.getPage(nPag);
+    // escala alta o suficiente para a IA ler números pequenos de laudo
+    const viewport = page.getViewport({ scale: 2.2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    return { dataUrl: canvas.toDataURL('image/jpeg', 0.92), paginas: pdf.numPages };
+  },
+
+  // Converte qualquer arquivo (imagem OU pdf) no dataURL pronto para OCR
+  async _arquivoParaImagem(file) {
+    const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    if (ehPdf) {
+      const r = await this._pdfParaImagem(file, 1);
+      return { dataUrl: r.dataUrl, aviso: r.paginas > 1 ? `PDF com ${r.paginas} páginas — li a primeira. Se os dados estiverem em outra, envie um print dela.` : null };
+    }
+    const dataUrl = await new Promise((ok, err) => {
+      const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.onerror = err; rd.readAsDataURL(file);
+    });
+    return { dataUrl, aviso: null };
+  },
+
   async importarAuto(input) {
     const file = input.files && input.files[0];
     if (!file) return;
     const res = document.getElementById('autoResult');
-    if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🪄 Analisando a imagem — identificando o que é...</p>';
+    const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    if (res) res.innerHTML = `<p style="color:var(--textm);font-size:13px">🪄 ${ehPdf ? 'Convertendo o PDF e analisando' : 'Analisando a imagem'} — identificando o que é...</p>`;
     try {
-      const dataUrl = await new Promise((ok, err) => {
-        const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = err; r.readAsDataURL(file);
-      });
-      const compressed = await this._compressImageForOCR(dataUrl);
+      const conv = await this._arquivoParaImagem(file);
+      this._avisoImport = conv.aviso;
+      const compressed = await this._compressImageForOCR(conv.dataUrl);
       const base64 = compressed.split(',')[1];
       const nota = (document.getElementById('autoTexto')?.value || '').trim().slice(0, 300);
       const session = await window.sb.auth.getSession();
@@ -2127,6 +2175,11 @@ const VITALE_CORE = {
       const auto = data.auto || {};
       input.value = '';
       this._rotearImportacao(auto);
+      if (this._avisoImport && res) {
+        res.insertAdjacentHTML('afterbegin',
+          `<div style="background:rgba(212,168,67,0.08);border:1px solid rgba(212,168,67,0.25);border-radius:8px;padding:9px 12px;font-size:12.5px;color:var(--gold);margin-bottom:10px">📄 ${this._escapeHtml(this._avisoImport)}</div>`);
+        this._avisoImport = null;
+      }
     } catch (e) {
       if (res) res.innerHTML = `<p style="color:var(--red,#e8504a);font-size:13px">❌ ${this._escapeHtml(e.message || 'Erro na importação')}</p>`;
     }
@@ -3570,21 +3623,26 @@ const VITALE_CORE = {
   // =====================================================
   // OCR — FIX: Authorization Bearer + compressão de imagem
   // =====================================================
-  handleImageUpload(e) {
+  // v5.21 — aceita imagem OU PDF (converte a 1ª página)
+  async handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) return this.showAlert('error', 'Arquivo muito grande (máx 10MB)');
     const ocrR = document.getElementById('ocrResult'); if (ocrR) ocrR.innerHTML = '';
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+    const prev = document.getElementById('imagePreview');
+    const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    if (prev && ehPdf) prev.innerHTML = '<p style="font-size:13px;color:var(--textm)">📄 Convertendo o PDF…</p>';
+    try {
+      const conv = await this._arquivoParaImagem(file);
       const img = document.createElement('img');
-      img.src = ev.target.result;
+      img.src = conv.dataUrl;
       img.style.cssText = 'max-width:100%;border-radius:8px;margin-bottom:8px';
-      document.getElementById('imagePreview').innerHTML = '';
-      document.getElementById('imagePreview').appendChild(img);
+      if (prev) { prev.innerHTML = ''; prev.appendChild(img);
+        if (conv.aviso) prev.insertAdjacentHTML('beforeend', `<p style="font-size:12px;color:var(--gold)">📄 ${this._escapeHtml(conv.aviso)}</p>`); }
       document.getElementById('btnProcessarImagem').style.display = 'block';
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      if (prev) prev.innerHTML = `<p style="font-size:13px;color:var(--red,#e8504a)">❌ ${this._escapeHtml(err.message || 'Não consegui ler o arquivo')}</p>`;
+    }
   },
 
   // FASE A — Foto de alimento → IA estima calorias

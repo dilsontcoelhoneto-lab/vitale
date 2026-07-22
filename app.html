@@ -471,34 +471,40 @@
 
   <!-- REGISTRAR MEDIÇÕES -->
   <div id="upload" class="tab-content">
+    <!-- v5.21 — UMA ÚNICA ENTRADA: qualquer arquivo, a IA decide o resto -->
+    <h2 style="font-size:30px;margin-bottom:6px;color:var(--gold)">📄 Enviar documento</h2>
+    <p style="color:var(--textm);font-size:14px;margin-bottom:20px;line-height:1.7">Mande <strong style="color:var(--text)">qualquer coisa</strong> e a IA identifica sozinha: exame de sangue, bioimpedância, balança, treino ou prato de comida. Você confere e salva.</p>
+
     <div class="card" style="border-color:rgba(212,168,67,0.35)">
-      <h3>🪄 Importação Inteligente</h3>
-      <p style="font-size:13px;color:var(--textm);margin-bottom:14px;line-height:1.7">Solte <strong style="color:var(--text)">qualquer print ou foto</strong> — treino, prato de comida, balança, histórico de peso ou exame de sangue. A IA identifica o que é, extrai os dados e te leva pro lugar certo. Você sempre confirma antes de salvar.</p>
-      <input type="text" id="autoTexto" placeholder="opcional: contexto pra IA — ex: 'eram 300g', 'foi ontem', 'metade do prato'" style="width:100%;margin-bottom:10px">
-      <input type="file" id="autoFile" accept="image/*" onchange="VITALE_CORE.importarAuto(this)" style="width:100%;font-size:13px">
+      <div class="upload-area" onclick="document.getElementById('autoFile').click()" style="cursor:pointer">
+        <h4 style="font-size:19px">📎 Toque para enviar</h4>
+        <p style="margin-top:6px">Foto, print ou <strong style="color:var(--gold)">PDF</strong> — laudo, balança, treino, comida</p>
+        <input type="file" id="autoFile" accept="image/*,application/pdf,.pdf" onchange="VITALE_CORE.importarAuto(this)" style="display:none">
+      </div>
+      <input type="text" id="autoTexto" placeholder="opcional: um contexto pra IA — ex: 'eram 300g', 'foi ontem'" style="width:100%;margin-top:12px">
       <div id="autoResult" style="margin-top:12px"></div>
+      <p style="font-size:11.5px;color:var(--textm);margin-top:12px;text-align:center">A IA sempre mostra o que entendeu antes de salvar.</p>
     </div>
 
-    <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)">📸 Registrar Medições</h2>
-    <p style="color:var(--textm);font-size:14px;margin-bottom:24px">Adicione peso, medidas corporais e dados de bioimpedância — manualmente ou por print do seu app de saúde.</p>
-
-    <!-- OCR via IA -->
-    <div class="card" data-flag="ocr_imagem">
-      <h3>🤖 Print do App de Saúde (IA)</h3>
-      <div class="info-box" style="margin-bottom:16px">📲 Tire um print do seu app (Apple Saúde, balança de bioimpedância, Strava…) e a IA extrai os dados automaticamente — peso ou medidas corporais.</div>
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button id="ocrModoPeso" class="btn btn-secondary btn-small" onclick="VITALE_CORE.setOcrModo('peso')" style="flex:1">⚖️ Peso</button>
-        <button id="ocrModoBio" class="btn btn-secondary btn-small" onclick="VITALE_CORE.setOcrModo('bioimpedancia')" style="flex:1">📊 Bioimpedância</button>
+    <!-- Modo detalhado: fica disponível, mas fora do caminho principal -->
+    <details class="card" data-flag="ocr_imagem" style="margin-top:8px">
+      <summary style="cursor:pointer;font-size:14px;color:var(--textm);list-style:none">⚙️ Prefere escolher o tipo manualmente? <span style="color:var(--gold)">Abrir modo detalhado</span></summary>
+      <div style="margin-top:16px">
+        <div class="info-box" style="margin-bottom:16px">Use quando a identificação automática errar. Escolha o tipo e envie o print.</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button id="ocrModoPeso" class="btn btn-secondary btn-small" onclick="VITALE_CORE.setOcrModo('peso')" style="flex:1">⚖️ Peso</button>
+          <button id="ocrModoBio" class="btn btn-secondary btn-small" onclick="VITALE_CORE.setOcrModo('bioimpedancia')" style="flex:1">📊 Bioimpedância</button>
+        </div>
+        <div class="upload-area" onclick="document.getElementById('imageInput').click()">
+          <h4>📷 Clique ou arraste</h4>
+          <p>PNG, JPG, WebP, PDF — máx 10MB</p>
+          <input type="file" id="imageInput" accept="image/*,application/pdf,.pdf" style="display:none" onchange="VITALE_CORE.handleImageUpload(event)">
+        </div>
+        <div id="imagePreview" style="margin-top:16px"></div>
+        <div id="ocrResult" style="margin-top:12px"></div>
+        <button class="btn btn-primary" onclick="VITALE_CORE.processarImagemOCR()" style="width:100%;margin-top:12px;display:none" id="btnProcessarImagem">🔍 PROCESSAR COM IA</button>
       </div>
-      <div class="upload-area" onclick="document.getElementById('imageInput').click()">
-        <h4>📷 Clique ou arraste a imagem</h4>
-        <p>PNG, JPG, WebP — Máx 10MB</p>
-        <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="VITALE_CORE.handleImageUpload(event)">
-      </div>
-      <div id="imagePreview" style="margin-top:16px"></div>
-      <div id="ocrResult" style="margin-top:12px"></div>
-      <button class="btn btn-primary" onclick="VITALE_CORE.processarImagemOCR()" style="width:100%;margin-top:12px;display:none" id="btnProcessarImagem">🔍 PROCESSAR COM IA</button>
-    </div>
+    </details>
 
     <!-- Composição corporal (bioimpedância) -->
     <div class="card">
@@ -882,10 +888,18 @@
   <!-- EXAMES LABORATORIAIS -->
   <div id="exames" class="tab-content">
     <h2 style="font-size:30px;margin-bottom:8px;color:var(--gold)">🔬 Exames Laboratoriais</h2>
-    <p style="color:var(--textm);font-size:14px;margin-bottom:24px">Registre os marcadores dos seus exames de sangue. O VITALE acompanha a tendência e inclui tudo na Análise Completa.</p>
+    <p style="color:var(--textm);font-size:14px;margin-bottom:20px">Acompanhe a tendência dos seus marcadores. Tudo entra na Análise Completa.</p>
 
-    <div class="card">
-      <h3>➕ Registrar marcador</h3>
+    <!-- v5.21 — caminho principal: mandar o laudo e deixar a IA ler -->
+    <div class="card" style="border-color:rgba(212,168,67,0.35);margin-bottom:20px">
+      <h3>📄 Enviar o laudo</h3>
+      <p style="font-size:13px;color:var(--textm);margin:6px 0 14px;line-height:1.7">Mande o <strong style="color:var(--text)">PDF ou a foto</strong> do exame. A IA lê os marcadores e a data da coleta — você só confere e confirma. É o jeito mais rápido.</p>
+      <button class="btn btn-gold" onclick="VITALE_CORE.switchTab({currentTarget:document.querySelector('.tab-btn[onclick*=upload]')},'upload');setTimeout(()=>document.getElementById('autoFile')?.click(),300)" style="width:100%;padding:14px">📎 Enviar laudo (PDF ou foto)</button>
+    </div>
+
+    <details class="card">
+      <summary style="cursor:pointer;font-size:15px;color:var(--text);list-style:none"><strong>➕ Digitar marcador manualmente</strong> <span style="color:var(--textm);font-size:13px">— quando preferir lançar um valor só</span></summary>
+      <div style="margin-top:16px">
       <label style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px">Data da coleta</label>
       <input type="date" id="exameData" style="width:100%;margin-bottom:14px">
       <label style="font-size:11px;color:var(--textm);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px">Marcador</label>
@@ -895,7 +909,8 @@
       <input type="number" id="exameValor" step="0.01" placeholder="ex: 88" style="width:100%;margin-bottom:16px">
       <button class="btn btn-primary" onclick="VITALE_CORE.salvarExame()" style="width:100%">🔬 Salvar Exame</button>
       <div id="exameSessao"></div>
-    </div>
+      </div>
+    </details>
 
     <div class="card">
       <h3>📊 Tendência dos marcadores</h3>
@@ -1251,13 +1266,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Dados Básicos (A22)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Importar PDF (A23)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A22"></script>
+<script src="/assets/js/vitale-calc.js?v=A23"></script>
 <script src="/assets/js/supabase-client.js?v=A17"></script>
 <script src="/assets/js/feature-flags.js?v=A17"></script>
-<script src="/assets/js/vitale-core.js?v=A22"></script>
+<script src="/assets/js/vitale-core.js?v=A23"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1275,7 +1290,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.20') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.21') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();
