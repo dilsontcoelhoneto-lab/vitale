@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A15">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A16">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -15,7 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A15"></script>
+<script src="/config.js?v=A16"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -82,11 +82,14 @@
     <!-- Dica diária da IA -->
     <div id="dicaDiaria" style="display:none;background:rgba(74,157,232,0.06);border:1px solid rgba(74,157,232,0.18);border-radius:12px;padding:12px 16px;margin-bottom:20px"></div>
 
-    <div class="card" style="border-color:rgba(212,168,67,0.3)">
-      <h3>💬 Conte pro VITALE</h3>
-      <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px">Escreva livremente o que fez ou comeu — hoje ou dias atrás. Ex: <em>"ontem caminhei 30 min e fiz 40 de musculação, almocei feijoada"</em> ou <em>"viajei no fim de semana e comi mal"</em>. A IA organiza, você confirma.</p>
-      <textarea id="diarioTexto" rows="2" placeholder="fiz 30 min de caminhada, comi arroz com frango no almoço..." style="width:100%;margin-bottom:10px;resize:vertical"></textarea>
-      <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioProcessar()">💬 Enviar</button>
+    <div class="card" id="cardRegistrar" style="border-color:rgba(212,168,67,0.3)">
+      <h3>✍️ Registrar</h3>
+      <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px">Conte em uma frase — a IA separa cada dado e você confirma. Ex: <em>"pesei 88,4, tomei a dose de 7,5, almocei frango com arroz e caminhei 40 min"</em>. Peso, dose, refeição, treino e contexto entram de uma vez.</p>
+      <textarea id="diarioTexto" rows="2" placeholder="pesei 88,4 · dose 7,5 · almocei frango com arroz · caminhei 40 min" style="width:100%;margin-bottom:10px;resize:vertical"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioProcessar()">✨ Analisar e confirmar</button>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.switchTab({currentTarget:document.querySelector('[onclick*=upload]')},'upload')">📷 Enviar foto/print</button>
+      </div>
       <div id="diarioResult" style="margin-top:10px"></div>
     </div>
     <div class="coach-card" data-flag="dashboard">
@@ -1171,15 +1174,21 @@
   </div>
 </div>
 
+<!-- BOTÃO FLUTUANTE "REGISTRAR" (v5.11) — ponto de entrada único, visível em qualquer aba -->
+<button id="fabRegistrar" onclick="VITALE_CORE.irRegistrar()" title="Registrar"
+  style="position:fixed;right:20px;bottom:52px;width:60px;height:60px;border-radius:50%;border:0;z-index:210;
+  background:linear-gradient(135deg,#d4a843,#b8862f);color:#05070b;font-size:32px;font-weight:600;cursor:pointer;
+  box-shadow:0 8px 22px rgba(212,168,67,0.4);display:flex;align-items:center;justify-content:center">+</button>
+
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">Consentimento (A15)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">Registrar (A16)</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A15"></script>
-<script src="/assets/js/feature-flags.js?v=A15"></script>
-<script src="/assets/js/vitale-core.js?v=A15"></script>
+<script src="/assets/js/supabase-client.js?v=A16"></script>
+<script src="/assets/js/feature-flags.js?v=A16"></script>
+<script src="/assets/js/vitale-core.js?v=A16"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1197,7 +1206,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
     // Confere se o core é o A.4 esperado
-    coreEl.style.color = v.includes('v5.10') ? 'var(--em)' : 'var(--red)';
+    coreEl.style.color = v.includes('v5.11') ? 'var(--em)' : 'var(--red)';
   }
   const md = document.getElementById('manualDate'); if (md) md.value = new Date().toISOString().slice(0, 10);
   VITALE_CORE.init();

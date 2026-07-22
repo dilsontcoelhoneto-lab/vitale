@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.10 · Consentimento LGPD · 2026-07-21';
+const VITALE_VERSION = 'v5.11 · Registrar Único · 2026-07-21';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -2132,6 +2132,16 @@ const VITALE_CORE = {
     }
   },
 
+  // v5.11 — ponto de entrada único: vai ao dashboard e foca o campo Registrar
+  irRegistrar() {
+    const btn = document.querySelector('.tab-btn[onclick*="dashboard"]');
+    this.switchTab({ currentTarget: btn || { classList: { add() {} } } }, 'dashboard');
+    const card = document.getElementById('cardRegistrar');
+    const ta = document.getElementById('diarioTexto');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => { if (ta) ta.focus(); }, 350);
+  },
+
   // =====================================================
   // DIÁRIO LIVRE — conte pro app o que fez/comeu; IA estrutura e salva
   // =====================================================
@@ -2152,8 +2162,10 @@ const VITALE_CORE = {
       const d = data.diario || {};
       this._diarioPend = d;
       const chips = [];
+      (d.pesos || []).forEach(w => chips.push(`⚖️ <b>${w.peso} kg</b> <span style="color:var(--textm)">(${this.fmt(w.data)})</span>`));
+      (d.doses || []).forEach(x => chips.push(`💉 ${this._escapeHtml(x.medicamento || 'Dose')} ${this._escapeHtml(x.dose || '')} <span style="color:var(--textm)">(${this.fmt(x.data)})</span>`));
       (d.exercicios || []).forEach(e => chips.push(`🏃 ${e.tipo}${e.duracao_min ? ' ' + e.duracao_min + 'min' : ''} <span style="color:var(--textm)">(${this.fmt(e.data)})</span>`));
-      (d.refeicoes || []).forEach(r => chips.push(`🍽️ ${this._escapeHtml(r.descricao)}${r.calorias ? ' ~' + r.calorias + ' kcal' : ''} <span style="color:var(--textm)">(${this.fmt(r.data)})</span>`));
+      (d.refeicoes || []).forEach(r => chips.push(`🍽️ ${this._escapeHtml(r.descricao)}${r.calorias ? ' ~' + r.calorias + ' kcal' : ''}${r.proteina_g ? ' · ' + r.proteina_g + 'g prot' : ''} <span style="color:var(--textm)">(${this.fmt(r.data)})</span>`));
       (d.eventos || []).forEach(ev => chips.push(`📝 ${this._escapeHtml(ev.descricao)}`));
       const temAlgo = chips.length > 0;
       if (res) res.innerHTML = `<div style="background:rgba(212,168,67,0.05);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:14px 16px;font-size:13px">
@@ -2173,6 +2185,27 @@ const VITALE_CORE = {
     const user = await window.VitaleAuth.getUser();
     if (!user) return this.showAlert('error', 'Sessão expirada.');
     let ok = 0;
+    let mexeuPeso = false;
+    // Pesos (v5.11) — só grava se não houver pesagem no mesmo dia
+    for (const w of (d.pesos || [])) {
+      try {
+        const { data: existe } = await window.sb.from('weights').select('id').eq('user_id', user.id).eq('data', w.data).limit(1);
+        if (existe && existe.length) continue;
+        const { error } = await window.sb.from('weights').insert({ user_id: user.id, data: w.data, peso: w.peso, origem: 'diario' });
+        if (error) throw error;
+        mexeuPeso = true; ok++;
+      } catch (err) { console.warn('diario peso', err); }
+    }
+    // Doses GLP-1 (v5.11)
+    for (const x of (d.doses || [])) {
+      try {
+        const { data: novo, error } = await window.sb.from('doses_medicacao').insert({
+          user_id: user.id, data: x.data, medicamento: x.medicamento || 'GLP-1', dose: x.dose || '', nota: 'via diário'
+        }).select().single();
+        if (error) throw error;
+        (this.state.doses = this.state.doses || []).unshift(novo); ok++;
+      } catch (err) { console.warn('diario dose', err); }
+    }
     // Exercícios — calorias estimadas por MET quando houver duração
     for (const e of (d.exercicios || [])) {
       try {
@@ -2191,7 +2224,7 @@ const VITALE_CORE = {
       try {
         const { data: novo, error } = await window.sb.from('refeicoes').insert({
           user_id: user.id, data: r.data, tipo: r.tipo, descricao: r.descricao,
-          calorias: r.calorias, peso_g: null, origem: 'diario'
+          calorias: r.calorias, proteina_g: r.proteina_g ?? null, peso_g: null, origem: 'diario'
         }).select().single();
         if (error) throw error;
         this.state.refeicoes.push(novo); ok++;
@@ -2213,6 +2246,8 @@ const VITALE_CORE = {
     const res = document.getElementById('diarioResult');
     if (res) res.innerHTML = `<p style="color:var(--em);font-size:13px">✅ ${ok} registro(s) salvo(s). Tudo isso entra na sua próxima Análise Completa.</p>`;
     try { this.renderExercicios(); this.renderRefeicoes(); this.renderBalancoCalorico(); } catch (e) {}
+    if (mexeuPeso) { try { this.state.weights = await this.loadWeights(); this.updateDashboard(); } catch (e) {} }
+    if ((d.doses || []).length) { try { this.renderDosesList(); } catch (e) {} }
     this._invalidateCoachCache();
     this.showAlert('success', `✅ Diário salvo — ${ok} registro(s)!`);
   },

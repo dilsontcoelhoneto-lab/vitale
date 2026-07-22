@@ -147,12 +147,14 @@ TEXTO DO USUÁRIO: "${textoD}"
 
 Extraia (use null/[] quando não houver; NUNCA invente):
 1. exercicios: cada atividade citada → {"tipo":"caminhada|corrida|bicicleta|musculacao|natacao|funcional|yoga|esporte|outro","duracao_min":num ou null,"intensidade":"leve|moderada|intensa","data":"YYYY-MM-DD"} — converta "ontem", "sábado", "fim de semana" usando a data de hoje; sem data explícita = hoje.
-2. refeicoes: cada refeição/comida citada → {"tipo":"cafe|almoco|jantar|lanche","descricao":"...","calorias":estimativa realista,"data":"YYYY-MM-DD"}
-3. eventos: contexto relevante para saúde (viagem, estresse, festa, comeu mal, dormiu pouco, doença) → {"descricao":"frase curta em 3ª pessoa","data":"YYYY-MM-DD ou null"}
-4. resposta: UMA resposta curta (máx 2 frases), acolhedora e direta, em pt-BR, como um coach — reconheça o que foi feito sem julgar excessos.
+2. refeicoes: cada refeição/comida citada → {"tipo":"cafe|almoco|jantar|lanche","descricao":"...","calorias":estimativa realista,"proteina_g":estimativa de proteína em gramas,"data":"YYYY-MM-DD"}
+3. pesos: cada pesagem citada ("pesei 90", "tô com 88,4 hoje") → {"peso":num em kg,"data":"YYYY-MM-DD"} — só se o número for claramente um peso corporal (30 a 400 kg).
+4. doses: cada dose de medicação GLP-1 citada ("tomei a dose de 7,5", "apliquei mounjaro 5mg") → {"medicamento":"nome ou null","dose":"texto ex 7,5 mg","data":"YYYY-MM-DD"}.
+5. eventos: contexto relevante para saúde (viagem, estresse, festa, comeu mal, dormiu pouco, doença, efeito colateral) → {"descricao":"frase curta em 3ª pessoa","data":"YYYY-MM-DD ou null"}
+6. resposta: UMA resposta curta (máx 2 frases), acolhedora e direta, em pt-BR, como um coach — reconheça o que foi feito sem julgar excessos.
 
 Responda APENAS com JSON puro, sem markdown:
-{"resposta":"...","exercicios":[],"refeicoes":[],"eventos":[]}`;
+{"resposta":"...","exercicios":[],"refeicoes":[],"pesos":[],"doses":[],"eventos":[]}`;
       const r2 = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
@@ -172,7 +174,11 @@ Responda APENAS com JSON puro, sem markdown:
         exercicios: (Array.isArray(p2.exercicios) ? p2.exercicios : []).filter(e => e && tiposEx.includes(e.tipo)).slice(0, 6)
           .map(e => ({ tipo: e.tipo, duracao_min: (e.duracao_min > 0 && e.duracao_min <= 600) ? Math.round(e.duracao_min) : null, intensidade: ['leve', 'moderada', 'intensa'].includes(e.intensidade) ? e.intensidade : 'moderada', data: /^\d{4}-\d{2}-\d{2}$/.test(e.data || '') ? e.data : hoje })),
         refeicoes: (Array.isArray(p2.refeicoes) ? p2.refeicoes : []).filter(r => r && r.descricao).slice(0, 8)
-          .map(r => ({ tipo: ['cafe', 'almoco', 'jantar', 'lanche'].includes(r.tipo) ? r.tipo : 'lanche', descricao: String(r.descricao).slice(0, 200), calorias: (r.calorias > 0 && r.calorias < 8000) ? Math.round(r.calorias) : null, data: /^\d{4}-\d{2}-\d{2}$/.test(r.data || '') ? r.data : hoje })),
+          .map(r => ({ tipo: ['cafe', 'almoco', 'jantar', 'lanche'].includes(r.tipo) ? r.tipo : 'lanche', descricao: String(r.descricao).slice(0, 200), calorias: (r.calorias > 0 && r.calorias < 8000) ? Math.round(r.calorias) : null, proteina_g: (r.proteina_g > 0 && r.proteina_g < 400) ? Math.round(r.proteina_g) : null, data: /^\d{4}-\d{2}-\d{2}$/.test(r.data || '') ? r.data : hoje })),
+        pesos: (Array.isArray(p2.pesos) ? p2.pesos : []).filter(w => w && w.peso > 30 && w.peso < 400).slice(0, 4)
+          .map(w => ({ peso: Math.round(parseFloat(w.peso) * 10) / 10, data: /^\d{4}-\d{2}-\d{2}$/.test(w.data || '') ? w.data : hoje })),
+        doses: (Array.isArray(p2.doses) ? p2.doses : []).filter(d => d && (d.dose || d.medicamento)).slice(0, 3)
+          .map(d => ({ medicamento: d.medicamento ? String(d.medicamento).slice(0, 60) : null, dose: d.dose ? String(d.dose).slice(0, 40) : null, data: /^\d{4}-\d{2}-\d{2}$/.test(d.data || '') ? d.data : hoje })),
         eventos: (Array.isArray(p2.eventos) ? p2.eventos : []).filter(e => e && e.descricao).slice(0, 4)
           .map(e => ({ descricao: String(e.descricao).slice(0, 240), data: /^\d{4}-\d{2}-\d{2}$/.test(e.data || '') ? e.data : null }))
       };
