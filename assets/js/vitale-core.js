@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.35 · Fix 2FA não trava portal + edição · A35 · 2026-07-22';
+const VITALE_VERSION = 'v5.36 · Portal: escolha de conta não-médica · A36 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,

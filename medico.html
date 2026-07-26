@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A35"></script>
+<script src="/config.js?v=A36"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -347,6 +347,20 @@ table.lab td{padding:11px 10px}
     <p style="text-align:center;margin-top:12px"><a href="#" onclick="PORTAL.sair();return false" style="font-size:13px">Sair</a></p>
   </div>
 
+  <!-- v5.36 — conta logada que não é médico: em vez de empurrar o cadastro,
+       deixa a pessoa escolher. Sem isto, um paciente que já usa o app e abre
+       /medico.html cai direto num formulário de cadastro médico confuso. -->
+  <div id="telaNaoMedico" class="card oculto login">
+    <div class="sec" style="border:0;padding:0">Acesso profissional</div>
+    <h2 style="font-size:24px">Esta conta não é médica</h2>
+    <p style="color:var(--tinta2);font-size:14.5px;margin-top:10px;line-height:1.6">
+      Você está conectado como <b id="naoMedicoEmail"></b>. Este e-mail não tem
+      cadastro de médico no VITALE.
+    </p>
+    <button class="btn" style="width:100%;margin-top:18px" onclick="PORTAL.irCadastroMedico()">Cadastrar como médico</button>
+    <button class="btn sec" style="width:100%;margin-top:10px" onclick="PORTAL.trocarConta()">Entrar com outra conta</button>
+  </div>
+
   <div id="telaPendente" class="card oculto login">
     <div class="sec" style="border:0;padding:0">Cadastro em análise</div>
     <h2 style="font-size:24px">Aguardando verificação</h2>
@@ -503,7 +517,7 @@ const PORTAL = {
 
   // alterna telas públicas (login / cadastro / recuperação / 2FA)
   tela(id){
-    ['telaLogin','telaCadastro','telaRecuperar','telaNovaSenha','telaMfaCadastro','telaMfaDesafio'].forEach(t=>{
+    ['telaLogin','telaCadastro','telaRecuperar','telaNovaSenha','telaMfaCadastro','telaMfaDesafio','telaNaoMedico'].forEach(t=>{
       const el=document.getElementById(t); if(el) el.classList.toggle('oculto', t!==id);
     });
     window.scrollTo(0,0);
@@ -809,20 +823,35 @@ const PORTAL = {
     if(error) this._msg('loginMsg','Não foi possível entrar: '+error.message);
   },
 
+  // v5.36 — a partir da tela "não é médico"
+  irCadastroMedico(){
+    this.tela('telaCadastro');
+    const setv=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
+    setv('cadEmail', this._emailLogado);
+    setv('cadNome', this._nomeLogado);
+    const bloco=document.getElementById('cadSenha')?.closest('div');
+    if(bloco) bloco.style.display='none';   // já autenticado, não precisa de senha
+    this._msg('cadMsg','Complete seu cadastro profissional para liberar o acesso.','ok');
+    this._socialSemCadastro = true;
+  },
+  async trocarConta(){
+    try{ await this.sb.auth.signOut(); }catch(e){}
+    try{ localStorage.clear(); }catch(e){}
+    location.href='/medico.html';
+  },
+
   async posLogin(){
     const {data:{user}}=await this.sb.auth.getUser();
     if(!user)return;
     const {data:med}=await this.sb.from('medicos').select('*').eq('id',user.id).maybeSingle();
     if(!med){
-      // v5.26 — entrou por Google/Apple sem cadastro: leva ao formulário
-      this.tela('telaCadastro');
-      const setv=(id,val)=>{const el=document.getElementById(id);if(el&&val)el.value=val;};
-      setv('cadEmail', user.email);
-      setv('cadNome', user.user_metadata?.full_name || user.user_metadata?.name || '');
-      const bloco=document.getElementById('cadSenha')?.closest('div');
-      if(bloco) bloco.style.display='none';   // já autenticado, não precisa de senha
-      this._msg('cadMsg','Você entrou com sucesso. Complete seu cadastro profissional para liberar o acesso.','ok');
-      this._socialSemCadastro = true;
+      // v5.36 — conta logada sem cadastro médico: oferece escolher em vez de
+      // empurrar o formulário. Guarda o e-mail p/ pré-preencher se for cadastrar.
+      this._emailLogado = user.email;
+      this._nomeLogado = user.user_metadata?.full_name || user.user_metadata?.name || '';
+      this.tela('');
+      const lbl=document.getElementById('naoMedicoEmail'); if(lbl) lbl.textContent=user.email||'';
+      document.getElementById('telaNaoMedico').classList.remove('oculto');
       return;
     }
     this.medico=med;
