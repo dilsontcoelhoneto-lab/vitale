@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A34"></script>
+<script src="/config.js?v=A35"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -527,17 +527,16 @@ const PORTAL = {
     // Tem fator cadastrado → precisa do desafio
     if(niveis.nextLevel==='aal2'){ this.tela('telaMfaDesafio'); setTimeout(()=>document.getElementById('mfaCodigoDes')?.focus(),150); return false; }
 
-    // Não tem fator → cadastro obrigatório
-    await this._mfaIniciarCadastro();
-    return false;
+    // Não tem fator → tenta cadastrar. Se o MFA não estiver habilitado no
+    // projeto Supabase, o enroll falha e NÃO travamos o portal — o 2FA passa
+    // a valer automaticamente quando o admin ligar TOTP em Authentication.
+    const iniciou = await this._mfaIniciarCadastro();
+    return iniciou ? false : true;
   },
 
+  // Retorna true se a tela de cadastro foi montada; false se o MFA está
+  // indisponível no projeto (aí o chamador libera o acesso).
   async _mfaIniciarCadastro(){
-    this.tela('telaMfaCadastro');
-    this._msg('mfaCadMsg','');
-    const qr=document.getElementById('mfaQr');
-    qr.innerHTML='<p style="color:var(--tinta2);font-size:14px">Gerando código…</p>';
-
     // Remove fatores não verificados de tentativas anteriores (senão o
     // enroll acumula lixo e o Supabase recusa por nome duplicado).
     try{
@@ -545,11 +544,21 @@ const PORTAL = {
       for(const f of (lista?.all||[])) if(f.status!=='verified') await this.sb.auth.mfa.unenroll({factorId:f.id});
     }catch(e){}
 
-    const {data,error}=await this.sb.auth.mfa.enroll({factorType:'totp',friendlyName:'VITALE '+Date.now()});
-    if(error){ qr.innerHTML=''; return this._msg('mfaCadMsg','Não foi possível gerar o código: '+error.message); }
+    let data, error;
+    try{ ({data,error}=await this.sb.auth.mfa.enroll({factorType:'totp',friendlyName:'VITALE '+Date.now()})); }
+    catch(e){ error=e; }
+
+    if(error || !data?.totp){
+      console.warn('[VITALE] MFA indisponível no projeto — liberando sem 2FA:', error?.message||error);
+      return false;
+    }
+
+    this.tela('telaMfaCadastro');
+    this._msg('mfaCadMsg','');
     this._mfaFactorId=data.id;
-    qr.innerHTML=`<img src="${data.totp.qr_code}" alt="QR code do autenticador" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:8px">`;
+    document.getElementById('mfaQr').innerHTML=`<img src="${data.totp.qr_code}" alt="QR code do autenticador" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:8px">`;
     document.getElementById('mfaSegredo').textContent=data.totp.secret;
+    return true;
   },
 
   async mfaConfirmarCadastro(){

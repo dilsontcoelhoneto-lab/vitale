@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — Torre de Comando</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A34">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A35">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- v5.13 — TORRE em tema "papel clínico" (override do vitale.css) -->
 <style>
@@ -27,7 +27,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A34"></script>
+<script src="/config.js?v=A35"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">VERIFICANDO ACESSO ADMIN...</p></div>
@@ -191,7 +191,7 @@
   </div>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A34"></script>
+<script src="/assets/js/supabase-client.js?v=A35"></script>
 <script>
 let allFlags = [], allUsers = [];
 
@@ -649,12 +649,14 @@ async function garantirMfaAdmin() {
     const { data: lista } = await window.sb.auth.mfa.listFactors();
     for (const f of (lista?.all || [])) if (f.status !== 'verified') await window.sb.auth.mfa.unenroll({ factorId: f.id });
   } catch (e) {}
-  const { data, error } = await window.sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'VITALE Torre ' + Date.now() });
-  if (error) {
-    _telaMfa(`<h2 style="color:var(--red);font-size:20px;margin-bottom:8px">MFA indisponível</h2>
-      <p style="font-size:13px;color:var(--textm)">${esc(error.message)}</p>
-      <p style="font-size:12px;color:var(--textm);margin-top:12px">Verifique se o MFA (TOTP) está habilitado em Authentication → Multi-Factor no Supabase.</p>`);
-    return false;
+  let data, error;
+  try { ({ data, error } = await window.sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'VITALE Torre ' + Date.now() })); }
+  catch (e) { error = e; }
+  // MFA não habilitado no projeto: NÃO trava a Torre — libera. O 2FA passa a
+  // valer quando o admin ligar TOTP em Authentication → Multi-Factor.
+  if (error || !data?.totp) {
+    console.warn('[ADMIN] MFA indisponível no projeto — liberando sem 2FA:', error?.message || error);
+    return true;
   }
   window._mfaFactorId = data.id;
   _telaMfa(`<h2 style="color:var(--gold);font-size:22px;margin-bottom:8px">Ative a verificação em duas etapas</h2>
