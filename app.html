@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A49">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A50">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A49"></script>
+<script src="/config.js?v=A50"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -1023,6 +1023,13 @@
       <h3><span class="ico">🧬</span> Perfil genético</h3>
       <p style="font-size:12.5px;color:var(--textm);margin:6px 0 14px;line-height:1.6">Predisposições do seu DNA que ajudam a explicar exames e orientar hábitos. A Análise Completa considera esses achados.</p>
       <div id="geneticaLista"></div>
+      <!-- v5.50 (IA-7) — enviar laudo de DNA: a IA propõe, você confere e confirma -->
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+        <button class="btn btn-secondary btn-small" onclick="document.getElementById('geneticaFile').click()">🧬 Enviar laudo de DNA (PDF ou foto)</button>
+        <input type="file" id="geneticaFile" accept="image/*,application/pdf,.pdf" onchange="VITALE_CORE.importarGenetica(this)" style="display:none">
+        <p style="font-size:11px;color:var(--textm);margin-top:8px;line-height:1.6">Dado sensível: nada é gravado sem a sua confirmação. A IA lê a página e propõe os achados — você revisa e escolhe o que salvar.</p>
+        <div id="geneticaResult" style="margin-top:12px"></div>
+      </div>
     </div>
 
 
@@ -1371,10 +1378,10 @@
   app.html <strong style="color:var(--gold)">A45</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A49"></script>
-<script src="/assets/js/supabase-client.js?v=A49"></script>
-<script src="/assets/js/feature-flags.js?v=A49"></script>
-<script src="/assets/js/vitale-core.js?v=A49"></script>
+<script src="/assets/js/vitale-calc.js?v=A50"></script>
+<script src="/assets/js/supabase-client.js?v=A50"></script>
+<script src="/assets/js/feature-flags.js?v=A50"></script>
+<script src="/assets/js/vitale-core.js?v=A50"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1391,7 +1398,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.49';
+  const CORE_ESPERADO = 'v5.50';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;

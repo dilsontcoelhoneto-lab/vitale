@@ -196,6 +196,7 @@ Responda APENAS com JSON puro, sem markdown:
     const isFood = modo === 'alimento';
     const isExerc = modo === 'exercicio';
     const isAuto = modo === 'auto';
+    const isGen = modo === 'genetica';
     const pesoG = body.peso_g || null;
     const hojeRef = body.hoje || new Date().toISOString().slice(0, 10);
 
@@ -310,15 +311,33 @@ Responda APENAS com JSON puro, sem markdown:
 {"categoria":"...","exercicio":null,"alimento":null,"composicao":null,"peso":null,"exame_lab":null}
 Preencha SOMENTE o campo da categoria detectada; os demais ficam null.`;
 
+    // Modo GENÉTICA — laudo de teste de DNA (Genera, 23andMe, etc.). Dado
+    // sensível: a IA só PROPÕE; o app exige confirmação do usuário antes de gravar.
+    const promptGenetica = `Esta imagem é uma página de um laudo de teste genético / DNA (ex.: Genera, 23andMe, MapMyGenome). Extraia os achados que aparecem EXPLICITAMENTE.
+
+REGRA CRÍTICA: NÃO invente resultados nem genes. Só extraia o que está escrito. Se um campo não aparece, use null. Isto é dado sensível — precisão importa mais que quantidade.
+
+Para cada achado, retorne:
+- categoria: uma de "metabolismo","nutricao","farmacogenetica","predisposicao","fitness","outro"
+- titulo: nome curto do achado (ex.: "Predisposição a vitamina D baixa", "Metabolização de cafeína")
+- resultado: o que o laudo diz (ex.: "Tendência aumentada", "Metabolizador lento", "Risco elevado")
+- gene: sigla do gene se citada (ex.: "MTHFR", "VDR", "CYP1A2") ou null
+- relevancia: "alta","media" ou "baixa" conforme o próprio laudo enfatiza, ou null
+- detalhe: uma frase curta de contexto do laudo, ou null
+
+Responda APENAS com JSON puro, sem markdown:
+{"fonte":"genera|23andme|outro","itens":[{"categoria":"...","titulo":"...","resultado":"...","gene":null,"relevancia":null,"detalhe":null}]}
+Extraia no máximo 20 achados. Se a imagem não for um laudo genético, retorne {"fonte":null,"itens":[]}.`;
+
     // 6) Monta requisição para Claude API
     const claudePayload = {
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 1500,
+      max_tokens: 1800,
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-          { type: 'text', text: isAuto ? promptAuto : (isBio ? promptBio : (isFood ? promptFood : (isExerc ? promptExerc : promptPeso))) }
+          { type: 'text', text: isGen ? promptGenetica : (isAuto ? promptAuto : (isBio ? promptBio : (isFood ? promptFood : (isExerc ? promptExerc : promptPeso)))) }
         ]
       }]
     };
@@ -422,6 +441,25 @@ Preencha SOMENTE o campo da categoria detectada; os demais ficam null.`;
       if (!isNaN(cal) && cal > 0 && cal < 10000) out.calorias = cal;
       if (['leve', 'moderada', 'intensa'].includes(e.intensidade)) out.intensidade = e.intensidade;
       return new Response(JSON.stringify({ exercicio: Object.keys(out).length ? out : null }), { headers: corsHeaders });
+    }
+
+    if (isGen) {
+      const catsOk = ['metabolismo', 'nutricao', 'farmacogenetica', 'predisposicao', 'fitness', 'outro'];
+      const relOk = ['alta', 'media', 'baixa'];
+      const itens = (parsed && Array.isArray(parsed.itens) ? parsed.itens : [])
+        .filter(i => i && i.titulo && i.resultado)
+        .slice(0, 20)
+        .map(i => ({
+          categoria: catsOk.includes(i.categoria) ? i.categoria : 'outro',
+          titulo: String(i.titulo).slice(0, 120),
+          resultado: String(i.resultado).slice(0, 160),
+          gene: i.gene ? String(i.gene).slice(0, 40) : null,
+          relevancia: relOk.includes(i.relevancia) ? i.relevancia : null,
+          detalhe: i.detalhe ? String(i.detalhe).slice(0, 300) : null
+        }));
+      const fontesOk = ['genera', '23andme', 'outro'];
+      const fonte = fontesOk.includes(parsed && parsed.fonte) ? parsed.fonte : 'outro';
+      return new Response(JSON.stringify({ genetica: { fonte, itens } }), { headers: corsHeaders });
     }
 
     // modo peso (padrão) — preserva tua validação original

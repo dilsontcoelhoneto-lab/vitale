@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.49 · paleta única propagada (V7) + treino "Tudo" mostra histórico inteiro · A49 · 2026-07-27';
+const VITALE_VERSION = 'v5.50 · IA-7: upload de laudo de DNA com confirmação · A50 · 2026-07-27';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -2585,6 +2585,88 @@ const VITALE_CORE = {
         <div style="font-size:13px;color:${cor[a.relevancia] || 'var(--text)'};margin-top:2px">${this._escapeHtml(a.resultado)}</div>
         ${a.detalhe ? `<div style="font-size:12px;color:var(--textm);margin-top:5px;line-height:1.5">${this._escapeHtml(a.detalhe)}</div>` : ''}
       </div>`).join('');
+  },
+
+  // v5.50 (IA-7) — upload de laudo de DNA. A IA PROPÕE os achados (modo 'genetica'
+  // no /api/ocr); nada é gravado sem o usuário conferir e confirmar (dado sensível).
+  async importarGenetica(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const res = document.getElementById('geneticaResult');
+    const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    if (res) res.innerHTML = `<p style="color:var(--textm);font-size:13px">🧬 ${ehPdf ? 'Convertendo o PDF e lendo' : 'Lendo o laudo'} — proponho os achados pra você conferir...</p>`;
+    try {
+      const conv = await this._arquivoParaImagem(file);
+      const compressed = await this._compressImageForOCR(conv.dataUrl);
+      const base64 = compressed.split(',')[1];
+      const session = await window.sb.auth.getSession();
+      const token = session?.data?.session?.access_token;
+      const resp = await fetch('/api/ocr', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ image: base64, mime: 'image/jpeg', modo: 'genetica' })
+      });
+      if (!resp.ok) { const ed = await resp.json().catch(() => ({})); throw new Error(ed.error || 'Falha na leitura'); }
+      const data = await resp.json();
+      input.value = '';
+      const itens = (data.genetica && Array.isArray(data.genetica.itens)) ? data.genetica.itens : [];
+      this._genPropostos = { fonte: (data.genetica && data.genetica.fonte) || 'outro', itens };
+      if (!itens.length) {
+        if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">🤔 Não reconheci achados genéticos nesta página. Tente uma foto mais nítida ou envie a página com a tabela de resultados.</p>';
+        return;
+      }
+      const relRot = { alta: 'alta', media: 'média', baixa: 'baixa' };
+      const linhas = itens.map((it, i) => `
+        <label style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">
+          <input type="checkbox" class="genChk" data-i="${i}" checked style="margin-top:3px">
+          <span style="flex:1">
+            <strong style="font-size:13.5px;color:var(--text)">${this._escapeHtml(it.titulo)}</strong>
+            <span style="font-size:11px;color:var(--textm)"> · ${this._escapeHtml(it.categoria)}${it.gene ? ' · ' + this._escapeHtml(it.gene) : ''}${it.relevancia ? ' · relevância ' + relRot[it.relevancia] : ''}</span>
+            <div style="font-size:12.5px;color:var(--gold);margin-top:2px">${this._escapeHtml(it.resultado)}</div>
+            ${it.detalhe ? `<div style="font-size:11.5px;color:var(--textm);margin-top:3px;line-height:1.5">${this._escapeHtml(it.detalhe)}</div>` : ''}
+          </span>
+        </label>`).join('');
+      if (res) res.innerHTML = `
+        <div style="background:rgba(155,89,232,0.06);border:1px solid rgba(155,89,232,0.28);border-radius:10px;padding:12px 14px">
+          <div style="font-size:13px;color:var(--text);margin-bottom:4px">🧬 <strong>Encontrei ${itens.length} achado(s).</strong> Desmarque o que não quiser e confirme:</div>
+          <div>${linhas}</div>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-gold btn-small" onclick="VITALE_CORE._confirmarGenetica()">✅ Salvar selecionados</button>
+            <button class="btn btn-secondary btn-small" onclick="document.getElementById('geneticaResult').innerHTML=''">Cancelar</button>
+          </div>
+          <p style="font-size:11px;color:var(--textm);margin-top:8px">Confira com atenção — são predisposições, não diagnóstico. Leve dúvidas ao seu médico.</p>
+        </div>`;
+    } catch (e) {
+      if (res) res.innerHTML = `<p style="color:var(--red,#e8504a);font-size:13px">❌ ${this._escapeHtml(e.message || 'Erro na leitura do laudo')}</p>`;
+      if (window.VitaleErr) window.VitaleErr.log('import_genetica', e);
+    }
+  },
+
+  async _confirmarGenetica() {
+    const res = document.getElementById('geneticaResult');
+    const prop = this._genPropostos;
+    if (!prop || !prop.itens.length) return;
+    const marcados = Array.from(document.querySelectorAll('.genChk'))
+      .filter(c => c.checked).map(c => prop.itens[parseInt(c.dataset.i)]).filter(Boolean);
+    if (!marcados.length) { if (res) res.innerHTML = '<p style="color:var(--textm);font-size:13px">Nada selecionado.</p>'; return; }
+    try {
+      const user = await window.VitaleAuth.getUser();
+      if (!user) throw new Error('Sessão expirada');
+      const rows = marcados.map(it => ({
+        user_id: user.id, categoria: it.categoria, titulo: it.titulo, resultado: it.resultado,
+        gene: it.gene || null, relevancia: it.relevancia || null, detalhe: it.detalhe || null,
+        fonte: prop.fonte || 'outro'
+      }));
+      const { error } = await window.sb.from('achados_geneticos').insert(rows);
+      if (error) throw error;
+      this.state.genetica = await this.loadGenetica();
+      this.renderGenetica();
+      this._invalidateCoachCache && this._invalidateCoachCache();
+      if (res) res.innerHTML = `<div style="background:rgba(39,196,125,0.08);border:1px solid rgba(39,196,125,0.3);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--em)">✅ ${rows.length} achado(s) salvos no seu perfil genético. A Análise Completa já vai considerá-los.</div>`;
+      if (window.VitaleAnalytics) window.VitaleAnalytics.track('genetica_importada', { n: rows.length });
+    } catch (e) {
+      if (res) res.innerHTML = `<p style="color:var(--red,#e8504a);font-size:13px">❌ ${this._escapeHtml(e.message || 'Erro ao salvar')}</p>`;
+      if (window.VitaleErr) window.VitaleErr.log('confirma_genetica', e);
+    }
   },
 
   async loadExames() {
