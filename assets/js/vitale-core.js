@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.38 · Protocolo de Medicações + IA · A38 · 2026-07-22';
+const VITALE_VERSION = 'v5.39 · IA vê proteína e gasto detalhado · A39 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -3209,10 +3209,19 @@ const VITALE_CORE = {
     const ultMedida = (this.state.medidas || [])[0] || null;
     const rcq = ultMedida ? this._calcRCQ(ultMedida.cintura, ultMedida.quadril) : null;
     const ultComp = (this.state.composicao || [])[0] || null;
+    // v5.39 (IA-1) — tendência de massa muscular: em GLP-1, o que interessa não
+    // é só o peso cair, é a massa magra ser preservada. Compara as 2 últimas.
+    const comps = this.state.composicao || [];
+    let tendMusculo = null;
+    if (comps.length >= 2 && comps[0].massa_muscular != null && comps[1].massa_muscular != null) {
+      const d = comps[0].massa_muscular - comps[1].massa_muscular;
+      tendMusculo = (d >= 0 ? '+' : '') + d.toFixed(1) + ' kg desde ' + this.fmt(comps[1].data);
+    }
     const composicao = ultComp ? {
       data: ultComp.data, fonte: ultComp.fonte,
       massa_muscular: ultComp.massa_muscular, massa_gordura: ultComp.massa_gordura,
-      gordura_pct: ultComp.gordura_pct, gordura_visceral: ultComp.gordura_visceral
+      gordura_pct: ultComp.gordura_pct, gordura_visceral: ultComp.gordura_visceral,
+      tendencia_massa_muscular: tendMusculo
     } : null;
 
     // Mood + alimentação + balanço de hoje
@@ -3225,9 +3234,28 @@ const VITALE_CORE = {
       const fator = hp.fator_atividade || 1.3; // rotina SEM treino (o exercício entra somado)
       const exHojeKcal = (this.state.exercicios || []).filter(e => e.data === hoje).reduce((s, e) => s + (e.calorias || 0), 0);
       const gasto = Math.round(tmbInfo.valor * fator + exHojeKcal);
-      balanco = { consumido: consumidoHoje, gasto, saldo: consumidoHoje - gasto, em_deficit: (consumidoHoje - gasto) < 0 };
+      // v5.39 (IA-2) — gasto decomposto: a IA distingue "déficit por treino" de
+      // "déficit por comer pouco" — leituras clínicas diferentes.
+      balanco = {
+        consumido: consumidoHoje, gasto, saldo: consumidoHoje - gasto, em_deficit: (consumidoHoje - gasto) < 0,
+        basal: tmbInfo.valor, rotina: Math.round(tmbInfo.valor * (fator - 1)), exercicio: exHojeKcal
+      };
     }
-    const alimentacao = refeicoesHoje.length ? { refeicoes_hoje: refeicoesHoje.length, calorias_consumidas: consumidoHoje, itens: refeicoesHoje.map(r => r.descricao).filter(Boolean).slice(0, 6) } : null;
+
+    // v5.39 (IA-1) — proteína: a métrica-rainha do GLP-1. Meta 1,6 g/kg,
+    // consumo de hoje e adesão nos últimos 7 dias.
+    const pAtualKg = sorted.length ? sorted[sorted.length - 1].peso : null;
+    let proteina = null;
+    if (pAtualKg) {
+      const metaP = Math.round(pAtualKg * 1.6);
+      const norm = v => this._normData ? this._normData(v) : (v || '').slice(0, 10);
+      const protHoje = refeicoesHoje.reduce((s, r) => s + (r.proteina_g || 0), 0);
+      const dias7 = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - i); return norm(d.toISOString().slice(0, 10)); });
+      const bateu = dias7.filter(dia => (this.state.refeicoes || []).filter(r => norm(r.data) === dia).reduce((s, r) => s + (r.proteina_g || 0), 0) >= metaP).length;
+      proteina = { meta_g_dia: metaP, hoje_g: protHoje, meta_batida_ultimos_7_dias: bateu };
+    }
+
+    const alimentacao = refeicoesHoje.length ? { refeicoes_hoje: refeicoesHoje.length, calorias_consumidas: consumidoHoje, proteina_g: refeicoesHoje.reduce((s, r) => s + (r.proteina_g || 0), 0), itens: refeicoesHoje.map(r => r.descricao).filter(Boolean).slice(0, 6) } : null;
 
     // v5.38 — PROTOCOLO de medicamentos + suplementos. Antes a IA só via um
     // campo vazio do perfil; agora recebe o protocolo estruturado, essencial
@@ -3291,6 +3319,7 @@ const VITALE_CORE = {
       composicao_corporal: composicao,
       humor_hoje: mood,
       alimentacao_hoje: alimentacao,
+      proteina: proteina,
       balanco_calorico: balanco,
       doses_glp1: doses.length ? doses : null,
       efeitos_colaterais: efeitos.length ? efeitos : null,
