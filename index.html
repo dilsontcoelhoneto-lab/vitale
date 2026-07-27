@@ -120,6 +120,32 @@
       VITALE v4 • Hospedado em vitale.acacianegocios.com.br
     </p>
   </div>
+
+  <!-- ==========================================================
+       v5.46 · SLOT DE ANÚNCIO (apenas página pública de login)
+       DESLIGADO por padrão. NUNCA colocar dentro do app.html:
+       misturar anúncio com dados de saúde do usuário viola a
+       política do AdSense e é risco de LGPD. Ver docs/GUIA_adsense.md.
+       Para ligar: (1) tenha conta AdSense aprovada + banner de
+       consentimento de cookies; (2) troque ca-pub-XXX/SLOT;
+       (3) ADS_ON = true.
+       ========================================================== -->
+  <div id="adSlot" style="display:none;max-width:728px;margin:22px auto 0;text-align:center">
+    <div style="font-size:9px;color:var(--textm);letter-spacing:1px;margin-bottom:4px">PUBLICIDADE</div>
+    <!-- <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="XXXXXXXXXX" data-ad-format="auto" data-full-width-responsive="true"></ins> -->
+    <div style="border:1px dashed var(--border2);border-radius:10px;padding:22px;color:var(--textm);font-size:12px">Espaço reservado para anúncio</div>
+  </div>
+  <script>
+    // Ligue somente após aprovação do AdSense + consentimento de cookies.
+    var ADS_ON = false;
+    if (ADS_ON) {
+      document.getElementById('adSlot').style.display = 'block';
+      // var s=document.createElement('script'); s.async=true;
+      // s.src='https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX';
+      // s.crossOrigin='anonymous'; document.head.appendChild(s);
+      // (adsbygoogle = window.adsbygoogle || []).push({});
+    }
+  </script>
 </div>
 
 <script src="/assets/js/supabase-client.js"></script>

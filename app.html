@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A45">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A46">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,14 +33,14 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A45"></script>
+<script src="/config.js?v=A46"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
 
 <header>
   <div class="logo">
-    <svg width="42" height="42" viewBox="0 0 100 100" fill="none">
+    <svg width="58" height="58" viewBox="0 0 100 100" fill="none">
       <defs>
         <linearGradient id="vg" x1="0" y1="100" x2="100" y2="0">
           <stop offset="0%" stop-color="#27c47d"/><stop offset="100%" stop-color="#d4a843"/>
@@ -51,14 +51,15 @@
       <circle cx="50" cy="55" r="5" fill="#d4a843"/>
     </svg>
     <div>
-      <h1>VITALE <span class="logo-badge">v4</span></h1>
+      <h1 style="font-size:30px">VITALE</h1>
       <div class="logo-sub">Coach de Saúde</div>
     </div>
   </div>
   <div class="header-right">
-    <div class="header-stat"><div class="header-stat-val" id="hdrPeso">—</div><div class="header-stat-lbl">Peso (kg)</div></div>
-    <div class="header-stat"><div class="header-stat-val" id="hdrIMC">—</div><div class="header-stat-lbl">IMC</div></div>
-    <div class="header-stat"><div class="header-stat-val" id="hdrPerda">—</div><div class="header-stat-lbl">Perdido</div></div>
+    <div class="header-stat"><div class="header-stat-val" id="hdrPeso">—</div><div class="header-stat-lbl">Peso atual (kg)</div></div>
+    <div class="header-stat"><div class="header-stat-val" id="pesoInicial">—</div><div class="header-stat-lbl">Inicial (kg)</div></div>
+    <div class="header-stat"><div class="header-stat-val" id="perdaTotal">—</div><div class="header-stat-lbl">Perda</div></div>
+    <div class="header-stat"><div class="header-stat-val" id="diasRastro">—</div><div class="header-stat-lbl">Dias</div></div>
     <button class="settings-btn" onclick="VITALE_CORE.openSettings()" title="Configurações">⚙️</button>
     <div class="user-menu" onclick="toggleUserMenu()">
       <div class="user-avatar" id="headerUserAvatar">U</div>
@@ -132,42 +133,40 @@
       .perbar .chip:hover{color:var(--text)}
     </style>
 
-    <!-- ZONA 1 · HOJE ------------------------------------------------ -->
-    <div class="zona-tit">Hoje</div>
+    <!-- CABEÇALHO · Coach IA com a leitura do dia -------------------- -->
+    <div class="coach-card" data-flag="dashboard" style="margin-bottom:16px">
+      <div class="coach-header">
+        <div class="coach-avatar">🤖</div>
+        <div><div class="coach-name">VITALE COACH IA</div><div class="coach-role">Sua leitura de hoje</div></div>
+      </div>
+      <div class="coach-message" id="coachMessage">Carregando...</div>
+      <div class="coach-footer" id="coachFooter"></div>
+      <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px">
+        <button class="btn btn-primary btn-small" id="btnAnaliseCompleta" onclick="VITALE_CORE.pedirAnaliseCompleta()" style="width:100%">🧠 Análise completa — cruza tudo (peso, exames, DNA, treino)</button>
+        <div id="analiseResultado" style="margin-top:14px"></div>
+      </div>
+    </div>
 
-    <div id="badgeResumo" style="background:linear-gradient(135deg,rgba(212,168,67,0.08),rgba(212,168,67,0.02));border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:11px 15px;margin-bottom:16px;font-size:13px"></div>
-    <div id="dicaDiaria" style="display:none;background:rgba(74,157,232,0.06);border:1px solid rgba(74,157,232,0.18);border-radius:12px;padding:12px 16px;margin-bottom:16px"></div>
-    <div id="doseGlp1Card" style="display:none;margin-bottom:16px"></div>
+    <div id="badgeResumo" style="background:linear-gradient(135deg,rgba(212,168,67,0.08),rgba(212,168,67,0.02));border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:12.5px"></div>
+    <div id="dicaDiaria" style="display:none;background:rgba(74,157,232,0.06);border:1px solid rgba(74,157,232,0.18);border-radius:12px;padding:12px 16px;margin-bottom:14px"></div>
+    <div id="doseGlp1Card" style="display:none;margin-bottom:14px"></div>
 
-    <div class="card card--destaque" id="cardRegistrar" style="border-color:rgba(212,168,67,0.3)">
-      <h3><span class="ico">✍️</span> Registrar</h3>
-      <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px">Conte em uma frase — a IA separa cada dado e você confirma. Ex: <em>"pesei 88,4, tomei a dose de 7,5, almocei frango com arroz e caminhei 40 min"</em>.</p>
-      <textarea id="diarioTexto" rows="2" placeholder="pesei 88,4 · dose 7,5 · almocei frango com arroz · caminhei 40 min" style="width:100%;margin-bottom:10px;resize:vertical"></textarea>
+    <!-- REGISTRAR · compacto, com atalhos ---------------------------- -->
+    <div class="card card--destaque" id="cardRegistrar" style="border-color:rgba(212,168,67,0.3);padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:18px">✍️</span>
+        <strong style="font-size:15px;color:var(--text)">Registrar em uma frase</strong>
+      </div>
+      <textarea id="diarioTexto" rows="2" placeholder="pesei 88,4 · dose 7,5 · almocei frango com arroz · caminhei 40 min" style="width:100%;margin-bottom:8px;resize:vertical"></textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioProcessar()">✨ Analisar e confirmar</button>
-        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.irAba('upload')">📷 Enviar foto/print</button>
+        <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioProcessar()">✨ Analisar</button>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.irAba('upload')">📷 Enviar foto/laudo</button>
       </div>
       <div id="diarioResult" style="margin-top:10px"></div>
     </div>
 
+    <!-- Métricas de hoje -->
     <div class="card" id="balancoCard" style="display:none"></div>
-
-    <!-- ZONA 2 · MOTIVAÇÃO ------------------------------------------ -->
-    <div class="zona-tit">Motivação</div>
-
-    <div class="coach-card" data-flag="dashboard">
-      <div class="coach-header">
-        <div class="coach-avatar">🤖</div>
-        <div><div class="coach-name">VITALE COACH IA</div><div class="coach-role">Sua leitura do momento</div></div>
-      </div>
-      <div class="coach-message" id="coachMessage">Carregando...</div>
-      <div class="coach-footer" id="coachFooter"></div>
-      <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
-        <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px;line-height:1.6">Quer o mergulho completo? A IA cruza peso, composição, alimentação, exercício, GLP-1, exames, DNA e contexto como um conjunto.</p>
-        <button class="btn btn-primary btn-small" id="btnAnaliseCompleta" onclick="VITALE_CORE.pedirAnaliseCompleta()" style="width:100%">🧠 Gerar análise mais completa</button>
-        <div id="analiseResultado" style="margin-top:14px"></div>
-      </div>
-    </div>
 
     <div class="card" id="exercHomeCard" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
@@ -179,9 +178,11 @@
       <div id="exercHomeNota" style="font-size:12px;color:var(--textm);margin-top:10px;line-height:1.6"></div>
     </div>
 
-    <div class="card" id="moodCard" data-editando="0" data-flag="dashboard"><span style="color:var(--textm)">📔 Carregando diário…</span></div>
+    <!-- v5.46 — diário de humor DESLIGADO temporariamente (pedido do Dilson).
+         Card e gráfico ocultos; podem voltar mudando display para ''. -->
+    <div class="card" id="moodCard" data-editando="0" data-flag="dashboard" style="display:none"></div>
 
-    <!-- ZONA 3 · EVOLUÇÃO (período unificado) ----------------------- -->
+    <!-- EVOLUÇÃO (período unificado) -------------------------------- -->
     <div class="zona-tit">Evolução</div>
 
     <div class="card" style="margin-bottom:16px">
@@ -210,12 +211,7 @@
       <div class="imc-value" id="imcValue">—</div>
       <p class="imc-status" id="imcStatus" style="color:var(--gold)">Aguardando dados</p>
     </div>
-    <div class="stats-grid">
-      <div class="stat"><div class="stat-value" id="pesoAtual">—</div><div class="stat-label">Peso Atual (kg)</div></div>
-      <div class="stat"><div class="stat-value" id="pesoInicial">—</div><div class="stat-label">Peso Inicial (kg)</div></div>
-      <div class="stat"><div class="stat-value" id="perdaTotal">—</div><div class="stat-label">Perda Total</div></div>
-      <div class="stat"><div class="stat-value" id="diasRastro">—</div><div class="stat-label">Dias Rastreando</div></div>
-    </div>
+    <!-- v5.46 · stats movidos para o cabeçalho fixo (peso atual/inicial/perda/dias) -->
 
     <div class="card">
       <h3><span class="ico">📈</span> Progresso para Meta</h3>
@@ -364,6 +360,20 @@
           </select>
           <p style="font-size:10.5px;color:var(--textm);margin-top:4px">Não conte o treino aqui — os exercícios que você registra já são somados à parte.</p>
         </div>
+      </div>
+    </div>
+
+    <!-- v5.46 — localização: a IA usa clima/latitude p/ contextualizar (ex.: frio e pouca luz solar → vitamina D baixa) -->
+    <div class="card" id="cardLocalizacao">
+      <h3><span class="ico">📍</span> Localização</h3>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:16px">A análise da IA leva em conta o seu clima: cidades frias e com menos sol (como Curitiba no inverno) ajudam a explicar, por exemplo, uma vitamina D mais baixa.</p>
+      <div class="form-group">
+        <div><label>Cidade</label><input type="text" id="hCidade" placeholder="Curitiba" autocomplete="address-level2"></div>
+        <div><label>Estado (UF)</label><input type="text" id="hEstado" maxlength="2" placeholder="PR" autocomplete="address-level1" style="text-transform:uppercase"></div>
+      </div>
+      <div class="form-group">
+        <div><label>Telefone (opcional)</label><input type="tel" id="hTelefone" placeholder="(41) 90000-0000" autocomplete="tel"></div>
+        <div></div>
       </div>
     </div>
 
@@ -1343,10 +1353,10 @@
   app.html <strong style="color:var(--gold)">A45</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A45"></script>
-<script src="/assets/js/supabase-client.js?v=A45"></script>
-<script src="/assets/js/feature-flags.js?v=A45"></script>
-<script src="/assets/js/vitale-core.js?v=A45"></script>
+<script src="/assets/js/vitale-calc.js?v=A46"></script>
+<script src="/assets/js/supabase-client.js?v=A46"></script>
+<script src="/assets/js/feature-flags.js?v=A46"></script>
+<script src="/assets/js/vitale-core.js?v=A46"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1363,7 +1373,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.45';
+  const CORE_ESPERADO = 'v5.46';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;

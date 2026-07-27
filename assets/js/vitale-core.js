@@ -10,10 +10,12 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.45 · UX-2 home em 3 zonas + período unificado · A45 · 2026-07-22';
+const VITALE_VERSION = 'v5.46 · stats no cabeçalho + humor off + exames corrigidos + localização na IA · A46 · 2026-07-27';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
+  // v5.46 — diário de humor desligado temporariamente. Para reativar: true.
+  DIARIO_HUMOR_ON: false,
   state: {
     profile: null,
     healthProfile: null,
@@ -134,9 +136,11 @@ const VITALE_CORE = {
       try { this.fillHealthProfileForm(); } catch (e) { console.warn('fillHealthProfileForm', e); }
       try { this._vigiarAlteracoesSaude(); } catch (e) { console.warn('vigiarSaude', e); }
       try { this.renderCompletude(); } catch (e) { console.warn('completude', e); }
-      try { this.renderMoodCard(); } catch (e) { console.warn('renderMoodCard', e); }
+      // v5.46 — diário de humor desligado temporariamente (não renderiza)
+      // try { this.renderMoodCard(); } catch (e) { console.warn('renderMoodCard', e); }
       try { this.renderDoseGLP1(); } catch (e) { console.warn('renderDoseGLP1', e); }
-      try { this.renderMoodHistorico(); } catch (e) { console.warn('renderMoodHistorico', e); }
+      // v5.46 — gráfico do diário de humor desligado temporariamente
+      // try { this.renderMoodHistorico(); } catch (e) { console.warn('renderMoodHistorico', e); }
       try { this.renderConquistas(); } catch (e) { console.warn('renderConquistas', e); }
       // Checa conquistas no load (sem celebrar as antigas — só registra novas em silêncio na 1ª vez)
       try { this.checkConquistas(true); } catch (e) { console.warn('checkConquistas', e); }
@@ -1762,20 +1766,24 @@ const VITALE_CORE = {
       const ini = new Date(fim.getTime() - 6 * 86400000);
       const iniS = ini.toISOString().slice(0, 10), fimS = fim.toISOString().slice(0, 10);
       const doSem = exs.filter(e => { const d = norm(e.data); return d >= iniS && d <= fimS; });
-      return { label: `${ini.getDate()}/${ini.getMonth() + 1}`, min: doSem.reduce((s, e) => s + (e.duracao_min || 0), 0), n: doSem.length };
+      // v5.46 — o Apple Saúde fragmenta o dia em várias sessões (2-3 caminhadas
+      // + musculação). Contar "dias ativos" (datas distintas) faz mais sentido
+      // do que contar sessões. Minutos continua sendo a soma real.
+      const diasAtivos = new Set(doSem.map(e => norm(e.data))).size;
+      return { label: `${ini.getDate()}/${ini.getMonth() + 1}`, min: doSem.reduce((s, e) => s + (e.duracao_min || 0), 0), n: diasAtivos };
     });
 
-    // streak: semanas consecutivas (terminando na atual) com pelo menos 1 treino
+    // streak: semanas consecutivas (terminando na atual) com pelo menos 1 dia ativo
     let streak = 0;
     for (let i = semanas.length - 1; i >= 0; i--) { if (semanas[i].n > 0) streak++; else break; }
 
-    // resumo do PERÍODO selecionado (não fixo em 7 dias)
+    // resumo do PERÍODO selecionado
     const corte = filtroDe || new Date(hoje.getTime() - 6 * 86400000).toISOString().slice(0, 10);
     const noPeriodo = exs.filter(e => norm(e.data) >= corte);
-    const nTreinos = noPeriodo.length;
+    const diasAtivosP = new Set(noPeriodo.map(e => norm(e.data))).size;
     const minP = noPeriodo.reduce((s, e) => s + (e.duracao_min || 0), 0);
     const kcalP = noPeriodo.reduce((s, e) => s + (e.calorias || 0), 0);
-    const rotPer = filtroDe ? 'NO PERÍODO' : 'ÚLT. 7 DIAS';
+    const rotPer = filtroDe ? 'DIAS ATIVOS' : 'DIAS ATIVOS · 7d';
 
     // média semanal para comparar com a meta da OMS (150 min/sem)
     const semanasNoPer = Math.max(1, janelaDias / 7);
@@ -1786,7 +1794,7 @@ const VITALE_CORE = {
 
     const resumo = document.getElementById('exercHomeResumo');
     if (resumo) resumo.innerHTML = `
-      <div><div style="font-size:24px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums">${nTreinos}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">TREINOS · ${rotPer}</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums">${diasAtivosP}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">${rotPer}</div></div>
       <div><div style="font-size:24px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums">${minP}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">MINUTOS</div></div>
       <div><div style="font-size:24px;font-weight:700;color:var(--em);font-variant-numeric:tabular-nums">${kcalP}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">KCAL</div></div>`;
 
@@ -1811,7 +1819,7 @@ const VITALE_CORE = {
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false },
-            tooltip: { callbacks: { label: c => `${c.parsed.y} min · ${semanas[c.dataIndex].n} treino(s)` } } },
+            tooltip: { callbacks: { label: c => `${c.parsed.y} min · ${semanas[c.dataIndex].n} dia(s) ativo(s)` } } },
           scales: {
             x: { ticks: { color: '#a5a096', font: { size: 9 } }, grid: { display: false } },
             y: { ticks: { color: '#a5a096', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' },
@@ -1982,6 +1990,7 @@ const VITALE_CORE = {
   async renderMoodHistorico() {
     const card = document.getElementById('moodHistCard');
     if (!card) return;
+    if (!this.DIARIO_HUMOR_ON) { card.style.display = 'none'; return; }  // v5.46 desligado
     let dados;
     try { dados = await this.loadMoodHistorico(); }
     catch (e) { card.style.display = 'none'; return; }
@@ -2087,6 +2096,7 @@ const VITALE_CORE = {
   renderMoodCard() {
     const el = document.getElementById('moodCard');
     if (!el) return;
+    if (!this.DIARIO_HUMOR_ON) { el.style.display = 'none'; return; }  // v5.46 humor/sono desligado
 
     // Se já registrou hoje, mostra resumo + botão editar
     const hoje = this.state.moodHoje;
@@ -2177,8 +2187,8 @@ const VITALE_CORE = {
     const imc = this.calcIMC(last.peso, this.altura);
     const info = this.getObesidadeInfo(imc);
 
-    document.getElementById('hdrPeso').textContent = last.peso.toFixed(1);
-    document.getElementById('hdrIMC').textContent = imc;
+    { const e = document.getElementById('hdrPeso'); if (e) e.textContent = last.peso.toFixed(1); }
+    { const e = document.getElementById('hdrIMC'); if (e) e.textContent = imc; }
     const imcVal = document.getElementById('imcValue');
     const imcStat = document.getElementById('imcStatus');
     if (imcVal) imcVal.textContent = imc;
@@ -2196,7 +2206,7 @@ const VITALE_CORE = {
       const temMeta = this.metaKg != null && first.peso > this.metaKg;
       const progress = temMeta ? Math.min(Math.max(((first.peso - last.peso) / (first.peso - this.metaKg)) * 100, 0), 100) : 100;
 
-      document.getElementById('hdrPerda').textContent = perda + ' kg';
+      { const e = document.getElementById('hdrPerda'); if (e) e.textContent = perda + ' kg'; }
       const pTotal = document.getElementById('perdaTotal');
       const dRastro = document.getElementById('diasRastro');
       const mInicio = document.getElementById('metaInicio');
@@ -2223,7 +2233,7 @@ const VITALE_CORE = {
   },
 
   renderEmptyDashboard() {
-    const hdr = ['hdrPeso', 'hdrIMC', 'hdrPerda'];
+    const hdr = ['hdrPeso', 'hdrIMC', 'hdrPerda', 'pesoAtual', 'pesoInicial', 'perdaTotal', 'diasRastro'];
     hdr.forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '—'; });
   },
 
@@ -3468,9 +3478,26 @@ const VITALE_CORE = {
       genetica: (this.state.genetica || []).length ? (this.state.genetica || []).map(a => ({ categoria: a.categoria, achado: a.titulo, resultado: a.resultado, gene: a.gene || null, detalhe: a.detalhe || null })) : null,
       dados_clinicos: clinico,
       memoria_usuario: memoria.length ? memoria : null,
-      exames_laboratoriais: examesCtx
+      exames_laboratoriais: examesCtx,
+      // v5.46 — localização + estação: a IA deve cruzar fatores externos
+      // (ex.: clima frio e pouca exposição solar ajudam a explicar vitamina D baixa).
+      localizacao: (hp.cidade || hp.estado) ? {
+        cidade: hp.cidade || null,
+        estado: hp.estado || null,
+        mes_atual: new Date().toLocaleDateString('pt-BR', { month: 'long' }),
+        estacao_hemisferio_sul: this._estacaoAtual()
+      } : null
     };
     return ctx;
+  },
+
+  // v5.46 — estação no hemisfério sul (contexto climático p/ a IA)
+  _estacaoAtual() {
+    const m = new Date().getMonth() + 1; // 1..12
+    if (m === 12 || m <= 2) return 'verão';
+    if (m <= 5) return 'outono';
+    if (m <= 8) return 'inverno';
+    return 'primavera';
   },
 
   // E-mail(s) com acesso ilimitado (admin). Ajuste com o seu.
@@ -5623,6 +5650,10 @@ const VITALE_CORE = {
     // v5.20: dados básicos na aba (sexo, nascimento, altura, atividade)
     setVal('hDataNasc', hp.data_nascimento);
     setVal('hSexo', hp.sexo);
+    // v5.46: localização (a IA usa p/ contextualizar — ex.: frio/pouca luz solar → vitamina D)
+    setVal('hCidade', hp.cidade);
+    setVal('hEstado', hp.estado);
+    setVal('hTelefone', hp.telefone);
     setVal('hAltura', this.state.profile?.altura);
     setVal('hFatorAtividade', hp.fator_atividade ? String(hp.fator_atividade) : '1.3');
 
@@ -5685,6 +5716,9 @@ const VITALE_CORE = {
         urgencia: getStr('hUrgencia'),
         data_nascimento: getStr('hDataNasc'),
         sexo: getStr('hSexo'),
+        cidade: getStr('hCidade'),
+        estado: getStr('hEstado'),
+        telefone: getStr('hTelefone'),
         fator_atividade: getNum('hFatorAtividade'),
         glp1_ativo: !!document.getElementById('glp1Ativo')?.checked,
         glp1_medicamento: getStr('glp1Medicamento'),
