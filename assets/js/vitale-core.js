@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.41 · IA-4/IA-5 + exercício na home · A41 · 2026-07-22';
+const VITALE_VERSION = 'v5.42 · Abdome unificado + score de atenção (IA-6) · A42 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -1107,9 +1107,8 @@ const VITALE_CORE = {
   // BLOCO MEDIDAS CORPORAIS (body_measurements)
   // =====================================================
   _medidasCampos: [
-    { id: 'cintura', nome: 'Cintura', icone: '📏' },
+    { id: 'abdomen', nome: 'Abdome', icone: '🎯' },
     { id: 'quadril', nome: 'Quadril', icone: '📐' },
-    { id: 'abdomen', nome: 'Abdômen', icone: '🎯' },
     { id: 'peito', nome: 'Peito', icone: '💚' },
     { id: 'braco', nome: 'Braço', icone: '💪' },
     { id: 'coxa', nome: 'Coxa', icone: '🦵' },
@@ -1125,6 +1124,13 @@ const VITALE_CORE = {
       .eq('user_id', user.id)
       .order('data', { ascending: false });
     if (error) throw error;
+    // v5.42 — cintura e abdômen unificados. `abdomen` é a coluna canônica;
+    // espelhamos em `cintura` na memória para todo o código legado (RCQ, KPIs,
+    // relatório, contexto da IA) continuar funcionando sem alteração.
+    (data || []).forEach(m => {
+      const abd = m.abdomen != null ? m.abdomen : m.cintura;
+      m.abdomen = abd; m.cintura = abd;
+    });
     return data || [];
   },
 
@@ -1159,6 +1165,9 @@ const VITALE_CORE = {
     try {
       const { data, error } = await window.sb.from('body_measurements').insert(reg).select().single();
       if (error) throw error;
+      // v5.42 — espelha abdomen↔cintura (mesma unificação do loader)
+      const abd = data.abdomen != null ? data.abdomen : data.cintura;
+      data.abdomen = abd; data.cintura = abd;
       // Mantém ordenado por data desc após inserir (pode ser data passada)
       this.state.medidas.push(data);
       this.state.medidas.sort((a, b) => (b.data > a.data ? 1 : -1));
@@ -1246,10 +1255,14 @@ const VITALE_CORE = {
     const ctx = canvas.getContext('2d');
     if (this.state.medidasChartInstance) this.state.medidasChartInstance.destroy();
 
+    // v5.42 — cintura e abdômen são a mesma medida; mostra só "Abdome" para
+    // não desenhar duas linhas idênticas sobrepostas.
     const series = [
-      { key: 'cintura', label: 'Cintura', cor: '#d4a843' },
-      { key: 'abdomen', label: 'Abdômen', cor: '#e8924a' },
-      { key: 'quadril', label: 'Quadril', cor: '#4a9de8' }
+      { key: 'abdomen', label: 'Abdome', cor: '#e8924a' },
+      { key: 'quadril', label: 'Quadril', cor: '#4a9de8' },
+      { key: 'peito', label: 'Peito', cor: '#d4a843' },
+      { key: 'braco', label: 'Braço', cor: '#27c47d' },
+      { key: 'coxa', label: 'Coxa', cor: '#9b59e8' }
     ].filter(s => ms.some(m => m[s.key] != null));
 
     this.state.medidasChartInstance = new Chart(ctx, {

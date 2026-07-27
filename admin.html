@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — Torre de Comando</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A41">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A42">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- v5.13 — TORRE em tema "papel clínico" (override do vitale.css) -->
 <style>
@@ -27,7 +27,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A41"></script>
+<script src="/config.js?v=A42"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">VERIFICANDO ACESSO ADMIN...</p></div>
@@ -191,7 +191,7 @@
   </div>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A41"></script>
+<script src="/assets/js/supabase-client.js?v=A42"></script>
 <script>
 let allFlags = [], allUsers = [];
 
@@ -627,7 +627,10 @@ function _mfaMsg(t, cor) {
   if (el) { el.textContent = t || ''; el.style.color = cor || 'var(--red)'; }
 }
 
+// v5.42 — TEMPORÁRIO (fase de teste): 2FA da Torre desligado. Reative com true.
+const MFA_OBRIGATORIO_ADMIN = false;
 async function garantirMfaAdmin() {
+  if (!MFA_OBRIGATORIO_ADMIN) return true;   // fase de teste
   let niveis;
   try { niveis = (await window.sb.auth.mfa.getAuthenticatorAssuranceLevel()).data; }
   catch (e) { console.warn('MFA indisponível:', e); return true; }

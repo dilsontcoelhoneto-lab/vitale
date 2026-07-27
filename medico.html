@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A41"></script>
+<script src="/config.js?v=A42"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -105,6 +105,13 @@ input:focus{outline:none;border-color:var(--ouro)}
     border-top:1px solid #999;font-size:9pt;color:#333;line-height:1.5}
 }
 .rodape-impressao{display:none}
+
+/* v5.42 — badge de nível de atenção na lista de pacientes (IA-6 por regras) */
+.nivel{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.3px;margin-top:3px}
+.nivel.crit{color:var(--vermelho)}
+.nivel.aten{color:var(--ambar)}
+.nivel.ok{color:var(--verde)}
+tr.pac.at td:first-child{border-left:3px solid var(--ambar)}
 
 /* v5.38 — protocolo de medicamentos + suplementos */
 .psub{margin-bottom:18px}
@@ -546,7 +553,12 @@ const PORTAL = {
 
   // ===== v5.29 — 2FA (TOTP) obrigatório no portal do médico =====
   // Retorna true se o acesso está liberado; false se parou numa tela de 2FA.
+  // v5.42 — TEMPORÁRIO (fase de teste): 2FA desligado para facilitar o acesso.
+  // Para REATIVAR antes de abrir a médicos reais: mude para true.
+  MFA_OBRIGATORIO: false,
+
   async _garantirMfa(){
+    if(!this.MFA_OBRIGATORIO) return true;   // fase de teste
     let niveis;
     try{
       niveis = (await this.sb.auth.mfa.getAuthenticatorAssuranceLevel()).data;
@@ -918,26 +930,28 @@ const PORTAL = {
     const linhas=[];
     for(const p of pacs){
       const r=await this._resumo(p.paciente_id);
-      const at=r.foraMeta>0||r.inativo||(r.reganho);
-      const s=[];
-      if(r.foraMeta>0)s.push(`<span class="marca-al">${r.foraMeta} fora da faixa</span>`);
-      if(r.reganho)s.push('<span class="marca-al">reganho</span>');
-      if(r.inativo)s.push(`<span class="marca-nu">inativo ${r.dias}d</span>`);
-      if(!s.length)s.push('<span class="marca-ok">sem alertas</span>');
-      linhas.push({at,html:`<tr class="pac ${at?'at':''}" onclick="PORTAL.abrirFicha('${p.paciente_id}')">
-        <td><b>${this._esc(p.nome||'Paciente')}</b></td>
+      // badge de nível (crítico/atenção/ok) — o "chamar atenção" por regras
+      const badge = r.nivel==='critico'
+        ? '<span class="nivel crit" title="'+this._esc(r.motivos.join(' · '))+'">● prioridade</span>'
+        : r.nivel==='atencao'
+        ? '<span class="nivel aten" title="'+this._esc(r.motivos.join(' · '))+'">● atenção</span>'
+        : '<span class="nivel ok">● em dia</span>';
+      const s = r.motivos.length ? r.motivos.map(x=>`<span class="marca-al">${this._esc(x)}</span>`).join(' ') : '<span class="marca-ok">sem alertas</span>';
+      linhas.push({score:r.score,html:`<tr class="pac ${r.nivel!=='ok'?'at':''}" onclick="PORTAL.abrirFicha('${p.paciente_id}')">
+        <td><b>${this._esc(p.nome||'Paciente')}</b><br>${badge}</td>
         <td class="num" data-rot="Peso">${r.peso!=null?r.peso.toFixed(1)+' kg':'—'}</td>
         <td class="num" data-rot="Variação" style="color:${r.varia<0?'var(--verde)':r.varia>0?'var(--vermelho)':'var(--suave)'}">${r.varia!=null?(r.varia>0?'+':'')+r.varia.toFixed(1)+' kg':'—'}</td>
         <td class="num" data-rot="Ritmo 28d">${r.vel==null?'—':Math.abs(r.vel)<0.1?'<span style="color:var(--suave)">estável</span>':(r.vel>0?'−':'+')+Math.abs(r.vel).toFixed(2)}</td>
         <td data-rot="Últ. registro" style="color:var(--tinta2);font-size:14px">${r.ultima||'—'}</td>
-        <td data-rot="Sinalizações">${s.join(' · ')}</td><td class="ver">ver →</td></tr>`});
+        <td data-rot="Sinalizações">${s}</td><td class="ver">ver →</td></tr>`});
     }
-    linhas.sort((a,b)=>(b.at?1:0)-(a.at?1:0));
+    // ordena por score de atenção decrescente — quem precisa de olhar vem primeiro
+    linhas.sort((a,b)=>b.score-a.score);
     tb.innerHTML=linhas.map(l=>l.html).join('');
   },
 
   async _resumo(pid){
-    const o={peso:null,varia:null,ultima:null,foraMeta:0,inativo:false,dias:null,vel:null,reganho:false};
+    const o={peso:null,varia:null,ultima:null,foraMeta:0,inativo:false,dias:null,vel:null,reganho:0,efeitoGrave:0,score:0,motivos:[]};
     const {data:pesos}=await this.sb.from('weights').select('data, peso').eq('user_id',pid).order('data',{ascending:true});
     if(pesos&&pesos.length){
       const u=pesos[pesos.length-1];o.peso=parseFloat(u.peso);
@@ -946,11 +960,29 @@ const PORTAL = {
       o.dias=Math.round((Date.now()-new Date(u.data+'T12:00:00'))/86400000);
       o.inativo=o.dias>15; o.vel=this._velocidade(pesos);
       const min=Math.min(...pesos.map(p=>parseFloat(p.peso)));
-      o.reganho=(parseFloat(u.peso)-min)>1.0;
-    }
+      o.reganho=parseFloat(u.peso)-min;   // kg acima do menor peso
+    } else { o.dias=null; }
     const {data:ex}=await this.sb.from('exames_lab').select('marcador, valor, ref_min, ref_max, data').eq('user_id',pid);
     if(ex&&ex.length){const ult={};ex.forEach(e=>{const a=ult[e.marcador];if(!a||e.data>a.data)ult[e.marcador]=e;});
       o.foraMeta=Object.values(ult).filter(e=>(e.ref_min!=null&&e.valor<e.ref_min)||(e.ref_max!=null&&e.valor>e.ref_max)).length;}
+    // efeitos colaterais graves nos últimos 14 dias
+    const corte14=new Date(Date.now()-14*86400000).toISOString().slice(0,10);
+    const {data:ef}=await this.sb.from('efeitos_colaterais').select('data, tipo, intensidade').eq('user_id',pid).gte('data',corte14);
+    if(ef&&ef.length){
+      const grave=v=>{const n=parseInt(v);if(!isNaN(n))return n>=4;return /intens|grave|forte/i.test(String(v||''));};
+      o.efeitoGrave=ef.filter(e=>grave(e.intensidade)).length;
+    }
+    // ===== v5.42 (IA-6) — SCORE DE ATENÇÃO por regras (sem IA, custo zero) =====
+    let sc=0; const m=o.motivos;
+    if(o.foraMeta>0){ sc+=Math.min(o.foraMeta,4)*2; m.push(`${o.foraMeta} exame(s) fora da faixa`); }
+    if(o.reganho>2){ sc+=4; m.push(`reganho de ${o.reganho.toFixed(1)} kg`); }
+    else if(o.reganho>1){ sc+=2; m.push('reganho leve'); }
+    if(o.dias==null){ sc+=1; m.push('sem pesagens'); }
+    else if(o.dias>30){ sc+=4; m.push(`inativo há ${o.dias} dias`); }
+    else if(o.dias>15){ sc+=2; m.push(`inativo há ${o.dias} dias`); }
+    if(o.efeitoGrave>0){ sc+=5; m.push(`${o.efeitoGrave} efeito(s) colateral(is) intenso(s)`); }
+    o.score=sc;
+    o.nivel = sc>=6?'critico' : sc>=3?'atencao' : 'ok';
     return o;
   },
 
@@ -984,7 +1016,7 @@ const PORTAL = {
       this.sb.from('medicacoes').select('nome, dose, tipo, principio_ativo, marca, unidade, qtd_por_vez, frequencia, frequencia_desc, dias, horario, periodo, com_alimento, prioridade, observacao, inicio, ativo').eq('user_id',pid).eq('ativo',true).then(r=>r.data||[]),
       this.sb.from('doses_medicacao').select('data, medicamento, dose').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('efeitos_colaterais').select('data, tipo, intensidade').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
-      this.sb.from('body_measurements').select('data, cintura').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
+      this.sb.from('body_measurements').select('data, cintura, abdomen').eq('user_id',pid).order('data',{ascending:false}).then(r=>(r.data||[]).map(m=>{const a=m.abdomen!=null?m.abdomen:m.cintura;return {...m,cintura:a,abdomen:a};})),
       this.sb.from('exercicios').select('data').eq('user_id',pid).then(r=>r.data||[])
     ]);
 
@@ -1112,7 +1144,7 @@ const PORTAL = {
 
     <div class="bloco"><div class="sec">Síntese</div>
       <ol class="sintese">
-        <li><b>Ganhos:</b> ${perda>0?`−${perda.toFixed(1)} kg${cintA&&cintI?` e −${(cintI-cintA).toFixed(0)} cm de cintura`:''}`:'linha de base em formação'}${ganhos.length?`; melhora em ${ganhos.slice(0,5).join(', ')}`:''}.</li>
+        <li><b>Ganhos:</b> ${perda>0?`−${perda.toFixed(1)} kg${cintA&&cintI?` e −${(cintI-cintA).toFixed(0)} cm de abdome`:''}`:'linha de base em formação'}${ganhos.length?`; melhora em ${ganhos.slice(0,5).join(', ')}`:''}.</li>
         <li><b>Lente de interpretação:</b> ${treino>=8?'treino intenso recente pode elevar creatinina, ferritina, ácido úrico e enzimas hepáticas — leitura contextualizada antes de conclusão.':'os valores refletem a fase atual da jornada; compare com coletas anteriores, não só com a referência isolada.'}</li>
         <li><b>Alvos remanescentes:</b> ${alvos.length?alvos.slice(0,5).join(', ')+' — priorizar reavaliação.':'nenhum marcador registrado fora das metas.'}</li>
       </ol></div>

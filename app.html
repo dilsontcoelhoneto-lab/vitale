@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A41">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A42">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A41"></script>
+<script src="/config.js?v=A42"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -605,13 +605,12 @@
     <!-- Medidas corporais (fita métrica) manual -->
     <div class="card">
       <h3><span class="ico">📏</span> Medidas de Fita</h3>
-      <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Circunferências medidas com fita. Cintura e quadril calculam sua relação cintura/quadril (risco cardiovascular).</p>
+      <p style="font-size:12px;color:var(--textm);margin-bottom:16px">Circunferências medidas com fita. O <strong>abdome</strong> (na altura do umbigo) é a medida que mais reflete a gordura visceral — a mais importante para acompanhar.</p>
       <div id="medidasDestaque" style="display:none;background:rgba(212,168,67,0.06);border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:14px;margin-bottom:16px"></div>
       <div class="field" style="margin-bottom:12px"><label>Data</label><input type="date" id="med_data"></div>
       <div class="form-group" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px">
-        <div><label>Cintura (cm)</label><input type="number" id="med_cintura" step="0.1" placeholder="ex: 95"></div>
+        <div><label>Abdome / cintura (cm)</label><input type="number" id="med_abdomen" step="0.1" placeholder="ex: 98"></div>
         <div><label>Quadril (cm)</label><input type="number" id="med_quadril" step="0.1" placeholder="ex: 105"></div>
-        <div><label>Abdômen (cm)</label><input type="number" id="med_abdomen" step="0.1" placeholder="ex: 98"></div>
         <div><label>Peito (cm)</label><input type="number" id="med_peito" step="0.1" placeholder="ex: 102"></div>
         <div><label>Braço (cm)</label><input type="number" id="med_braco" step="0.1" placeholder="ex: 35"></div>
         <div><label>Coxa (cm)</label><input type="number" id="med_coxa" step="0.1" placeholder="ex: 58"></div>
@@ -1301,13 +1300,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">A41</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">A42</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A41"></script>
-<script src="/assets/js/supabase-client.js?v=A41"></script>
-<script src="/assets/js/feature-flags.js?v=A41"></script>
-<script src="/assets/js/vitale-core.js?v=A41"></script>
+<script src="/assets/js/vitale-calc.js?v=A42"></script>
+<script src="/assets/js/supabase-client.js?v=A42"></script>
+<script src="/assets/js/feature-flags.js?v=A42"></script>
+<script src="/assets/js/vitale-core.js?v=A42"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1324,7 +1323,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.41';
+  const CORE_ESPERADO = 'v5.42';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
