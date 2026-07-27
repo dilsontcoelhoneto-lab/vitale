@@ -86,6 +86,7 @@ REGRAS:
 - Pode interpretar os DADOS de forma assertiva (tendências, o que está fora da faixa, o que os marcadores costumam indicar), mas NUNCA dê diagnóstico fechado nem prescreva medicamento/dose. A interpretação é educacional.
 - Se algum marcador estiver MUITO alterado ou houver combinação preocupante, gere um alerta claro recomendando procurar o médico (com urgência se for grave) — sem causar pânico.
 - No tratamento GLP-1, valorize a preservação de massa muscular e a relação dose × resposta.
+- Se houver "protocolo_medicacoes" (medicamentos e suplementos com horário, relação com alimento e há quanto tempo usa), considere-o na leitura: possíveis interações (ex.: NAC × zinco, ferro × cálcio), adesão, se o horário/alimento está adequado (ex.: lipossolúveis com gordura), e conexões com os exames (ex.: estatina e enzimas hepáticas; metformina e B12). Não prescreva dose — comente de forma educativa e sugira validar com o médico.
 - Use HTML inline simples (<strong>, <br>), sem markdown. Máximo ~450 palavras, parágrafos curtos.
 
 DADOS DA PESSOA (JSON):

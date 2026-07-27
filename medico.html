@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A37"></script>
+<script src="/config.js?v=A38"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -105,6 +105,27 @@ input:focus{outline:none;border-color:var(--ouro)}
     border-top:1px solid #999;font-size:9pt;color:#333;line-height:1.5}
 }
 .rodape-impressao{display:none}
+
+/* v5.38 — protocolo de medicamentos + suplementos */
+.psub{margin-bottom:18px}
+.psubt{font-size:13px;font-weight:700;letter-spacing:.5px;color:var(--tinta);margin:6px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--linha2)}
+.psubt .num{color:var(--suave);font-weight:400}
+.pperiodo{margin-bottom:12px}
+.pperh{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--ouro);margin:8px 0 6px}
+.pitem{display:flex;gap:12px;padding:9px 0;border-bottom:1px solid var(--linha)}
+.pitem:last-child{border-bottom:0}
+.phora{flex:0 0 62px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--tinta2);padding-top:1px;font-variant-numeric:tabular-nums}
+.pcorpo{flex:1;min-width:0}
+.pnome{font-size:14.5px;color:var(--tinta);font-weight:600;line-height:1.35}
+.pnome .pdose{font-weight:400;color:var(--tinta2)}
+.pnome .ppri{font-size:11.5px;font-weight:600;margin-left:6px;white-space:nowrap}
+.pativo{font-size:12.5px;color:var(--tinta2);margin-top:1px}
+.pmeta{margin-top:5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ptag{font-size:11px;background:var(--papel2);border:1px solid var(--linha2);color:var(--tinta2);padding:1px 8px;border-radius:20px}
+.ptag.alt{background:rgba(199,154,53,0.10);border-color:rgba(199,154,53,0.30);color:var(--ambar)}
+.pdesde{font-size:11px;color:var(--suave)}
+.pobs{font-size:12px;color:var(--tinta2);line-height:1.5;margin-top:5px;padding-left:10px;border-left:2px solid var(--linha2)}
+@media print{.pitem{break-inside:avoid}}
 
 /* desde último acesso */
 .desde{background:var(--papel2);border:1px solid var(--linha);border-radius:9px;padding:13px 18px;font-size:14.5px;color:var(--tinta2);margin-bottom:26px;line-height:1.7}
@@ -960,7 +981,7 @@ const PORTAL = {
       this.sb.from('weights').select('data, peso').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('exames_lab').select('*').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('composicao_corporal').select('*').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
-      this.sb.from('medicacoes').select('nome, dose').eq('user_id',pid).then(r=>r.data||[]),
+      this.sb.from('medicacoes').select('nome, dose, tipo, principio_ativo, marca, unidade, qtd_por_vez, frequencia, frequencia_desc, dias, horario, periodo, com_alimento, prioridade, observacao, inicio, ativo').eq('user_id',pid).eq('ativo',true).then(r=>r.data||[]),
       this.sb.from('doses_medicacao').select('data, medicamento, dose').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('efeitos_colaterais').select('data, tipo, intensidade').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
       this.sb.from('body_measurements').select('data, cintura').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
@@ -1050,8 +1071,10 @@ const PORTAL = {
     // efeitos com linha do tempo (mais recentes)
     const efHtml=d.efeitos.length?`<div class="mini"><div class="rot">Efeitos colaterais · recentes</div><table>
       ${d.efeitos.slice(0,6).map(e=>`<tr><td style="color:var(--tinta2)">${this._esc(e.tipo||'')}</td><td style="text-align:right"><span class="st aten" style="font-size:13px">${this._esc(e.intensidade||'')}</span> <span class="num ref">${this._fmt(e.data)}</span></td></tr>`).join('')}</table></div>`:'';
-    const medsHtml=d.meds.length?`<div class="mini"><div class="rot">Medicações em uso</div><table>
-      ${d.meds.map(m=>`<tr><td>${this._esc(m.nome)}</td><td style="text-align:right;color:var(--tinta2)">${this._esc(m.dose||'')}</td></tr>`).join('')}</table></div>`:'';
+    // v5.38 — o bloco antigo "Medicações em uso" (só nome+dose) foi
+    // substituído pelo protocolo completo (protocoloHtml), num bloco próprio.
+    const medsHtml='';
+    const protocoloHtml=this._protocoloHtml(d.meds);
 
     const temDose=d.doses.length&&d.pesos.length>=2;
 
@@ -1089,10 +1112,63 @@ const PORTAL = {
         <li><b>Alvos remanescentes:</b> ${alvos.length?alvos.slice(0,5).join(', ')+' — priorizar reavaliação.':'nenhum marcador registrado fora das metas.'}</li>
       </ol></div>
 
+    ${protocoloHtml}
+
     ${(compHtml||dosesHtml||efHtml||medsHtml)?`<div class="bloco"><div class="sec">Detalhamento</div>
       <div class="grid2">${compHtml}${dosesHtml}${efHtml}${medsHtml}</div></div>`:''}
 
     <div class="card"><p class="legal">Documento gerado a partir de dados <b>auto-relatados</b> pelo paciente no aplicativo VITALE. Não constitui laudo, diagnóstico ou conduta. A interpretação clínica é do médico assistente. Este acesso foi registrado e é visível ao paciente.</p></div>`;
+  },
+
+  // v5.38 — protocolo de medicamentos + suplementos, agrupado por período
+  // do dia e ordenado por horário. Desenhado para o médico bater o olho:
+  // o que é medicamento (essencial) salta primeiro; a relação com alimento e
+  // a prioridade ficam visíveis; "há quanto tempo usa" contextualiza.
+  _protocoloHtml(meds){
+    if(!meds||!meds.length) return '';
+    const ordemPer={'manha':1,'entre refeicoes':2,'tarde':3,'pos-treino':4,'noite':5,'qualquer':6};
+    const rotPer={'manha':'Manhã','entre refeicoes':'Entre refeições','tarde':'Tarde','pos-treino':'Pós-treino','noite':'Noite','qualquer':'Sem horário fixo'};
+    const corPri={'essencial':'var(--vermelho)','alta':'var(--ouro)','media':'var(--azul)','baixa':'var(--suave)'};
+    const rotPri={'essencial':'Essencial','alta':'Alta','media':'Média','baixa':'Baixa'};
+
+    const meses=(iso)=>{ if(!iso) return ''; const d=new Date(iso+'T12:00:00'); const m=Math.round((Date.now()-d)/(30*86400000)); return m>=1?`há ${m} ${m===1?'mês':'meses'}`:'recente'; };
+
+    const linha=(m)=>{
+      const dose=[m.qtd_por_vez&&m.qtd_por_vez!=1?m.qtd_por_vez+'×':'', m.dose, m.unidade].filter(Boolean).join(' ').trim();
+      const alim=(m.com_alimento&&!/indiferente|qualquer/i.test(m.com_alimento))?`<span class="ptag">${this._esc(m.com_alimento)}</span>`:'';
+      const freq=m.frequencia_desc&&!/^di[aá]ria$/i.test(m.frequencia_desc)?`<span class="ptag alt">${this._esc(m.frequencia_desc)}</span>`:'';
+      const desde=m.inicio?`<span class="pdesde">em uso ${meses(m.inicio)}</span>`:'';
+      const obs=m.observacao?this._esc(String(m.observacao).replace('[protocolo]','').trim()):'';
+      return `<div class="pitem">
+        <div class="phora">${this._esc(m.horario||'—')}</div>
+        <div class="pcorpo">
+          <div class="pnome">${this._esc(m.nome)} ${dose?`<span class="pdose">${this._esc(dose)}</span>`:''}
+            <span class="ppri" style="color:${corPri[m.prioridade]||'var(--suave)'}">•&nbsp;${rotPri[m.prioridade]||''}</span></div>
+          ${m.principio_ativo?`<div class="pativo">${this._esc(m.principio_ativo)}${m.marca?' · '+this._esc(m.marca):''}</div>`:''}
+          <div class="pmeta">${alim}${freq}${desde}</div>
+          ${obs?`<div class="pobs">${obs}</div>`:''}
+        </div>
+      </div>`;
+    };
+
+    const bloco=(titulo, itens)=>{
+      if(!itens.length) return '';
+      const grupos={};
+      itens.forEach(m=>{ const p=m.periodo||'qualquer'; (grupos[p]=grupos[p]||[]).push(m); });
+      const pers=Object.keys(grupos).sort((a,b)=>(ordemPer[a]||9)-(ordemPer[b]||9));
+      const corpo=pers.map(p=>{
+        const arr=grupos[p].sort((a,b)=>String(a.horario||'').localeCompare(String(b.horario||'')));
+        return `<div class="pperiodo"><div class="pperh">${rotPer[p]||this._esc(p)}</div>${arr.map(linha).join('')}</div>`;
+      }).join('');
+      return `<div class="psub"><div class="psubt">${titulo} <span class="num">(${itens.length})</span></div>${corpo}</div>`;
+    };
+
+    const remedios=meds.filter(m=>m.tipo==='medicamento');
+    const supls=meds.filter(m=>m.tipo!=='medicamento');
+    return `<div class="bloco"><div class="sec">Protocolo em uso<span>medicamentos e suplementos · auto-relatado</span></div>
+      ${bloco('Medicamentos', remedios)}
+      ${bloco('Suplementos', supls)}
+    </div>`;
   },
 
   graficoDosePeso(pesos,doses){

@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.37 · Fix QR do 2FA + dados de teste · A37 · 2026-07-22';
+const VITALE_VERSION = 'v5.38 · Protocolo de Medicações + IA · A38 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -3229,6 +3229,17 @@ const VITALE_CORE = {
     }
     const alimentacao = refeicoesHoje.length ? { refeicoes_hoje: refeicoesHoje.length, calorias_consumidas: consumidoHoje, itens: refeicoesHoje.map(r => r.descricao).filter(Boolean).slice(0, 6) } : null;
 
+    // v5.38 — PROTOCOLO de medicamentos + suplementos. Antes a IA só via um
+    // campo vazio do perfil; agora recebe o protocolo estruturado, essencial
+    // para raciocinar sobre interações, adesão e leitura de exames.
+    const protocolo = (this.state.medicacoes || []).map(m => ({
+      nome: m.nome, tipo: m.tipo || null, principio_ativo: m.principio_ativo || null,
+      dose: [m.qtd_por_vez && m.qtd_por_vez != 1 ? m.qtd_por_vez + 'x' : '', m.dose, m.unidade].filter(Boolean).join(' ').trim() || m.dose,
+      frequencia: m.frequencia_desc || m.frequencia || null, horario: m.horario || null,
+      com_alimento: m.com_alimento || null, prioridade: m.prioridade || null,
+      desde: m.inicio || null, obs: m.observacao ? String(m.observacao).replace('[protocolo]', '').trim() : null
+    }));
+
     // GLP-1: doses e efeitos (diferencial de nicho — agora chega na IA)
     const doses = (this.state.doses || []).slice(0, 5).map(d => ({ data: d.data, medicamento: d.medicamento, dose: d.dose }));
     const efeitos = (this.state.efeitos || []).slice(0, 8).map(e => ({ data: e.data, tipo: e.tipo, intensidade: e.intensidade }));
@@ -3283,6 +3294,7 @@ const VITALE_CORE = {
       balanco_calorico: balanco,
       doses_glp1: doses.length ? doses : null,
       efeitos_colaterais: efeitos.length ? efeitos : null,
+      protocolo_medicacoes: protocolo.length ? protocolo : null,
       dados_clinicos: clinico,
       memoria_usuario: memoria.length ? memoria : null,
       exames_laboratoriais: examesCtx
@@ -5295,7 +5307,15 @@ const VITALE_CORE = {
           perfil: { altura_m: this.altura, peso_atual_kg: last.peso, imc: parseFloat(imc), meta_kg: this.metaKg || null },
           pesos: sorted.slice(-60).map(w => ({ data: w.date, kg: w.peso })),
           exames: porM3,
-          medicacoes: (this.state.medicacoes || []).map(m => ({ nome: m.nome, dose: m.dose })),
+          // v5.38 — protocolo completo para a IA raciocinar (interações,
+          // horário, com/sem alimento, prioridade, há quanto tempo usa)
+          medicacoes: (this.state.medicacoes || []).map(m => ({
+            nome: m.nome, tipo: m.tipo || null, principio_ativo: m.principio_ativo || null,
+            dose: [m.qtd_por_vez && m.qtd_por_vez != 1 ? m.qtd_por_vez + 'x' : '', m.dose, m.unidade].filter(Boolean).join(' ').trim() || m.dose,
+            frequencia: m.frequencia_desc || m.frequencia || null, horario: m.horario || null,
+            periodo: m.periodo || null, com_alimento: m.com_alimento || null,
+            prioridade: m.prioridade || null, desde: m.inicio || null, obs: m.observacao ? String(m.observacao).replace('[protocolo]', '').trim() : null
+          })),
           doses_glp1: (this.state.doses || []).slice(0, 20).map(d => ({ data: d.data, medicamento: d.medicamento, dose: d.dose })),
           efeitos_colaterais: (this.state.efeitos || []).slice(0, 20).map(e => ({ data: e.data, tipo: e.tipo, intensidade: e.intensidade })),
           composicao_corporal: comp ? { data: comp.data, massa_muscular: comp.massa_muscular, massa_gordura: comp.massa_gordura, gordura_pct: comp.gordura_pct } : null
