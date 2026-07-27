@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A48">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A49">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A48"></script>
+<script src="/config.js?v=A49"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -169,6 +169,31 @@
     <!-- Métricas de hoje -->
     <div class="card" id="balancoCard" style="display:none"></div>
 
+    <!-- v5.49 — BLOCO ÚNICO DE GRÁFICOS: filtro no topo + contorno em volta de
+         todos os gráficos (pedido do Dilson). Todos respeitam o mesmo período. -->
+    <div class="bloco-graf" style="border:1.5px solid rgba(212,168,67,0.35);border-radius:16px;padding:12px;margin-top:6px;background:rgba(212,168,67,0.02)">
+
+    <div class="card" style="margin-bottom:14px;border-color:rgba(212,168,67,0.25)">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <strong style="font-size:13px;color:var(--gold)">📅 Período — vale para todos os gráficos abaixo</strong>
+        <a href="#" onclick="VITALE_CORE._toggleFiltroData(event)" style="font-size:12px;color:var(--textm)">intervalo personalizado</a>
+      </div>
+      <div class="perbar" id="perBar">
+        <button class="chip" data-dias="15" onclick="VITALE_CORE.filtrarPeriodoDashboard('15',this)">15 dias</button>
+        <button class="chip" data-dias="30" onclick="VITALE_CORE.filtrarPeriodoDashboard('30',this)">30 dias</button>
+        <button class="chip" data-dias="60" onclick="VITALE_CORE.filtrarPeriodoDashboard('60',this)">60 dias</button>
+        <button class="chip" data-dias="120" onclick="VITALE_CORE.filtrarPeriodoDashboard('120',this)">120 dias</button>
+        <button class="chip on" data-dias="" onclick="VITALE_CORE.filtrarPeriodoDashboard('',this)">Tudo</button>
+      </div>
+      <div id="filtroDataCustom" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:4px">
+        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">De</label><input type="date" id="dashFiltroDe" style="width:100%"></div>
+        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Até</label><input type="date" id="dashFiltroAte" style="width:100%"></div>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.aplicarFiltroDashboard()">🔍 Filtrar</button>
+      </div>
+      <div id="dashFiltroInfo" style="display:none;font-size:12px;color:var(--gold);margin-top:10px;padding:8px 12px;background:rgba(212,168,67,0.06);border-radius:8px"></div>
+      <select id="dashPeriodoRapido" style="display:none"></select>
+    </div>
+
     <!-- v5.47 — CONSUMO × GASTO: o gráfico central do app metabólico. -->
     <div class="card" id="consumoGastoCard" style="display:none;border-color:rgba(93,173,226,0.28)">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
@@ -192,30 +217,6 @@
     <!-- v5.46 — diário de humor DESLIGADO temporariamente (pedido do Dilson).
          Card e gráfico ocultos; podem voltar mudando display para ''. -->
     <div class="card" id="moodCard" data-editando="0" data-flag="dashboard" style="display:none"></div>
-
-    <!-- EVOLUÇÃO (período unificado) -------------------------------- -->
-    <div class="zona-tit">Evolução</div>
-
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-        <strong style="font-size:13px;color:var(--text)">Período</strong>
-        <a href="#" onclick="VITALE_CORE._toggleFiltroData(event)" style="font-size:12px;color:var(--textm)">intervalo personalizado</a>
-      </div>
-      <div class="perbar" id="perBar">
-        <button class="chip" data-dias="15" onclick="VITALE_CORE.filtrarPeriodoDashboard('15',this)">15 dias</button>
-        <button class="chip" data-dias="30" onclick="VITALE_CORE.filtrarPeriodoDashboard('30',this)">30 dias</button>
-        <button class="chip" data-dias="60" onclick="VITALE_CORE.filtrarPeriodoDashboard('60',this)">60 dias</button>
-        <button class="chip" data-dias="120" onclick="VITALE_CORE.filtrarPeriodoDashboard('120',this)">120 dias</button>
-        <button class="chip on" data-dias="" onclick="VITALE_CORE.filtrarPeriodoDashboard('',this)">Tudo</button>
-      </div>
-      <div id="filtroDataCustom" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:4px">
-        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">De</label><input type="date" id="dashFiltroDe" style="width:100%"></div>
-        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Até</label><input type="date" id="dashFiltroAte" style="width:100%"></div>
-        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.aplicarFiltroDashboard()">🔍 Filtrar</button>
-      </div>
-      <div id="dashFiltroInfo" style="display:none;font-size:12px;color:var(--gold);margin-top:10px;padding:8px 12px;background:rgba(212,168,67,0.06);border-radius:8px"></div>
-      <select id="dashPeriodoRapido" style="display:none"></select>
-    </div>
 
     <div class="imc-card">
       <p class="imc-label">Seu IMC Atual</p>
@@ -277,6 +278,8 @@
       <h3 style="margin-bottom:16px"><span class="ico">📔</span> Diário</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="moodHistChart"></canvas></div>
     </div>
+
+    </div><!-- /bloco-graf -->
 
     <!-- Conquistas (compactas) -->
     <div class="card" style="margin-top:22px">
@@ -1368,10 +1371,10 @@
   app.html <strong style="color:var(--gold)">A45</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A48"></script>
-<script src="/assets/js/supabase-client.js?v=A48"></script>
-<script src="/assets/js/feature-flags.js?v=A48"></script>
-<script src="/assets/js/vitale-core.js?v=A48"></script>
+<script src="/assets/js/vitale-calc.js?v=A49"></script>
+<script src="/assets/js/supabase-client.js?v=A49"></script>
+<script src="/assets/js/feature-flags.js?v=A49"></script>
+<script src="/assets/js/vitale-core.js?v=A49"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1388,7 +1391,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.48';
+  const CORE_ESPERADO = 'v5.49';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;

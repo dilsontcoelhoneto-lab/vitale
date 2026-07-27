@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.48 · treino dia a dia + ritmo no cabeçalho + paleta única (V7) · A48 · 2026-07-27';
+const VITALE_VERSION = 'v5.49 · paleta única propagada (V7) + treino "Tudo" mostra histórico inteiro · A49 · 2026-07-27';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -652,8 +652,11 @@ const VITALE_CORE = {
       const pct = Math.min(98, Math.max(2, (inicio - s.pesoAlvo) / (inicio - meta) * 100));
       const batida = atual <= s.pesoAlvo;
       const cor = batida ? 'var(--em)' : 'var(--gold)';
-      return `<div style="position:absolute;left:${pct}%;top:50%;transform:translate(-50%,-50%)" title="Submeta ${s.pesoAlvo.toFixed(1)} kg${batida ? ' — batida' : ''}">
-        <div style="width:11px;height:11px;border-radius:50%;background:${cor};border:2px solid var(--bg);box-shadow:0 0 0 1px ${cor}"></div></div>`;
+      const rot = s.titulo ? this._escapeHtml(s.titulo) + ' · ' : '';
+      const falta = batida ? 'atingida ✓' : `faltam ${Math.max(atual - s.pesoAlvo, 0).toFixed(1)} kg`;
+      // pointer-events:auto no dot p/ o tooltip (title) funcionar — o container é none
+      return `<div style="position:absolute;left:${pct}%;top:50%;transform:translate(-50%,-50%);pointer-events:auto;cursor:help" title="${rot}Submeta ${s.pesoAlvo.toFixed(1)} kg — ${falta}">
+        <div style="width:12px;height:12px;border-radius:50%;background:${cor};border:2px solid var(--bg);box-shadow:0 0 0 1px ${cor}"></div></div>`;
     }).join('');
   },
 
@@ -1354,8 +1357,8 @@ const VITALE_CORE = {
             callbacks: { label: (c) => c.raw == null ? null : ` ${c.dataset.label}: ${c.raw} cm` } }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 7 } },
-          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, callback: v => v + ' cm' } }
+          x: { grid: { display: false }, ticks: { color: '#a5a096', font: { size: 10 }, maxTicksLimit: 7 } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a5a096', font: { size: 10 }, callback: v => v + ' cm' } }
         }
       }
     });
@@ -1565,8 +1568,8 @@ const VITALE_CORE = {
             callbacks: { label: (c) => c.raw == null ? null : ` ${c.dataset.label}: ${c.raw} kg` } }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 7 } },
-          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, callback: v => v + ' kg' } }
+          x: { grid: { display: false }, ticks: { color: '#a5a096', font: { size: 10 }, maxTicksLimit: 7 } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a5a096', font: { size: 10 }, callback: v => v + ' kg' } }
         }
       }
     });
@@ -1882,13 +1885,13 @@ const VITALE_CORE = {
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { display: true, labels: { color: '#8c8880', font: { size: 10 }, boxWidth: 12 } },
+          legend: { display: true, labels: { color: '#a5a096', font: { size: 10 }, boxWidth: 12 } },
           tooltip: { callbacks: { afterBody: items => { const i = items[0].dataIndex; const s = pontos[i].consumo - pontos[i].gasto; return (s < 0 ? 'Déficit ' : 'Superávit ') + Math.abs(s) + ' kcal'; } } }
         },
         scales: {
-          x: { ticks: { color: '#8c8880', font: { size: 9 } }, grid: { display: false } },
-          y: { ticks: { color: '#8c8880', font: { size: 9 } }, title: { display: false } },
-          ySaldo: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#8c8880', font: { size: 9 } } }
+          x: { ticks: { color: '#a5a096', font: { size: 9 } }, grid: { display: false } },
+          y: { ticks: { color: '#a5a096', font: { size: 9 } }, title: { display: false } },
+          ySaldo: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#a5a096', font: { size: 9 } } }
         }
       }
     });
@@ -1965,8 +1968,10 @@ const VITALE_CORE = {
       : `Média de <strong>${mediaSemanal} min/semana</strong> no período — a OMS recomenda 150. Cada barra é um dia treinado.`;
 
     // v5.48 — DIA A DIA (barras finas), não agrupado por semana (pedido do Dilson).
-    // Janela: filtro do dashboard; sem filtro, 30 dias. Inclui dias zerados.
-    const iniDaily = filtroDe || new Date(hoje.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+    // Janela: filtro do dashboard; sem filtro ("Tudo") usa TODO o histórico de
+    // treino (não 30 dias — senão parece que só há dados recentes). Inclui zeros.
+    const primeiroEx = exs.reduce((min, e) => { const d = norm(e.data); return (!min || d < min) ? d : min; }, null);
+    const iniDaily = filtroDe || primeiroEx || new Date(hoje.getTime() - 29 * 86400000).toISOString().slice(0, 10);
     const minPorDia = {};
     exs.forEach(e => { const d = norm(e.data); if (d < iniDaily) return; minPorDia[d] = (minPorDia[d] || 0) + (e.duracao_min || 0); });
     const dias = [];
@@ -2200,8 +2205,8 @@ const VITALE_CORE = {
           }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 7 } },
-          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, stepSize: 1 }, min: 0, max: 5 }
+          x: { grid: { display: false }, ticks: { color: '#a5a096', font: { size: 10 }, maxTicksLimit: 7 } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a5a096', font: { size: 10 }, stepSize: 1 }, min: 0, max: 5 }
         }
       }
     });
@@ -3271,7 +3276,7 @@ const VITALE_CORE = {
       this._panCharts.peso = new Chart(ctxP, {
         type: 'line',
         data: { labels: sorted.map(w => this.fmt(w.date)), datasets: ds },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 8 }, maxTicksLimit: 10 } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a5a096', font: { size: 8 }, maxTicksLimit: 10 } }, y: { ticks: { color: '#a5a096', font: { size: 9 } } } } }
       });
     }
 
@@ -3291,7 +3296,7 @@ const VITALE_CORE = {
       this._panCharts.exerc = new Chart(ctxE, {
         type: 'bar',
         data: { labels: semanas.map(s => s.label), datasets: [{ label: 'Minutos/semana', data: semanas.map(s => s.min), backgroundColor: semanas.map(s => s.min >= 150 ? 'rgba(39,196,125,0.7)' : 'rgba(212,168,67,0.45)'), borderRadius: 6 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 9 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a5a096', font: { size: 9 } } }, y: { ticks: { color: '#a5a096', font: { size: 9 } } } } }
       });
       const notaE = document.getElementById('panExercicioNota');
       if (notaE) {
@@ -3325,7 +3330,7 @@ const VITALE_CORE = {
           this._panCharts['m_' + id] = new Chart(ctx, {
             type: 'line',
             data: { labels: ord.map(r => this.fmt(r.data)), datasets: ds },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 8 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a5a096', font: { size: 8 } } }, y: { ticks: { color: '#a5a096', font: { size: 9 } } } } }
           });
         });
       }
@@ -3490,8 +3495,8 @@ const VITALE_CORE = {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y} ${info.unidade || ''}`.trim() } } },
           scales: {
-            x: { ticks: { color: '#8c8880', font: { size: 9 } } },
-            y: { suggestedMin: lo - pad, suggestedMax: hi + pad, ticks: { color: '#8c8880', font: { size: 9 } } }
+            x: { ticks: { color: '#a5a096', font: { size: 9 } } },
+            y: { suggestedMin: lo - pad, suggestedMax: hi + pad, ticks: { color: '#a5a096', font: { size: 9 } } }
           }
         }
       });
@@ -4106,8 +4111,8 @@ const VITALE_CORE = {
           }
         },
         scales: {
-          x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#545870', font: { size: 11 } } },
-          y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#545870', font: { size: 11 }, callback: v => v.toFixed(0) + ' kg' }, min: yMin, max: yMax }
+          x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a5a096', font: { size: 11 } } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a5a096', font: { size: 11 }, callback: v => v.toFixed(0) + ' kg' }, min: yMin, max: yMax }
         }
       }
     });
@@ -4270,8 +4275,8 @@ const VITALE_CORE = {
           }
         },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#545870', font: { size: 10 }, maxTicksLimit: 6 } },
-          y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#545870', font: { size: 10 }, callback: v => v.toFixed(0) }, min: yMin, max: yMax }
+          x: { grid: { display: false }, ticks: { color: '#a5a096', font: { size: 10 }, maxTicksLimit: 6 } },
+          y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#a5a096', font: { size: 10 }, callback: v => v.toFixed(0) }, min: yMin, max: yMax }
         }
       },
       plugins: [faixasPlugin]
