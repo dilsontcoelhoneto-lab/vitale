@@ -59,6 +59,7 @@
     <div class="header-stat"><div class="header-stat-val" id="hdrPeso">—</div><div class="header-stat-lbl">Peso atual (kg)</div></div>
     <div class="header-stat"><div class="header-stat-val" id="pesoInicial">—</div><div class="header-stat-lbl">Inicial (kg)</div></div>
     <div class="header-stat"><div class="header-stat-val" id="perdaTotal">—</div><div class="header-stat-lbl">Perda</div></div>
+    <div class="header-stat"><div class="header-stat-val" id="hdrRitmo">—</div><div class="header-stat-lbl">kg/sem</div></div>
     <div class="header-stat"><div class="header-stat-val" id="diasRastro">—</div><div class="header-stat-lbl">Dias</div></div>
     <button class="settings-btn" onclick="VITALE_CORE.openSettings()" title="Configurações">⚙️</button>
     <div class="user-menu" onclick="toggleUserMenu()">
@@ -229,8 +230,11 @@
         <span style="font-size:12px;color:var(--textm)">Início: <span id="metaInicio" style="color:var(--text)">—</span></span>
         <span style="font-size:12px;color:var(--textm)">Meta: <span id="metaLabel" style="color:var(--gold)">—</span> kg</span>
       </div>
-      <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" id="metaProgress" style="width:0%"></div></div></div>
-      <p style="font-size:12px;color:var(--textm);margin-top:10px" id="metaText">—</p>
+      <div class="progress-wrap" style="position:relative">
+        <div class="progress-bar"><div class="progress-fill" id="metaProgress" style="width:0%"></div></div>
+        <div id="metaMarcos" style="position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;display:none"></div>
+      </div>
+      <p style="font-size:12px;color:var(--textm);margin-top:10px;line-height:1.6" id="metaText">—</p>
     </div>
 
     <div class="chart-card">

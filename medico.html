@@ -98,6 +98,12 @@ input:focus{outline:none;border-color:var(--ouro)}
   tr{break-inside:avoid;page-break-inside:avoid}
   h1,h2,h3{break-after:avoid;page-break-after:avoid}
   canvas{max-width:100% !important;height:auto !important}
+  /* v5.47 — grade de gráficos de evolução dos marcadores no portal */
+  .evolgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 18px;margin-top:12px}
+  .evolitem{border:1px solid #E4DFD4;border-radius:10px;padding:10px 12px}
+  .evoltit{font-size:12px;color:#8A8578;margin-bottom:4px;letter-spacing:.3px}
+  .evolcv{height:120px}
+  @media(max-width:640px){ .evolgrid{grid-template-columns:1fr} }
   a{text-decoration:none;color:#000}
   /* Rodapé de procedência: documento impresso sem origem não serve
      para nada num prontuário. */
@@ -511,7 +517,9 @@ const PORTAL = {
   nomes:{glicose:'Glicose (jejum)',hba1c:'HbA1c',insulina:'Insulina basal',homa_ir:'HOMA-IR',
     colesterol_total:'Colesterol total',ldl:'LDL',hdl:'HDL',triglicerides:'Triglicérides',
     tgo:'TGO (AST)',tgp:'TGP (ALT)',ggt:'Gama-GT',creatinina:'Creatinina',ureia:'Ureia',
-    acido_urico:'Ácido úrico',tsh:'TSH',t4_livre:'T4 livre',testosterona_total:'Testosterona total',
+    acido_urico:'Ácido úrico',tsh:'TSH',t4_livre:'T4 livre',t3_total:'T3 total',testosterona_total:'Testosterona total',
+    testosterona_livre:'Testosterona livre',estradiol:'Estradiol',shbg:'SHBG',lh:'LH',cortisol:'Cortisol (manhã)',
+    psa_total:'PSA total',apolipoproteina_b:'Apolipoproteína B',
     vitamina_d:'Vitamina D (25-OH)',vitamina_b12:'Vitamina B12',pcr:'PCR ultrassensível',ferritina:'Ferritina'},
   unid:{glicose:'mg/dL',hba1c:'%',insulina:'µUI/mL',homa_ir:'',colesterol_total:'mg/dL',ldl:'mg/dL',hdl:'mg/dL',
     triglicerides:'mg/dL',tgo:'U/L',tgp:'U/L',ggt:'U/L',creatinina:'mg/dL',ureia:'mg/dL',acido_urico:'mg/dL',
@@ -1024,6 +1032,30 @@ const PORTAL = {
     this._fichaAtual={pid,perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc,genetica,ultimoAcesso};
     alvo.innerHTML=this.montarFicha(this._fichaAtual);
     this.graficoDosePeso(pesos,doses);
+    this.graficosExames();
+  },
+
+  // v5.47 (V5) — desenha a tendência de cada marcador-chave com histórico.
+  graficosExames(){
+    const mids=this._evolMids||[]; const dados=this._evolData||{};
+    mids.forEach(m=>{
+      const cv=document.getElementById('gEx_'+m); if(!cv)return;
+      const pts=Object.values(dados[m]).sort((a,b)=>new Date(a.data)-new Date(b.data));
+      if(pts.length<2)return;
+      const meta=this.metas[m]||{};
+      const vals=pts.map(p=>p.valor);
+      const ds=[{label:this.nomes[m]||m,data:vals,borderColor:'#31597F',backgroundColor:'rgba(49,89,127,.08)',borderWidth:2,tension:.25,fill:true,pointRadius:2.5,pointBackgroundColor:'#31597F'}];
+      if(meta.max!=null)ds.push({label:'meta',data:pts.map(()=>meta.max),borderColor:'rgba(178,58,52,.5)',borderDash:[4,4],borderWidth:1,pointRadius:0,fill:false});
+      if(meta.min!=null)ds.push({label:'meta',data:pts.map(()=>meta.min),borderColor:'rgba(74,124,89,.5)',borderDash:[4,4],borderWidth:1,pointRadius:0,fill:false});
+      const cand=vals.concat(meta.max!=null?[meta.max]:[],meta.min!=null?[meta.min]:[]);
+      const lo=Math.min(...cand),hi=Math.max(...cand),pad=Math.max(1,(hi-lo)*0.15);
+      const u=this.unid[m]||'';
+      new Chart(cv.getContext('2d'),{type:'line',data:{labels:pts.map(p=>this._fmt(p.data)),datasets:ds},
+        options:{responsive:true,maintainAspectRatio:false,
+          plugins:{legend:{display:false},tooltip:{backgroundColor:'#1C1B18',titleColor:'#FBF8F3',bodyColor:'#FBF8F3',padding:8,callbacks:{label:c=>`${c.parsed.y} ${u}`.trim()}}},
+          scales:{x:{ticks:{color:'#8A8578',font:{size:9},maxTicksLimit:8},grid:{display:false}},
+            y:{suggestedMin:lo-pad,suggestedMax:hi+pad,ticks:{color:'#8A8578',font:{size:9}},grid:{color:'#E4DFD4'}}}}});
+    });
   },
 
   // bloco "desde seu último acesso"
@@ -1113,6 +1145,17 @@ const PORTAL = {
 
     const temDose=d.doses.length&&d.pesos.length>=2;
 
+    // v5.47 (V5) — Evolução dos marcadores-chave no portal do médico.
+    // Mesma correção do app: dedupe por data (um ponto/dia) e coage p/ número.
+    const _prioEx=['glicose','hba1c','homa_ir','ldl','hdl','triglicerides','testosterona_total','testosterona_livre','vitamina_d','ferritina','tgo','tgp','creatinina'];
+    const _porMev={}; (d.exames||[]).forEach(e=>{ const v=parseFloat(e.valor); if(!isFinite(v))return; const dd=String(e.data).slice(0,10); (_porMev[e.marcador]=_porMev[e.marcador]||{})[dd]={data:dd,valor:v}; });
+    const _evolMids=_prioEx.filter(m=>_porMev[m]&&Object.keys(_porMev[m]).length>=2);
+    this._evolData=_porMev; this._evolMids=_evolMids;
+    const evolExamesHtml=_evolMids.length
+      ? `<div class="bloco"><div class="sec">Evolução dos marcadores<span>tendência ao longo do tempo</span></div>
+         <div class="evolgrid">${_evolMids.map(m=>`<div class="evolitem"><div class="evoltit">${this._esc(this.nomes[m]||m)}</div><div class="evolcv"><canvas id="gEx_${m}"></canvas></div></div>`).join('')}</div></div>`
+      : '';
+
     return `
     <div class="pcabecalho">
       <div><h2>${this._esc(nome)}</h2>
@@ -1143,6 +1186,8 @@ const PORTAL = {
       <table class="lab"><thead><tr><th>Marcador</th><th>Resultado</th><th>Ref. lab</th><th>Meta otim.</th><th>Situação</th><th>Evolução</th></tr></thead>
       <tbody>${linhasLab}</tbody></table>
       <p class="ref" style="margin-top:12px">*Metas individuais dependem do risco do paciente e da sua conduta.</p></div>`:''}
+
+    ${evolExamesHtml}
 
     <div class="bloco"><div class="sec">Síntese</div>
       <ol class="sintese">

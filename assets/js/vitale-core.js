@@ -630,6 +630,26 @@ const VITALE_CORE = {
   // continuava vendo ritmo alto e projeções que nunca se realizariam.
   // Agora usa a janela recente (padrão 28 dias) e só cai para o
   // histórico quando não há registros recentes suficientes.
+  // v5.47 (V3) — marca as submetas como bolinhas na barra de progresso da meta.
+  // Verde = já batida; dourada = a caminho. Posição = % entre início e meta.
+  _renderMetaMarcos(inicio, atual, meta, temMeta) {
+    const box = document.getElementById('metaMarcos');
+    if (!box) return;
+    if (!temMeta || !(inicio > meta)) { box.innerHTML = ''; box.style.display = 'none'; return; }
+    const sms = (this.state.submetas || [])
+      .filter(s => s.pesoAlvo > meta && s.pesoAlvo < inicio)
+      .sort((a, b) => b.pesoAlvo - a.pesoAlvo);
+    if (!sms.length) { box.innerHTML = ''; box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    box.innerHTML = sms.map(s => {
+      const pct = Math.min(98, Math.max(2, (inicio - s.pesoAlvo) / (inicio - meta) * 100));
+      const batida = atual <= s.pesoAlvo;
+      const cor = batida ? 'var(--em)' : 'var(--gold)';
+      return `<div style="position:absolute;left:${pct}%;top:50%;transform:translate(-50%,-50%)" title="Submeta ${s.pesoAlvo.toFixed(1)} kg${batida ? ' — batida' : ''}">
+        <div style="width:11px;height:11px;border-radius:50%;background:${cor};border:2px solid var(--bg);box-shadow:0 0 0 1px ${cor}"></div></div>`;
+    }).join('');
+  },
+
   _velocidade(janelaDias = 28) {
     const sorted = this.getSorted();
     if (sorted.length < 2) return { kgDia: 0, base: 'sem_dados', dias: 0, confiavel: false };
@@ -1898,7 +1918,9 @@ const VITALE_CORE = {
       // + musculação). Contar "dias ativos" (datas distintas) faz mais sentido
       // do que contar sessões. Minutos continua sendo a soma real.
       const diasAtivos = new Set(doSem.map(e => norm(e.data))).size;
-      return { label: `${ini.getDate()}/${ini.getMonth() + 1}`, iniS, fimS, min: doSem.reduce((s, e) => s + (e.duracao_min || 0), 0), n: diasAtivos };
+      // v5.47 — rótulo como INTERVALO da semana (7–13/7), não só o dia de início
+      // (antes "7/7" parecia dia/mês e confundia).
+      return { label: `${ini.getDate()}–${fim.getDate()}/${fim.getMonth() + 1}`, iniS, fimS, min: doSem.reduce((s, e) => s + (e.duracao_min || 0), 0), n: diasAtivos };
     });
 
     // streak: semanas consecutivas (terminando na atual) com pelo menos 1 dia ativo
@@ -2348,12 +2370,41 @@ const VITALE_CORE = {
       const mTxt = document.getElementById('metaText');
       if (pTotal) pTotal.textContent = pct + '%';
       if (dRastro) dRastro.textContent = dias;
+      // v5.47 — ritmo kg/semana no cabeçalho (veio do bloco da IA)
+      {
+        const hR = document.getElementById('hdrRitmo');
+        if (hR) {
+          const v = this._velocidade();
+          const kgSem = v.kgDia * 7;
+          hR.textContent = kgSem > 0.005 ? kgSem.toFixed(2)
+            : (kgSem < -0.005 ? '+' + Math.abs(kgSem).toFixed(2) : '0');
+        }
+      }
       if (mInicio) mInicio.textContent = first.peso.toFixed(1);
       if (mLabel) mLabel.textContent = temMeta ? this.metaKg.toFixed(1) : '—';
       if (mProg) mProg.style.width = (temMeta ? progress.toFixed(1) : '100') + '%';
-      if (mTxt) mTxt.textContent = temMeta
-        ? `Faltam ${Math.max(last.peso - this.metaKg, 0).toFixed(1)} kg para IMC < 30 — ${progress.toFixed(0)}% concluído`
-        : this._metaTextoObjetivo();
+      // v5.47 (V3) — meta com projeção (ritmo + data estimada) e marcos de submeta
+      if (mTxt) {
+        if (temMeta) {
+          const kgFalta = Math.max(last.peso - this.metaKg, 0);
+          const v = this._velocidade();
+          const kgSem = v.kgDia > 0 ? v.kgDia * 7 : 0;
+          let proj;
+          if (kgFalta <= 0.05) proj = '<strong style="color:var(--em)">Você atingiu o peso-meta! 🎉</strong>';
+          else if (kgSem > 0.05) {
+            const diasMeta = Math.ceil(kgFalta / v.kgDia);
+            const dataMeta = new Date(Date.now() + diasMeta * 86400000);
+            proj = `No ritmo de <strong>${kgSem.toFixed(2)} kg/semana</strong> (${this._velocidadeFonte(v)}), você chega em <strong style="color:var(--em)">${this.fmtLong(dataMeta)}</strong> — ~${diasMeta} dias.`;
+            if (!v.confiavel) proj += ' <span style="color:var(--textm)">Estimativa ainda pouco confiável — registre mais pesagens.</span>';
+          } else {
+            proj = '<span style="color:var(--textm)">Ritmo recente estável; registre mais pesagens para projetar a data.</span>';
+          }
+          mTxt.innerHTML = `Faltam <strong>${kgFalta.toFixed(1)} kg</strong> para IMC &lt; 30 — <strong>${progress.toFixed(0)}%</strong> concluído.<br>${proj}`;
+        } else {
+          mTxt.textContent = this._metaTextoObjetivo();
+        }
+      }
+      try { this._renderMetaMarcos(first.peso, last.peso, this.metaKg, temMeta); } catch (e) {}
 
       this.buildWeightChart();
       this.buildIMCChart();
@@ -2423,13 +2474,9 @@ const VITALE_CORE = {
     }
     el.innerHTML = msg;
 
-    if (ft) {
-      ft.innerHTML = `
-        <div class="coach-stat"><div class="coach-stat-val">${totalPerdido.toFixed(1)} kg</div><div class="coach-stat-lbl">Total Perdido</div></div>
-        <div class="coach-stat"><div class="coach-stat-val">${velSemanal}</div><div class="coach-stat-lbl">kg/semana</div></div>
-        ${dataMeta ? `<div class="coach-stat"><div class="coach-stat-val" style="color:var(--gold);font-size:13px">${diasParaMeta}d</div><div class="coach-stat-lbl">Para Meta</div></div>` : ''}
-      `;
-    }
+    // v5.47 — os 3 stats (Total Perdido / kg-semana / Para Meta) saíram daqui
+    // para o cabeçalho fixo do topo (economia de espaço, pedido do Dilson).
+    if (ft) { ft.innerHTML = ''; ft.style.display = 'none'; }
   },
 
   // Invalida cache do Coach IA (chamar quando dados mudam)
