@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.44 · 2FA off no app do paciente (teste) · A44 · 2026-07-22';
+const VITALE_VERSION = 'v5.45 · UX-2 home em 3 zonas + período unificado · A45 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -858,9 +858,10 @@ const VITALE_CORE = {
 
     el.innerHTML = this._badges.map(b => {
       const got = desbloqueados.has(b.id);
-      return `<div title="${b.desc}" style="text-align:center;padding:12px 8px;border-radius:12px;background:${got ? 'rgba(212,168,67,0.1)' : 'rgba(255,255,255,0.02)'};border:1px solid ${got ? 'rgba(212,168,67,0.3)' : 'var(--border)'};${got ? '' : 'opacity:0.4;filter:grayscale(1)'}">
-        <div style="font-size:32px;line-height:1;margin-bottom:6px">${b.icone}</div>
-        <div style="font-size:11px;color:${got ? 'var(--text)' : 'var(--textm)'};font-weight:${got ? '600' : '400'}">${b.nome}</div>
+      // v5.45 — conquistas mais compactas
+      return `<div title="${b.desc} — ${b.nome}" style="text-align:center;padding:8px 5px;border-radius:10px;background:${got ? 'rgba(212,168,67,0.1)' : 'rgba(255,255,255,0.02)'};border:1px solid ${got ? 'rgba(212,168,67,0.3)' : 'var(--border)'};${got ? '' : 'opacity:0.4;filter:grayscale(1)'}">
+        <div style="font-size:22px;line-height:1;margin-bottom:3px">${b.icone}</div>
+        <div style="font-size:9.5px;color:${got ? 'var(--text)' : 'var(--textm)'};font-weight:${got ? '600' : '400'};line-height:1.2">${b.nome}</div>
       </div>`;
     }).join('');
     this.renderBadgeResumo();
@@ -1747,9 +1748,17 @@ const VITALE_CORE = {
 
     const norm = v => this._normData ? this._normData(v) : (v || '').slice(0, 10);
     const hoje = new Date();
-    // 8 semanas (segunda a domingo aproximado por janelas de 7 dias)
-    const semanas = [...Array(8)].map((_, i) => {
-      const fim = new Date(hoje.getTime() - (7 - i) * 7 * 86400000);
+    // v5.45 — respeita o período do dashboard. Descobre a janela em dias a
+    // partir do filtro; sem filtro ("Tudo"), usa 56 dias (8 semanas).
+    const filtroDe = this.dashFiltro?.de ? norm(this.dashFiltro.de) : null;
+    let janelaDias = 56;
+    if (filtroDe) {
+      const dd = Math.round((Date.now() - new Date(filtroDe + 'T12:00:00')) / 86400000);
+      if (dd > 0) janelaDias = dd;
+    }
+    const nSemanas = Math.max(2, Math.min(12, Math.ceil(janelaDias / 7)));
+    const semanas = [...Array(nSemanas)].map((_, i) => {
+      const fim = new Date(hoje.getTime() - (nSemanas - 1 - i) * 7 * 86400000);
       const ini = new Date(fim.getTime() - 6 * 86400000);
       const iniS = ini.toISOString().slice(0, 10), fimS = fim.toISOString().slice(0, 10);
       const doSem = exs.filter(e => { const d = norm(e.data); return d >= iniS && d <= fimS; });
@@ -1760,25 +1769,31 @@ const VITALE_CORE = {
     let streak = 0;
     for (let i = semanas.length - 1; i >= 0; i--) { if (semanas[i].n > 0) streak++; else break; }
 
-    // resumo dos últimos 7 dias
-    const seteDias = new Date(hoje.getTime() - 6 * 86400000).toISOString().slice(0, 10);
-    const sem7 = exs.filter(e => norm(e.data) >= seteDias);
-    const min7 = sem7.reduce((s, e) => s + (e.duracao_min || 0), 0);
-    const kcal7 = sem7.reduce((s, e) => s + (e.calorias || 0), 0);
+    // resumo do PERÍODO selecionado (não fixo em 7 dias)
+    const corte = filtroDe || new Date(hoje.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+    const noPeriodo = exs.filter(e => norm(e.data) >= corte);
+    const nTreinos = noPeriodo.length;
+    const minP = noPeriodo.reduce((s, e) => s + (e.duracao_min || 0), 0);
+    const kcalP = noPeriodo.reduce((s, e) => s + (e.calorias || 0), 0);
+    const rotPer = filtroDe ? 'NO PERÍODO' : 'ÚLT. 7 DIAS';
+
+    // média semanal para comparar com a meta da OMS (150 min/sem)
+    const semanasNoPer = Math.max(1, janelaDias / 7);
+    const mediaSemanal = Math.round(minP / semanasNoPer);
 
     const stEl = document.getElementById('exercHomeStreak');
     if (stEl) stEl.innerHTML = streak >= 2 ? `🔥 ${streak} semanas seguidas ativo` : '';
 
     const resumo = document.getElementById('exercHomeResumo');
     if (resumo) resumo.innerHTML = `
-      <div><div style="font-size:24px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums">${sem7.length}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">TREINOS · 7d</div></div>
-      <div><div style="font-size:24px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums">${min7}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">MINUTOS</div></div>
-      <div><div style="font-size:24px;font-weight:700;color:var(--em);font-variant-numeric:tabular-nums">${kcal7}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">KCAL</div></div>`;
+      <div><div style="font-size:24px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums">${nTreinos}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">TREINOS · ${rotPer}</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums">${minP}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">MINUTOS</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--em);font-variant-numeric:tabular-nums">${kcalP}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">KCAL</div></div>`;
 
     const nota = document.getElementById('exercHomeNota');
-    if (nota) nota.innerHTML = min7 >= 150
-      ? `<strong style="color:var(--em)">✅ ${min7} min nesta semana</strong> — você já bateu a recomendação da OMS (150 min).`
-      : `Faltam <strong>${150 - min7} min</strong> para os 150 min/semana recomendados pela OMS. As barras verdes são as semanas no alvo.`;
+    if (nota) nota.innerHTML = mediaSemanal >= 150
+      ? `<strong style="color:var(--em)">✅ média de ${mediaSemanal} min/semana</strong> — acima da recomendação da OMS (150 min). Barras verdes = semanas no alvo.`
+      : `Média de <strong>${mediaSemanal} min/semana</strong> no período — a OMS recomenda 150. As barras verdes são as semanas que bateram a meta.`;
 
     const ctx = document.getElementById('exercHomeChart');
     if (ctx) {
@@ -1971,6 +1986,8 @@ const VITALE_CORE = {
     try { dados = await this.loadMoodHistorico(); }
     catch (e) { card.style.display = 'none'; return; }
 
+    // v5.45 — respeita o período do dashboard (filtro unificado)
+    dados = (dados || []).filter(d => this._dentroDoFiltro(d.data));
     if (!dados || dados.length < 2) { card.style.display = 'none'; return; }
     card.style.display = '';
 
@@ -3617,7 +3634,14 @@ const VITALE_CORE = {
   dashFiltro: { de: null, ate: null },
 
   // v5.5 — Filtro rápido por período (30/60/90/120 dias · tudo)
-  filtrarPeriodoDashboard(dias) {
+  // v5.45 — mostra/esconde o intervalo personalizado (De/Até)
+  _toggleFiltroData(e) {
+    if (e) e.preventDefault();
+    const box = document.getElementById('filtroDataCustom');
+    if (box) box.style.display = box.style.display === 'flex' ? 'none' : 'flex';
+  },
+
+  filtrarPeriodoDashboard(dias, botao) {
     const elDe = document.getElementById('dashFiltroDe');
     const elAte = document.getElementById('dashFiltroAte');
     if (!dias) { // "tudo"
@@ -3632,11 +3656,11 @@ const VITALE_CORE = {
       if (elDe) elDe.value = de;
       if (elAte) elAte.value = '';
     }
-    this.buildWeightChart();
-    this.buildIMCChart();
-    if (this.buildComposicaoChart) this.buildComposicaoChart();
-    if (this.buildMedidasChart) this.buildMedidasChart();
-    this._atualizarInfoFiltro();
+    // marca o chip ativo
+    document.querySelectorAll('#perBar .chip').forEach(c => c.classList.remove('on'));
+    if (botao) botao.classList.add('on');
+    else { const alvo = document.querySelector(`#perBar .chip[data-dias="${dias || ''}"]`); if (alvo) alvo.classList.add('on'); }
+    this._redesenharGraficosPeriodo();
   },
 
   aplicarFiltroDashboard() {
@@ -3644,11 +3668,8 @@ const VITALE_CORE = {
       de: document.getElementById('dashFiltroDe')?.value || null,
       ate: document.getElementById('dashFiltroAte')?.value || null
     };
-    this.buildWeightChart();
-    this.buildIMCChart();
-    this.buildMedidasChart();
-    this.buildComposicaoChart();
-    this._atualizarInfoFiltro();
+    document.querySelectorAll('#perBar .chip').forEach(c => c.classList.remove('on'));
+    this._redesenharGraficosPeriodo();
   },
 
   limparFiltroDashboard() {
@@ -3657,10 +3678,18 @@ const VITALE_CORE = {
     const ate = document.getElementById('dashFiltroAte');
     if (de) de.value = '';
     if (ate) ate.value = '';
-    this.buildWeightChart();
-    this.buildIMCChart();
-    this.buildMedidasChart();
-    this.buildComposicaoChart();
+    this._redesenharGraficosPeriodo();
+  },
+
+  // v5.45 — um único ponto que redesenha TODOS os gráficos da home sob o
+  // período ativo: peso, IMC, composição, medidas, treino e diário.
+  _redesenharGraficosPeriodo() {
+    try { this.buildWeightChart(); } catch (e) {}
+    try { this.buildIMCChart(); } catch (e) {}
+    try { if (this.buildComposicaoChart) this.buildComposicaoChart(); } catch (e) {}
+    try { if (this.buildMedidasChart) this.buildMedidasChart(); } catch (e) {}
+    try { this.renderExercicioHome(); } catch (e) {}
+    try { this.renderMoodHistorico(); } catch (e) {}
     this._atualizarInfoFiltro();
   },
 

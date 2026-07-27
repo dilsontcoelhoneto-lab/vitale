@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A44">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A45">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A44"></script>
+<script src="/config.js?v=A45"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -113,26 +113,48 @@
 
   <!-- DASHBOARD -->
   <div id="dashboard" class="tab-content active">
-    <h2 style="font-size:30px;margin-bottom:20px;color:var(--gold)">Dashboard</h2>
-    <!-- Resumo de conquistas/streak no topo -->
-    <div id="badgeResumo" style="background:linear-gradient(135deg,rgba(212,168,67,0.08),rgba(212,168,67,0.02));border:1px solid rgba(212,168,67,0.2);border-radius:14px;padding:14px 18px;margin-bottom:20px"></div>
-    <!-- Dica diária da IA -->
-    <div id="dicaDiaria" style="display:none;background:rgba(74,157,232,0.06);border:1px solid rgba(74,157,232,0.18);border-radius:12px;padding:12px 16px;margin-bottom:20px"></div>
 
-    <!-- DOSE GLP-1 (v5.16) — lembrete no dia e confirmação em um toque -->
-    <div id="doseGlp1Card" style="display:none;margin-bottom:20px"></div>
+    <!-- ============================================================
+         v5.45 · UX-2 — home em 3 zonas com período unificado.
+         O controle de período no topo da Evolução rege TODOS os
+         gráficos (peso, IMC, composição, medidas, treino, diário).
+         ============================================================ -->
+    <style>
+      .zona{margin:0 0 10px}
+      .zona-tit{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);
+        margin:26px 0 12px;display:flex;align-items:center;gap:10px}
+      .zona-tit::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border2),transparent)}
+      .zona-tit:first-of-type{margin-top:4px}
+      .perbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+      .perbar .chip{background:transparent;border:1px solid var(--border2);color:var(--textm);border-radius:20px;
+        padding:7px 14px;font-size:13px;font-family:inherit;cursor:pointer;transition:.15s;min-height:36px}
+      .perbar .chip.on{background:rgba(212,168,67,0.12);border-color:var(--gold);color:var(--gold);font-weight:600}
+      .perbar .chip:hover{color:var(--text)}
+    </style>
+
+    <!-- ZONA 1 · HOJE ------------------------------------------------ -->
+    <div class="zona-tit">Hoje</div>
+
+    <div id="badgeResumo" style="background:linear-gradient(135deg,rgba(212,168,67,0.08),rgba(212,168,67,0.02));border:1px solid rgba(212,168,67,0.2);border-radius:12px;padding:11px 15px;margin-bottom:16px;font-size:13px"></div>
+    <div id="dicaDiaria" style="display:none;background:rgba(74,157,232,0.06);border:1px solid rgba(74,157,232,0.18);border-radius:12px;padding:12px 16px;margin-bottom:16px"></div>
+    <div id="doseGlp1Card" style="display:none;margin-bottom:16px"></div>
 
     <div class="card card--destaque" id="cardRegistrar" style="border-color:rgba(212,168,67,0.3)">
       <h3><span class="ico">✍️</span> Registrar</h3>
-      <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px">Conte em uma frase — a IA separa cada dado e você confirma. Ex: <em>"pesei 88,4, tomei a dose de 7,5, almocei frango com arroz e caminhei 40 min"</em>. Peso, dose, refeição, treino e contexto entram de uma vez.</p>
+      <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px">Conte em uma frase — a IA separa cada dado e você confirma. Ex: <em>"pesei 88,4, tomei a dose de 7,5, almocei frango com arroz e caminhei 40 min"</em>.</p>
       <textarea id="diarioTexto" rows="2" placeholder="pesei 88,4 · dose 7,5 · almocei frango com arroz · caminhei 40 min" style="width:100%;margin-bottom:10px;resize:vertical"></textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-gold btn-small" onclick="VITALE_CORE.diarioProcessar()">✨ Analisar e confirmar</button>
-        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.switchTab({currentTarget:document.querySelector('[onclick*=upload]')},'upload')">📷 Enviar foto/print</button>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.irAba('upload')">📷 Enviar foto/print</button>
       </div>
       <div id="diarioResult" style="margin-top:10px"></div>
     </div>
-    <!-- COACH + ANÁLISE COMPLETA (unificados na v5.16) -->
+
+    <div class="card" id="balancoCard" style="display:none"></div>
+
+    <!-- ZONA 2 · MOTIVAÇÃO ------------------------------------------ -->
+    <div class="zona-tit">Motivação</div>
+
     <div class="coach-card" data-flag="dashboard">
       <div class="coach-header">
         <div class="coach-avatar">🤖</div>
@@ -141,27 +163,48 @@
       <div class="coach-message" id="coachMessage">Carregando...</div>
       <div class="coach-footer" id="coachFooter"></div>
       <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
-        <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px;line-height:1.6">Quer o mergulho completo? A IA cruza peso, composição, alimentação, exercício, GLP-1, exames e contexto como um conjunto.</p>
+        <p style="font-size:12.5px;color:var(--textm);margin-bottom:10px;line-height:1.6">Quer o mergulho completo? A IA cruza peso, composição, alimentação, exercício, GLP-1, exames, DNA e contexto como um conjunto.</p>
         <button class="btn btn-primary btn-small" id="btnAnaliseCompleta" onclick="VITALE_CORE.pedirAnaliseCompleta()" style="width:100%">🧠 Gerar análise mais completa</button>
         <div id="analiseResultado" style="margin-top:14px"></div>
       </div>
     </div>
 
-    <!-- FASE A — Balanço Calórico -->
-    <div class="card" id="balancoCard" style="display:none"></div>
-
-    <!-- v5.41 — card de exercícios na home: incentivo visual (semana × meta OMS) -->
     <div class="card" id="exercHomeCard" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
-        <h3><span class="ico">🏃</span> Sua semana de treino</h3>
+        <h3><span class="ico">🏃</span> Treino no período</h3>
         <span id="exercHomeStreak" style="font-size:12px;color:var(--textm)"></span>
       </div>
       <div id="exercHomeResumo" style="display:flex;gap:18px;justify-content:space-around;text-align:center;margin:10px 0 14px"></div>
       <div style="height:120px"><canvas id="exercHomeChart"></canvas></div>
       <div id="exercHomeNota" style="font-size:12px;color:var(--textm);margin-top:10px;line-height:1.6"></div>
     </div>
-    <!-- BLOCO B — Diário Rápido -->
+
     <div class="card" id="moodCard" data-editando="0" data-flag="dashboard"><span style="color:var(--textm)">📔 Carregando diário…</span></div>
+
+    <!-- ZONA 3 · EVOLUÇÃO (período unificado) ----------------------- -->
+    <div class="zona-tit">Evolução</div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <strong style="font-size:13px;color:var(--text)">Período</strong>
+        <a href="#" onclick="VITALE_CORE._toggleFiltroData(event)" style="font-size:12px;color:var(--textm)">intervalo personalizado</a>
+      </div>
+      <div class="perbar" id="perBar">
+        <button class="chip" data-dias="15" onclick="VITALE_CORE.filtrarPeriodoDashboard('15',this)">15 dias</button>
+        <button class="chip" data-dias="30" onclick="VITALE_CORE.filtrarPeriodoDashboard('30',this)">30 dias</button>
+        <button class="chip" data-dias="60" onclick="VITALE_CORE.filtrarPeriodoDashboard('60',this)">60 dias</button>
+        <button class="chip" data-dias="120" onclick="VITALE_CORE.filtrarPeriodoDashboard('120',this)">120 dias</button>
+        <button class="chip on" data-dias="" onclick="VITALE_CORE.filtrarPeriodoDashboard('',this)">Tudo</button>
+      </div>
+      <div id="filtroDataCustom" style="display:none;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:4px">
+        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">De</label><input type="date" id="dashFiltroDe" style="width:100%"></div>
+        <div style="flex:1;min-width:120px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Até</label><input type="date" id="dashFiltroAte" style="width:100%"></div>
+        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.aplicarFiltroDashboard()">🔍 Filtrar</button>
+      </div>
+      <div id="dashFiltroInfo" style="display:none;font-size:12px;color:var(--gold);margin-top:10px;padding:8px 12px;background:rgba(212,168,67,0.06);border-radius:8px"></div>
+      <select id="dashPeriodoRapido" style="display:none"></select>
+    </div>
+
     <div class="imc-card">
       <p class="imc-label">Seu IMC Atual</p>
       <div class="imc-value" id="imcValue">—</div>
@@ -173,6 +216,7 @@
       <div class="stat"><div class="stat-value" id="perdaTotal">—</div><div class="stat-label">Perda Total</div></div>
       <div class="stat"><div class="stat-value" id="diasRastro">—</div><div class="stat-label">Dias Rastreando</div></div>
     </div>
+
     <div class="card">
       <h3><span class="ico">📈</span> Progresso para Meta</h3>
       <div style="display:flex;justify-content:space-between;margin-bottom:12px">
@@ -182,17 +226,9 @@
       <div class="progress-wrap"><div class="progress-bar"><div class="progress-fill" id="metaProgress" style="width:0%"></div></div></div>
       <p style="font-size:12px;color:var(--textm);margin-top:10px" id="metaText">—</p>
     </div>
+
     <div class="chart-card">
       <h3><span class="ico">📉</span> Histórico + Projeção</h3>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
-        <div style="width:130px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Período</label><select id="dashPeriodoRapido" onchange="VITALE_CORE.filtrarPeriodoDashboard(this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:10px;padding:9px;color:var(--text);font-family:inherit;font-size:14px"><option value="" selected>Tudo</option><option value="30">30 dias</option><option value="60">60 dias</option><option value="90">90 dias</option><option value="120">120 dias</option><option value="180">6 meses</option></select></div>
-        <div style="flex:1;min-width:110px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">De</label><input type="date" id="dashFiltroDe" style="width:100%"></div>
-        <div style="flex:1;min-width:110px"><label style="font-size:10px;color:var(--textm);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:4px">Até</label><input type="date" id="dashFiltroAte" style="width:100%"></div>
-        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.aplicarFiltroDashboard()" style="padding:9px 16px">🔍 Filtrar</button>
-        <button class="btn btn-secondary btn-small" onclick="VITALE_CORE.limparFiltroDashboard()" style="padding:9px 16px">↺ Limpar</button>
-      </div>
-      <div id="dashFiltroInfo" style="display:none;font-size:12px;color:var(--gold);margin-bottom:12px;padding:8px 12px;background:rgba(212,168,67,0.06);border-radius:8px"></div>
-      <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);font-size:11px;color:var(--textm)">📊 O filtro de período afeta todos os gráficos abaixo (peso, IMC, composição e medidas).</div>
       <div class="chart-wrapper"><canvas id="weightChart"></canvas></div>
       <div class="chart-legend">
         <div class="legend-item"><div class="legend-dot" style="background:#27c47d"></div>Peso real</div>
@@ -203,7 +239,6 @@
       </div>
     </div>
 
-    <!-- BLOCO IMC — Mini-gráfico de evolução do IMC -->
     <div class="chart-card" id="imcChartCard" style="margin-top:20px">
       <div id="imcChartHeader" style="margin-bottom:16px"></div>
       <div class="chart-wrapper" style="height:200px"><canvas id="imcChart"></canvas></div>
@@ -216,29 +251,26 @@
       </div>
     </div>
 
-    <!-- BLOCO COMPOSIÇÃO — Músculo vs Gordura (métrica-chave GLP-1) -->
     <div class="chart-card" id="composicaoChartCard" style="margin-top:20px;display:none">
       <h3 style="margin-bottom:16px"><span class="ico">📊</span> Composição: Músculo vs Gordura</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="composicaoChart"></canvas></div>
       <p style="font-size:11px;color:var(--textm);margin-top:10px;text-align:center">💡 No tratamento GLP-1, o ideal é a linha de gordura cair enquanto a de músculo se mantém.</p>
     </div>
 
-    <!-- BLOCO MEDIDAS — Gráfico de evolução -->
     <div class="chart-card" id="medidasChartCard" style="margin-top:20px;display:none">
       <h3 style="margin-bottom:16px"><span class="ico">📏</span> Medidas Corporais (cm)</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="medidasChart"></canvas></div>
     </div>
 
-    <!-- BLOCO F — Histórico do Diário -->
     <div class="chart-card" id="moodHistCard" style="margin-top:20px;display:none">
-      <h3 style="margin-bottom:16px"><span class="ico">📔</span> Diário — Últimos 30 dias</h3>
+      <h3 style="margin-bottom:16px"><span class="ico">📔</span> Diário</h3>
       <div class="chart-wrapper" style="height:200px"><canvas id="moodHistChart"></canvas></div>
     </div>
 
-    <!-- BLOCO GAMIFICAÇÃO — Galeria de Conquistas -->
-    <div class="card" style="margin-top:20px">
-      <div id="conquistasHeader" style="margin-bottom:14px"><strong style="color:var(--gold)">🏆 Conquistas</strong></div>
-      <div id="conquistasGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:10px"></div>
+    <!-- Conquistas (compactas) -->
+    <div class="card" style="margin-top:22px">
+      <div id="conquistasHeader" style="margin-bottom:12px"><strong style="color:var(--gold);font-size:14px">🏆 Conquistas</strong></div>
+      <div id="conquistasGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px"></div>
     </div>
   </div>
 
@@ -1308,13 +1340,13 @@
 <!-- SELO DE VERSÃO — controlado pelo HTML (não depende do core).
      Ao colar um app.html novo, esta linha sobe junto e confirma qual versão está no ar. -->
 <div id="vitaleVersion" style="position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);border-top:1px solid var(--border);font-size:11px;color:var(--textm);font-family:monospace;z-index:200;padding:6px 12px;text-align:center;letter-spacing:0.5px">
-  app.html <strong style="color:var(--gold)">A44</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
+  app.html <strong style="color:var(--gold)">A45</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A44"></script>
-<script src="/assets/js/supabase-client.js?v=A44"></script>
-<script src="/assets/js/feature-flags.js?v=A44"></script>
-<script src="/assets/js/vitale-core.js?v=A44"></script>
+<script src="/assets/js/vitale-calc.js?v=A45"></script>
+<script src="/assets/js/supabase-client.js?v=A45"></script>
+<script src="/assets/js/feature-flags.js?v=A45"></script>
+<script src="/assets/js/vitale-core.js?v=A45"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1331,7 +1363,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.44';
+  const CORE_ESPERADO = 'v5.45';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;
