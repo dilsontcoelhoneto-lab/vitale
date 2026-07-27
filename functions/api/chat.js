@@ -95,6 +95,7 @@ REGRAS:
 - Se houver "proteina" (meta_g_dia, hoje_g e meta_batida_ultimos_7_dias), comente a adesão à proteína — é o fator que mais preserva massa magra em GLP-1. Ex.: bateu a meta em poucos dos 7 é um alerta prático. Cruze com "composicao.tendencia_massa_muscular" quando existir.
 - Se houver "balanco_calorico" com basal/rotina/exercicio, distinga a origem do déficit (treino vs. ingestão) — são leituras diferentes.
 - Se houver "protocolo_medicacoes" (medicamentos e suplementos com horário, relação com alimento e há quanto tempo usa), considere-o na leitura: possíveis interações (ex.: NAC × zinco, ferro × cálcio), adesão, se o horário/alimento está adequado (ex.: lipossolúveis com gordura), e conexões com os exames (ex.: estatina e enzimas hepáticas; metformina e B12). Não prescreva dose — comente de forma educativa e sugira validar com o médico.
+- Se houver "genetica" (achados de teste de DNA), use como CONTEXTO explicativo, não como diagnóstico: conecte com os exames e o protocolo (ex.: predisposição a vitamina D baixa explica a Vit. D dos exames e justifica a suplementação; variante MTHFR justifica B-complexo metilado; predisposição a obesidade reforça a importância do controle de peso). Trate como probabilidade herdada, sempre "predisposição", nunca certeza. Alertas farmacogenéticos (ex.: sensibilidade a AINEs) valem menção.
 - Use HTML inline simples (<strong>, <br>), sem markdown. Máximo ~550 palavras, parágrafos curtos. Não repita o JSON nem liste dados crus.
 
 DADOS DA PESSOA (JSON):
@@ -165,7 +166,7 @@ Os dados são AUTO-RELATADOS pelo paciente no app (peso, composição por bioimp
 Produza um resumo TELEGRÁFICO em HTML inline (<strong>, <br>), com estes blocos:
 <strong>Panorama</strong> — 1-2 linhas: quem é, objetivo, tempo de acompanhamento, tendência de peso/composição.
 <strong>Sinais de atenção</strong> — marcadores fora da faixa, combinações de risco, adesão à proteína baixa, efeitos colaterais relatados. Ordene por relevância clínica. Se nada relevante, diga.
-<strong>Interações e conduta a considerar</strong> — do protocolo: interações plausíveis, adequação de horário/jejum, e conexões com exames (ex.: estatina × TGO/TGP, metformina × B12). Sugestões de conduta como HIPÓTESES a validar, nunca prescrição.
+<strong>Interações e conduta a considerar</strong> — do protocolo: interações plausíveis, adequação de horário/jejum, e conexões com exames (ex.: estatina × TGO/TGP, metformina × B12). Se houver "genetica", conecte achados relevantes (ex.: predisposição a Vit. D baixa, MTHFR, farmacogenética de AINEs, portador de alfa-1 antitripsina). Sugestões de conduta como HIPÓTESES a validar, nunca prescrição.
 <strong>Perguntar na consulta</strong> — 2-3 perguntas objetivas que os dados sugerem.
 
 REGRAS: máximo ~350 palavras; sem diagnóstico fechado; sem dose prescrita; termine com "<em>Resumo assistido por IA sobre dados auto-relatados — a conduta é do médico.</em>". Não repita o JSON.

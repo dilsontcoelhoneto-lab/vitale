@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.42 · Abdome unificado + score de atenção (IA-6) · A42 · 2026-07-22';
+const VITALE_VERSION = 'v5.43 · DNA + exames históricos + TMB · A43 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -87,11 +87,12 @@ const VITALE_CORE = {
         this.loadEfeitos(),
         this.loadMemoria(),
         this.loadExames(),
-        this.loadExameArquivos()
+        this.loadExameArquivos(),
+        this.loadGenetica()
       ]);
 
-      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos', 'memoria', 'exames', 'exameArquivos'];
-      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], [], [], [], []];
+      const nomes = ['profile', 'weights', 'weightsRaw', 'medicacoes', 'submetas', 'healthProfile', 'moodHoje', 'conquistas', 'exercicios', 'medidas', 'composicao', 'refeicoes', 'doses', 'efeitos', 'memoria', 'exames', 'exameArquivos', 'genetica'];
+      const fallbacks = [null, [], [], [], [], null, null, [], [], [], [], [], [], [], [], [], [], []];
       const falhas = [];
       const val = results.map((r, i) => {
         if (r.status === 'fulfilled') return r.value;
@@ -118,6 +119,7 @@ const VITALE_CORE = {
       this.state.memoria = val[14] || [];
       this.state.exames = val[15] || [];
       this.state.exameArquivos = val[16] || [];
+      this.state.genetica = val[17] || [];
 
       // v5.10 — grava o aceite dos termos no perfil (LGPD), no 1º acesso após cadastro
       try { await this.registrarConsentimentoPendente(); } catch (e) { console.warn('consentimento', e); }
@@ -2147,6 +2149,8 @@ const VITALE_CORE = {
 
   // =====================================================
   updateDashboard() {
+    // v5.43 — garante o card de exercícios ao voltar para a home
+    try { this.renderExercicioHome(); } catch (e) {}
     if (!this.state.weights.length) {
       this.renderEmptyDashboard();
       return;
@@ -2316,6 +2320,36 @@ const VITALE_CORE = {
     { id: 'pcr', nome: 'PCR Ultrassensível', unidade: 'mg/dL', ref_min: null, ref_max: 0.3, grupo: 'Inflamação' },
     { id: 'ferritina', nome: 'Ferritina', unidade: 'ng/mL', ref_min: 22, ref_max: 322, grupo: 'Outros' }
   ],
+
+  // v5.43 — achados genéticos (Genera). Dado sensível, RLS estrita no banco.
+  async loadGenetica() {
+    const user = await window.VitaleAuth.getUser();
+    if (!user) return [];
+    const { data, error } = await window.sb.from('achados_geneticos')
+      .select('categoria, titulo, resultado, detalhe, gene, relevancia, fonte')
+      .eq('user_id', user.id)
+      .order('relevancia', { ascending: true });
+    if (error) return [];
+    return data || [];
+  },
+
+  // Card de achados genéticos (visão do paciente, na aba Exames)
+  renderGenetica() {
+    const el = document.getElementById('geneticaLista');
+    if (!el) return;
+    const g = this.state.genetica || [];
+    if (!g.length) { el.innerHTML = '<p style="font-size:13px;color:var(--textm);text-align:center;padding:12px 0">Nenhum achado genético cadastrado. Envie seu laudo de DNA na aba Registrar.</p>'; return; }
+    const cor = { alta: 'var(--gold)', media: 'var(--cyan)', baixa: 'var(--textm)' };
+    el.innerHTML = g.map(a => `
+      <div style="border-left:3px solid ${cor[a.relevancia] || 'var(--textm)'};background:var(--bg1);border-radius:8px;padding:11px 13px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;gap:10px">
+          <strong style="font-size:14px;color:var(--text)">${this._escapeHtml(a.titulo)}</strong>
+          <span style="font-size:11px;color:var(--textm)">${this._escapeHtml(a.categoria)}${a.gene ? ' · ' + this._escapeHtml(a.gene) : ''}</span>
+        </div>
+        <div style="font-size:13px;color:${cor[a.relevancia] || 'var(--text)'};margin-top:2px">${this._escapeHtml(a.resultado)}</div>
+        ${a.detalhe ? `<div style="font-size:12px;color:var(--textm);margin-top:5px;line-height:1.5">${this._escapeHtml(a.detalhe)}</div>` : ''}
+      </div>`).join('');
+  },
 
   async loadExames() {
     const user = await window.VitaleAuth.getUser();
@@ -3412,6 +3446,9 @@ const VITALE_CORE = {
       doses_glp1: doses.length ? doses : null,
       efeitos_colaterais: efeitos.length ? efeitos : null,
       protocolo_medicacoes: protocolo.length ? protocolo : null,
+      // v5.43 — achados genéticos entram no raciocínio da IA (explica exames,
+      // justifica suplementos, alerta farmacogenético)
+      genetica: (this.state.genetica || []).length ? (this.state.genetica || []).map(a => ({ categoria: a.categoria, achado: a.titulo, resultado: a.resultado, gene: a.gene || null, detalhe: a.detalhe || null })) : null,
       dados_clinicos: clinico,
       memoria_usuario: memoria.length ? memoria : null,
       exames_laboratoriais: examesCtx
@@ -6611,6 +6648,7 @@ const VITALE_CORE = {
     if (tabName === 'exames') {
       try {
         this.renderExames();
+        this.renderGenetica();
         this.renderExameArquivos();
         const ed = document.getElementById('exameData');
         if (ed && !ed.value) ed.value = this._hojeSP();

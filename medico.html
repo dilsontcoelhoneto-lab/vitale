@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A42"></script>
+<script src="/config.js?v=A43"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -1008,7 +1008,7 @@ const PORTAL = {
       await this.sb.from('acessos_medico').insert({medico_id:this.medico.id,paciente_id:pid,acao:'abriu_paciente'});
     }catch(e){}
 
-    const [perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc]=await Promise.all([
+    const [perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc,genetica]=await Promise.all([
       this.sb.from('profiles').select('nome, altura').eq('id',pid).maybeSingle().then(r=>r.data),
       this.sb.from('weights').select('data, peso').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('exames_lab').select('*').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
@@ -1017,10 +1017,11 @@ const PORTAL = {
       this.sb.from('doses_medicacao').select('data, medicamento, dose').eq('user_id',pid).order('data',{ascending:true}).then(r=>r.data||[]),
       this.sb.from('efeitos_colaterais').select('data, tipo, intensidade').eq('user_id',pid).order('data',{ascending:false}).then(r=>r.data||[]),
       this.sb.from('body_measurements').select('data, cintura, abdomen').eq('user_id',pid).order('data',{ascending:false}).then(r=>(r.data||[]).map(m=>{const a=m.abdomen!=null?m.abdomen:m.cintura;return {...m,cintura:a,abdomen:a};})),
-      this.sb.from('exercicios').select('data').eq('user_id',pid).then(r=>r.data||[])
+      this.sb.from('exercicios').select('data').eq('user_id',pid).then(r=>r.data||[]),
+      this.sb.from('achados_geneticos').select('categoria, titulo, resultado, detalhe, gene, relevancia').eq('user_id',pid).then(r=>r.data||[])
     ]);
 
-    this._fichaAtual={pid,perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc,ultimoAcesso};
+    this._fichaAtual={pid,perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc,genetica,ultimoAcesso};
     alvo.innerHTML=this.montarFicha(this._fichaAtual);
     this.graficoDosePeso(pesos,doses);
   },
@@ -1108,6 +1109,7 @@ const PORTAL = {
     // substituído pelo protocolo completo (protocoloHtml), num bloco próprio.
     const medsHtml='';
     const protocoloHtml=this._protocoloHtml(d.meds);
+    const geneticaHtml=this._geneticaHtml(d.genetica);
 
     const temDose=d.doses.length&&d.pesos.length>=2;
 
@@ -1150,6 +1152,7 @@ const PORTAL = {
       </ol></div>
 
     ${protocoloHtml}
+    ${geneticaHtml}
 
     ${(compHtml||dosesHtml||efHtml||medsHtml)?`<div class="bloco"><div class="sec">Detalhamento</div>
       <div class="grid2">${compHtml}${dosesHtml}${efHtml}${medsHtml}</div></div>`:''}
@@ -1206,6 +1209,22 @@ const PORTAL = {
       ${bloco('Medicamentos', remedios)}
       ${bloco('Suplementos', supls)}
     </div>`;
+  },
+
+  // v5.43 — achados genéticos na ficha do médico
+  _geneticaHtml(g){
+    if(!g||!g.length) return '';
+    const cor={alta:'var(--vermelho)',media:'var(--azul)',baixa:'var(--suave)'};
+    const linhas=[...g].sort((a,b)=>({alta:0,media:1,baixa:2}[a.relevancia]-{alta:0,media:1,baixa:2}[b.relevancia])).map(a=>`
+      <div class="pitem">
+        <div class="phora" style="flex:0 0 82px;font-size:11px">${this._esc(a.categoria||'')}${a.gene?'<br>'+this._esc(a.gene):''}</div>
+        <div class="pcorpo">
+          <div class="pnome">${this._esc(a.titulo)} <span class="ppri" style="color:${cor[a.relevancia]||'var(--suave)'}">•&nbsp;${this._esc(a.resultado)}</span></div>
+          ${a.detalhe?`<div class="pobs">${this._esc(a.detalhe)}</div>`:''}
+        </div>
+      </div>`).join('');
+    return `<div class="bloco"><div class="sec">Perfil genético<span>teste de DNA · auto-relatado</span></div>${linhas}
+      <p class="ref" style="margin-top:8px">Predisposições genéticas — probabilidade, não diagnóstico. Interpretação clínica e confirmação são do médico.</p></div>`;
   },
 
   graficoDosePeso(pesos,doses){
@@ -1274,7 +1293,8 @@ const PORTAL = {
         prioridade:m.prioridade,desde:m.inicio,obs:m.observacao?String(m.observacao).replace('[protocolo]','').trim():null})),
       glp1_doses:(d.doses||[]).slice(-8).map(x=>({data:x.data,medicamento:x.medicamento,dose:x.dose})),
       efeitos_colaterais:(d.efeitos||[]).slice(0,10).map(e=>({data:e.data,tipo:e.tipo,intensidade:e.intensidade})),
-      treinos_30d:(d.exerc||[]).filter(e=>new Date(e.data+'T12:00:00')>Date.now()-30*86400000).length
+      treinos_30d:(d.exerc||[]).filter(e=>new Date(e.data+'T12:00:00')>Date.now()-30*86400000).length,
+      genetica:(d.genetica||[]).map(a=>({categoria:a.categoria,achado:a.titulo,resultado:a.resultado,gene:a.gene,detalhe:a.detalhe}))
     };
 
     try{
