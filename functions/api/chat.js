@@ -122,7 +122,9 @@ ${JSON.stringify(ctx, null, 2)}`;
     // TIPO: COACH (mensagem motivacional do progresso)
     // ============================================================
     if (tipo === 'coach') {
-      const { altura, meta_kg, nome, historico, historico_peso, submetas } = contexto || {};
+      const { altura, meta_kg, nome, historico, historico_peso, submetas,
+              objetivo, exercicios_semana, proteina, balanco_calorico,
+              composicao_corporal } = contexto || {};
       const hist = historico || historico_peso || [];
       if (!Array.isArray(hist) || hist.length < 2) {
         return new Response(JSON.stringify({ error: 'Histórico insuficiente' }), { status: 400, headers: corsHeaders });
@@ -135,6 +137,15 @@ ${JSON.stringify(ctx, null, 2)}`;
       const imc = altura ? (last.peso / (altura * altura)).toFixed(1) : '—';
       const submetasTxt = (submetas || []).slice(0, 3).map(s => `- ${s.nome}: alvo ${s.pesoAlvo} kg ${s.dataAlvo ? 'até ' + s.dataAlvo : ''}`).join('\n');
 
+      // v5.40 (IA-3) — sinais além do peso, para o coach da home ser
+      // realmente personalizado. Curtos de propósito (custo baixo).
+      const sinais = [];
+      if (objetivo) sinais.push(`Objetivo declarado: ${objetivo} (adapte o tom — nem todo mundo quer emagrecer).`);
+      if (exercicios_semana) sinais.push(`Exercício nos últimos 7 dias: ${exercicios_semana.treinos} treino(s), ${exercicios_semana.minutos} min, ${exercicios_semana.kcal} kcal (${(exercicios_semana.tipos || []).join(', ')}).`);
+      if (proteina) sinais.push(`Proteína: meta ${proteina.meta_g_dia} g/dia; bateu em ${proteina.meta_batida_ultimos_7_dias} dos últimos 7 dias.`);
+      if (balanco_calorico) sinais.push(`Balanço de hoje: consumiu ${balanco_calorico.consumido} kcal, gastou ${balanco_calorico.gasto} (basal ${balanco_calorico.basal} + rotina ${balanco_calorico.rotina} + exercício ${balanco_calorico.exercicio}); saldo ${balanco_calorico.saldo}.`);
+      if (composicao_corporal && composicao_corporal.tendencia_massa_muscular) sinais.push(`Massa muscular (bioimpedância): ${composicao_corporal.tendencia_massa_muscular}.`);
+
       const prompt = `Você é o "VITALE Coach", um coach de saúde pessoal brasileiro, direto, motivador mas honesto.
 
 Dados do usuário:
@@ -143,18 +154,18 @@ Dados do usuário:
 - Peso inicial (${first.date}): ${first.peso} kg
 - Peso atual (${last.date}): ${last.peso} kg
 - IMC atual: ${imc}
-- Meta IMC < 30 (~${meta_kg} kg)
-- Período: ${dias} dias · Total perdido: ${perdido} kg · Velocidade: ${velSem} kg/semana
+- Meta (~${meta_kg} kg)
+- Período: ${dias} dias · Variação: ${perdido} kg · Velocidade: ${velSem} kg/semana
 - Últimos pesos: ${JSON.stringify(hist.slice(-6))}
 ${submetasTxt ? '\nSubmetas:\n' + submetasTxt : ''}
+${sinais.length ? '\nSinais recentes (use o que for mais relevante HOJE, não repita tudo):\n- ' + sinais.join('\n- ') : ''}
 
 Gere uma mensagem MOTIVACIONAL E PERSONALIZADA em português com:
 1. Reconhecimento do progresso real
-2. Análise da tendência das últimas semanas
-3. Projeção honesta para a meta
-4. UM conselho prático específico
+2. Uma observação PONTUAL baseada nos sinais recentes (ex.: adesão à proteína, semana de treino, saldo calórico) — escolha o mais relevante, não liste tudo
+3. UM conselho prático específico ligado ao objetivo declarado
 
-Regras: máximo 4 parágrafos curtos; HTML inline (<strong>, <span class="hl">, <br>); destaque números com <span class="hl">XX kg</span>; tom de parceiro honesto; sem markdown; no máximo 2 emojis; termine com a ação concreta, não com frase vazia. Responda APENAS o HTML.`;
+Regras: máximo 4 parágrafos curtos; adeque ao objetivo (se não é emagrecimento, NÃO fale em "perder peso"); HTML inline (<strong>, <span class="hl">, <br>); destaque números com <span class="hl">XX</span>; tom de parceiro honesto; sem markdown; no máximo 2 emojis; termine com a ação concreta. Responda APENAS o HTML.`;
 
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',

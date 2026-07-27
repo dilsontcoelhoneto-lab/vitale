@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.39 · IA vê proteína e gasto detalhado · A39 · 2026-07-22';
+const VITALE_VERSION = 'v5.40 · IA-3 Coach contextual + import Apple Saúde · A40 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
