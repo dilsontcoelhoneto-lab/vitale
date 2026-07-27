@@ -77,9 +77,15 @@ export async function onRequestPost(context) {
       }
 
       const ctx = contexto || {};
-      const promptAnalise = `Você é um analista de saúde metabólica do VITALE, com conhecimento atualizado em obesidade, tratamento GLP-1, composição corporal e hábitos.
+      const promptAnalise = `Você reúne quatro olhares sobre a mesma pessoa: um endocrinologista (metabolismo, GLP-1, tireoide, resistência à insulina), um nutrólogo (proteína, composição corporal, padrão alimentar), um fisiologista do exercício (treino, gasto energético, recuperação) e um clínico que costura tudo. Você fala pelo VITALE, para o próprio paciente ler.
 
-Analise a PESSOA COMO UM TODO a partir dos dados abaixo — não comente números isolados, encontre conexões, padrões e a história. Seja específico, acolhedor e direto. Destaque o que está indo bem, o que merece atenção, e 2-3 ações concretas. Se houver memória do usuário (eventos como viagens, padrões emocionais), use-a para contextualizar. Se houver exames laboratoriais, comente tendências (o que melhorou, o que piorou) e o que está fora da referência, conectando com peso/composição/hábitos quando fizer sentido.
+Analise a PESSOA COMO UM TODO — não comente números isolados, encontre as CONEXÕES entre eles e conte a história por trás dos dados. Cruze as quatro lentes: por exemplo, ligue a resistência à insulina (HOMA-IR) ao padrão de proteína e treino; ligue as enzimas hepáticas à estatina e ao exercício recente; ligue a preservação de massa magra à adesão à proteína no GLP-1.
+
+ESTRUTURA (use estes rótulos em <strong>, nesta ordem):
+1. <strong>O que está indo bem</strong> — 1-2 vitórias reais e específicas.
+2. <strong>O que vigiar</strong> — o que merece atenção agora, com o porquê.
+3. <strong>3 ações para as próximas semanas</strong> — concretas, na ordem de impacto.
+4. <strong>Quando procurar seu médico</strong> — só se algo justificar; diga o quê e com que urgência.
 
 REGRAS:
 - Linguagem clara, em português do Brasil, sem jargão desnecessário.
@@ -89,7 +95,7 @@ REGRAS:
 - Se houver "proteina" (meta_g_dia, hoje_g e meta_batida_ultimos_7_dias), comente a adesão à proteína — é o fator que mais preserva massa magra em GLP-1. Ex.: bateu a meta em poucos dos 7 é um alerta prático. Cruze com "composicao.tendencia_massa_muscular" quando existir.
 - Se houver "balanco_calorico" com basal/rotina/exercicio, distinga a origem do déficit (treino vs. ingestão) — são leituras diferentes.
 - Se houver "protocolo_medicacoes" (medicamentos e suplementos com horário, relação com alimento e há quanto tempo usa), considere-o na leitura: possíveis interações (ex.: NAC × zinco, ferro × cálcio), adesão, se o horário/alimento está adequado (ex.: lipossolúveis com gordura), e conexões com os exames (ex.: estatina e enzimas hepáticas; metformina e B12). Não prescreva dose — comente de forma educativa e sugira validar com o médico.
-- Use HTML inline simples (<strong>, <br>), sem markdown. Máximo ~450 palavras, parágrafos curtos.
+- Use HTML inline simples (<strong>, <br>), sem markdown. Máximo ~550 palavras, parágrafos curtos. Não repita o JSON nem liste dados crus.
 
 DADOS DA PESSOA (JSON):
 ${JSON.stringify(ctx, null, 2)}`;
@@ -97,7 +103,7 @@ ${JSON.stringify(ctx, null, 2)}`;
       const ar = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1200, messages: [{ role: 'user', content: promptAnalise }] })
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: promptAnalise }] })
       });
       if (!ar.ok) {
         const t = await ar.text();
@@ -115,6 +121,69 @@ ${JSON.stringify(ctx, null, 2)}`;
         });
       } catch (e) {}
 
+      return new Response(JSON.stringify({ message }), { headers: corsHeaders });
+    }
+
+    // ============================================================
+    // TIPO: ANÁLISE PARA O MÉDICO (IA-5) — resumo clínico assistido
+    // O médico está autenticado com o token DELE. Antes de gastar API,
+    // validamos que existe consentimento ATIVO dele para este paciente.
+    // Sem isso, um médico poderia pedir análise de quem não autorizou.
+    // ============================================================
+    if (tipo === 'analise_medico') {
+      const pacienteId = body.paciente_id;
+      if (!pacienteId) {
+        return new Response(JSON.stringify({ error: 'paciente_id ausente' }), { status: 400, headers: corsHeaders });
+      }
+      // valida consentimento ativo médico(user.id) -> paciente
+      let autorizado = false;
+      try {
+        const cr = await fetch(`${env.SUPABASE_URL}/rest/v1/consentimentos?medico_id=eq.${user.id}&paciente_id=eq.${pacienteId}&status=eq.ativo&select=id`, {
+          headers: { apikey: env.SUPABASE_SERVICE_ROLE, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}` }
+        });
+        const rows = await cr.json();
+        autorizado = Array.isArray(rows) && rows.length > 0;
+      } catch (e) {}
+      if (!autorizado) {
+        return new Response(JSON.stringify({ error: 'sem_consentimento' }), { status: 403, headers: corsHeaders });
+      }
+
+      // registra na trilha de auditoria (o paciente vê que houve análise)
+      try {
+        await fetch(`${env.SUPABASE_URL}/rest/v1/acessos_medico`, {
+          method: 'POST',
+          headers: { apikey: env.SUPABASE_SERVICE_ROLE, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE}`, 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ medico_id: user.id, paciente_id: pacienteId, acao: 'analise_ia' })
+        });
+      } catch (e) {}
+
+      const ctxM = contexto || {};
+      const promptMed = `Você é um assistente clínico do VITALE apoiando um MÉDICO na leitura rápida de um paciente. NÃO é laudo nem prescrição — é um resumo para poupar o tempo dele antes/na consulta. Público: profissional de saúde, então pode usar termos técnicos e ser direto.
+
+Os dados são AUTO-RELATADOS pelo paciente no app (peso, composição por bioimpedância, exames que ele cadastrou, protocolo de medicações e suplementos, treinos). Trate-os como relato, não como prontuário.
+
+Produza um resumo TELEGRÁFICO em HTML inline (<strong>, <br>), com estes blocos:
+<strong>Panorama</strong> — 1-2 linhas: quem é, objetivo, tempo de acompanhamento, tendência de peso/composição.
+<strong>Sinais de atenção</strong> — marcadores fora da faixa, combinações de risco, adesão à proteína baixa, efeitos colaterais relatados. Ordene por relevância clínica. Se nada relevante, diga.
+<strong>Interações e conduta a considerar</strong> — do protocolo: interações plausíveis, adequação de horário/jejum, e conexões com exames (ex.: estatina × TGO/TGP, metformina × B12). Sugestões de conduta como HIPÓTESES a validar, nunca prescrição.
+<strong>Perguntar na consulta</strong> — 2-3 perguntas objetivas que os dados sugerem.
+
+REGRAS: máximo ~350 palavras; sem diagnóstico fechado; sem dose prescrita; termine com "<em>Resumo assistido por IA sobre dados auto-relatados — a conduta é do médico.</em>". Não repita o JSON.
+
+DADOS DO PACIENTE (JSON):
+${JSON.stringify(ctxM, null, 2)}`;
+
+      const mr = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1100, messages: [{ role: 'user', content: promptMed }] })
+      });
+      if (!mr.ok) {
+        const t = await mr.text();
+        return new Response(JSON.stringify({ error: `Erro da IA (${mr.status})`, detail: t.slice(0, 150) }), { status: mr.status, headers: corsHeaders });
+      }
+      const md = await mr.json();
+      const message = (md.content || []).map(c => c.text || '').join('').trim();
       return new Response(JSON.stringify({ message }), { headers: corsHeaders });
     }
 

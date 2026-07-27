@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.40 · IA-3 Coach contextual + import Apple Saúde · A40 · 2026-07-22';
+const VITALE_VERSION = 'v5.41 · IA-4/IA-5 + exercício na home · A41 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -145,6 +145,7 @@ const VITALE_CORE = {
       try { this.renderHistoricoCompleto(); } catch (e) { console.warn('renderHistoricoCompleto', e); }
       try { this.renderRefeicoes(); } catch (e) { console.warn('renderRefeicoes', e); }
       try { this.renderBalancoCalorico(); } catch (e) { console.warn('renderBalancoCalorico', e); }
+      try { this.renderExercicioHome(); } catch (e) { console.warn('renderExercicioHome', e); }
       try { this.buildComposicaoChart(); } catch (e) { console.warn('buildComposicaoChart', e); }
       try { this.renderBadgeResumo(); } catch (e) { console.warn('renderBadgeResumo', e); }
 
@@ -967,6 +968,7 @@ const VITALE_CORE = {
       this.state.exercicios.unshift(data);
       this.renderExercicios();
       this.renderBalancoCalorico();
+      try { this.renderExercicioHome(); } catch (e) {}
       this._invalidateCoachCache();
       const efr = document.getElementById('exercFotoResult'); if (efr) efr.innerHTML = '';
       const efp = document.getElementById('exercFotoPreview'); if (efp) efp.innerHTML = '';
@@ -1718,6 +1720,79 @@ const VITALE_CORE = {
 
   // v5.18 — Balanço do dia: consumo × gasto, proteína e leitura POR OBJETIVO.
   // Nunca some da tela: sem TMB, mostra o que dá e ensina como completar.
+  // v5.41 — card de exercícios na home. Incentivo visual: barras de
+  // treino/semana (8 semanas) coloridas conforme a meta da OMS (150 min),
+  // + streak de semanas ativas. Só aparece se houver histórico.
+  renderExercicioHome() {
+    const card = document.getElementById('exercHomeCard');
+    if (!card) return;
+    const exs = this.state.exercicios || [];
+    if (exs.length < 2) { card.style.display = 'none'; return; }
+    card.style.display = '';
+
+    const norm = v => this._normData ? this._normData(v) : (v || '').slice(0, 10);
+    const hoje = new Date();
+    // 8 semanas (segunda a domingo aproximado por janelas de 7 dias)
+    const semanas = [...Array(8)].map((_, i) => {
+      const fim = new Date(hoje.getTime() - (7 - i) * 7 * 86400000);
+      const ini = new Date(fim.getTime() - 6 * 86400000);
+      const iniS = ini.toISOString().slice(0, 10), fimS = fim.toISOString().slice(0, 10);
+      const doSem = exs.filter(e => { const d = norm(e.data); return d >= iniS && d <= fimS; });
+      return { label: `${ini.getDate()}/${ini.getMonth() + 1}`, min: doSem.reduce((s, e) => s + (e.duracao_min || 0), 0), n: doSem.length };
+    });
+
+    // streak: semanas consecutivas (terminando na atual) com pelo menos 1 treino
+    let streak = 0;
+    for (let i = semanas.length - 1; i >= 0; i--) { if (semanas[i].n > 0) streak++; else break; }
+
+    // resumo dos últimos 7 dias
+    const seteDias = new Date(hoje.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+    const sem7 = exs.filter(e => norm(e.data) >= seteDias);
+    const min7 = sem7.reduce((s, e) => s + (e.duracao_min || 0), 0);
+    const kcal7 = sem7.reduce((s, e) => s + (e.calorias || 0), 0);
+
+    const stEl = document.getElementById('exercHomeStreak');
+    if (stEl) stEl.innerHTML = streak >= 2 ? `🔥 ${streak} semanas seguidas ativo` : '';
+
+    const resumo = document.getElementById('exercHomeResumo');
+    if (resumo) resumo.innerHTML = `
+      <div><div style="font-size:24px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums">${sem7.length}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">TREINOS · 7d</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums">${min7}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">MINUTOS</div></div>
+      <div><div style="font-size:24px;font-weight:700;color:var(--em);font-variant-numeric:tabular-nums">${kcal7}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">KCAL</div></div>`;
+
+    const nota = document.getElementById('exercHomeNota');
+    if (nota) nota.innerHTML = min7 >= 150
+      ? `<strong style="color:var(--em)">✅ ${min7} min nesta semana</strong> — você já bateu a recomendação da OMS (150 min).`
+      : `Faltam <strong>${150 - min7} min</strong> para os 150 min/semana recomendados pela OMS. As barras verdes são as semanas no alvo.`;
+
+    const ctx = document.getElementById('exercHomeChart');
+    if (ctx) {
+      if (this._exercHomeChart) this._exercHomeChart.destroy();
+      this._exercHomeChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: semanas.map(s => s.label),
+          datasets: [{
+            label: 'Minutos/semana', data: semanas.map(s => s.min),
+            backgroundColor: semanas.map(s => s.min >= 150 ? 'rgba(39,196,125,0.75)' : 'rgba(212,168,67,0.5)'),
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false },
+            tooltip: { callbacks: { label: c => `${c.parsed.y} min · ${semanas[c.dataIndex].n} treino(s)` } } },
+          scales: {
+            x: { ticks: { color: '#a5a096', font: { size: 9 } }, grid: { display: false } },
+            y: { ticks: { color: '#a5a096', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' },
+              // linha de referência visual dos 150 min via sugestão de max
+              suggestedMax: 200 }
+          }
+        }
+      });
+    }
+  },
+
   renderBalancoCalorico() {
     const el = document.getElementById('balancoCard');
     if (!el) return;

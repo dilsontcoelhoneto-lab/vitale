@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A40"></script>
+<script src="/config.js?v=A41"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -988,7 +988,8 @@ const PORTAL = {
       this.sb.from('exercicios').select('data').eq('user_id',pid).then(r=>r.data||[])
     ]);
 
-    alvo.innerHTML=this.montarFicha({pid,perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc,ultimoAcesso});
+    this._fichaAtual={pid,perfil,pesos,exames,comp,meds,doses,efeitos,medidas,exerc,ultimoAcesso};
+    alvo.innerHTML=this.montarFicha(this._fichaAtual);
     this.graficoDosePeso(pesos,doses);
   },
 
@@ -1082,8 +1083,12 @@ const PORTAL = {
     <div class="pcabecalho">
       <div><h2>${this._esc(nome)}</h2>
         <div class="pobj">Análise 360 · gerada em ${new Date().toLocaleDateString('pt-BR')}</div></div>
-      <button class="btn sec sm" onclick="PORTAL.exportarPDF('${d.pid}')">Exportar PDF</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm" onclick="PORTAL.analiseIA('${d.pid}')">✨ Resumo IA</button>
+        <button class="btn sec sm" onclick="PORTAL.exportarPDF('${d.pid}')">Exportar PDF</button>
+      </div>
     </div>
+    <div id="analiseIABox" style="display:none"></div>
     ${this._desde(d.ultimoAcesso,d.pesos,d.exames,d.efeitos)}
     <div class="kpis">
       <div class="kpi"><div class="l">Peso atual</div><div class="v num">${peso!=null?peso.toFixed(1):'—'}<small> kg</small></div></div>
@@ -1208,6 +1213,54 @@ const PORTAL = {
     alvo.appendChild(rod);
     window.print();
     setTimeout(()=>rod.remove(),800);
+  },
+
+  // v5.41 (IA-5) — resumo clínico assistido do paciente aberto.
+  // Reúne o que já está carregado na ficha e envia ao endpoint, que valida
+  // o consentimento antes de gastar API e registra o acesso na trilha.
+  async analiseIA(pid){
+    const box=document.getElementById('analiseIABox');
+    if(!box) return;
+    const d=this._fichaAtual;
+    if(!d||d.pid!==pid){ box.style.display='block'; box.innerHTML='<div class="card"><p class="vazio">Reabra a ficha do paciente e tente novamente.</p></div>'; return; }
+    box.style.display='block';
+    box.innerHTML='<div class="card" style="border-color:var(--ouro)"><p class="vazio">✨ Lendo os dados do paciente e montando o resumo…</p></div>';
+
+    // monta o contexto (dados auto-relatados que o médico já vê na ficha)
+    const porM={}; (d.exames||[]).forEach(e=>{(porM[e.marcador]=porM[e.marcador]||[]).push({data:e.data,valor:e.valor,ref_min:e.ref_min,ref_max:e.ref_max});});
+    const c=(d.comp||[])[0]||null;
+    const ctx={
+      perfil:{nome:d.perfil?.nome||null, altura_m:d.perfil?.altura||null},
+      peso:{atual:d.pesos.length?parseFloat(d.pesos[d.pesos.length-1].peso):null,
+            inicial:d.pesos.length?parseFloat(d.pesos[0].peso):null,
+            registros:d.pesos.length, ritmo_28d_kg_sem:this._velocidade(d.pesos)},
+      composicao:c?{data:c.data,fonte:c.fonte,massa_muscular:c.massa_muscular,massa_gordura:c.massa_gordura,gordura_pct:c.gordura_pct,gordura_visceral:c.gordura_visceral}:null,
+      exames:porM,
+      protocolo:(d.meds||[]).map(m=>({nome:m.nome,tipo:m.tipo,principio_ativo:m.principio_ativo,
+        dose:[m.qtd_por_vez&&m.qtd_por_vez!=1?m.qtd_por_vez+'x':'',m.dose,m.unidade].filter(Boolean).join(' ').trim()||m.dose,
+        frequencia:m.frequencia_desc||m.frequencia,horario:m.horario,com_alimento:m.com_alimento,
+        prioridade:m.prioridade,desde:m.inicio,obs:m.observacao?String(m.observacao).replace('[protocolo]','').trim():null})),
+      glp1_doses:(d.doses||[]).slice(-8).map(x=>({data:x.data,medicamento:x.medicamento,dose:x.dose})),
+      efeitos_colaterais:(d.efeitos||[]).slice(0,10).map(e=>({data:e.data,tipo:e.tipo,intensidade:e.intensidade})),
+      treinos_30d:(d.exerc||[]).filter(e=>new Date(e.data+'T12:00:00')>Date.now()-30*86400000).length
+    };
+
+    try{
+      const {data:{session}}=await this.sb.auth.getSession();
+      const r=await fetch('/api/chat',{method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+(session?.access_token||'')},
+        body:JSON.stringify({tipo:'analise_medico',paciente_id:pid,contexto:ctx})});
+      if(r.status===403){ box.innerHTML='<div class="card"><p class="vazio">Sem consentimento ativo deste paciente.</p></div>'; return; }
+      if(!r.ok){ const e=await r.json().catch(()=>({})); box.innerHTML=`<div class="card"><p class="vazio">Não foi possível gerar o resumo (${this._esc(e.error||r.status)}).</p></div>`; return; }
+      const j=await r.json();
+      box.innerHTML=`<div class="card" style="border-color:var(--ouro)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--ouro)">✨ Resumo assistido por IA</span>
+        </div>
+        <div style="font-size:14.5px;line-height:1.7;color:var(--tinta)">${j.message||''}</div>
+      </div>`;
+      window.scrollTo({top:box.offsetTop-20,behavior:'smooth'});
+    }catch(e){ box.innerHTML='<div class="card"><p class="vazio">Falha de conexão ao gerar o resumo.</p></div>'; }
   },
 
   async exportarPDF(pid){
