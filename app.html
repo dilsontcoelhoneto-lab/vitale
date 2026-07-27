@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — App</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A46">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A47">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#040608">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A46"></script>
+<script src="/config.js?v=A47"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">CARREGANDO SEUS DADOS...</p></div>
@@ -168,6 +168,16 @@
     <!-- Métricas de hoje -->
     <div class="card" id="balancoCard" style="display:none"></div>
 
+    <!-- v5.47 — CONSUMO × GASTO: o gráfico central do app metabólico. -->
+    <div class="card" id="consumoGastoCard" style="display:none;border-color:rgba(93,173,226,0.28)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <h3><span class="ico">⚖️</span> Consumo × Gasto</h3>
+      </div>
+      <div id="consumoGastoResumo" style="display:flex;gap:18px;justify-content:space-around;text-align:center;margin:10px 0 14px"></div>
+      <div style="height:180px"><canvas id="consumoGastoChart"></canvas></div>
+      <div id="consumoGastoNota" style="font-size:12px;color:var(--textm);margin-top:10px;line-height:1.6"></div>
+    </div>
+
     <div class="card" id="exercHomeCard" style="display:none">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
         <h3><span class="ico">🏃</span> Treino no período</h3>
@@ -224,15 +234,16 @@
     </div>
 
     <div class="chart-card">
-      <h3><span class="ico">📉</span> Histórico + Projeção</h3>
+      <h3><span class="ico">📉</span> Seu peso ao longo do tempo</h3>
       <div class="chart-wrapper"><canvas id="weightChart"></canvas></div>
       <div class="chart-legend">
-        <div class="legend-item"><div class="legend-dot" style="background:#27c47d"></div>Peso real</div>
-        <div class="legend-item"><div class="legend-dot" style="border-top:2px dashed #d4a843;background:none"></div>Projeção</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#e8504a"></div>Meta IMC 30</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#e8924a;transform:rotate(45deg)"></div>⭐ Submeta</div>
-        <div class="legend-item"><div class="legend-dot" style="background:#4a9de8;transform:rotate(45deg)"></div>💉 Dose GLP-1</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#27c47d"></div>Peso registrado</div>
+        <div class="legend-item"><div class="legend-dot" style="border-top:2px dashed #d4a843;background:none"></div>Onde você chega no ritmo atual</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e8504a"></div>Peso-meta (IMC 30)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#e8924a;transform:rotate(45deg)"></div>⭐ Mini-meta</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#4a9de8;transform:rotate(45deg)"></div>💉 Dia da dose</div>
       </div>
+      <p style="font-size:11.5px;color:var(--textm);margin-top:8px;line-height:1.6">A linha verde é o que você já pesou. A tracejada dourada é a <strong>projeção</strong>: onde você chega se mantiver o ritmo atual. A linha vermelha é o peso que leva seu IMC abaixo de 30.</p>
     </div>
 
     <div class="chart-card" id="imcChartCard" style="margin-top:20px">
@@ -1353,10 +1364,10 @@
   app.html <strong style="color:var(--gold)">A45</strong> · core <span id="coreVersion" style="color:var(--textm)">carregando…</span>
 </div>
 
-<script src="/assets/js/vitale-calc.js?v=A46"></script>
-<script src="/assets/js/supabase-client.js?v=A46"></script>
-<script src="/assets/js/feature-flags.js?v=A46"></script>
-<script src="/assets/js/vitale-core.js?v=A46"></script>
+<script src="/assets/js/vitale-calc.js?v=A47"></script>
+<script src="/assets/js/supabase-client.js?v=A47"></script>
+<script src="/assets/js/feature-flags.js?v=A47"></script>
+<script src="/assets/js/vitale-core.js?v=A47"></script>
 <script>
 function toggleUserMenu() { const dd = document.getElementById('userMenuDropdown'); dd.style.display = dd.style.display === 'none' ? 'block' : 'none'; }
 document.addEventListener('click', e => { const menu = document.getElementById('userMenuDropdown'); if (!e.target.closest('.user-menu') && !e.target.closest('#userMenuDropdown') && menu) menu.style.display = 'none'; });
@@ -1373,7 +1384,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // dessincronizados. Foi exatamente isso que quebrou a navegação da v5.30:
   // o app.html novo continuou pedindo ?v=A26, e o Cloudflare devolveu o core
   // antigo — HTML novo com JS velho, botões sem função por trás.
-  const CORE_ESPERADO = 'v5.46';
+  const CORE_ESPERADO = 'v5.47';
   if (coreEl) {
     const v = VITALE_CORE.VERSION || '❓ sem versão';
     coreEl.textContent = v;

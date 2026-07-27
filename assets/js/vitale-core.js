@@ -10,12 +10,46 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.46 · stats no cabeçalho + humor off + exames corrigidos + localização na IA · A46 · 2026-07-27';
+const VITALE_VERSION = 'v5.47 · consumo×gasto + regra de mínimo p/ gráficos + fix treino/exames + marcadores · A47 · 2026-07-27';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
   // v5.46 — diário de humor desligado temporariamente. Para reativar: true.
   DIARIO_HUMOR_ON: false,
+
+  // v5.47 — REGRA GERAL: nenhum gráfico renderiza com poucos dados (evita
+  // gráfico "alucinando" e média mentirosa). Mínimo de PONTOS por gráfico.
+  // Ajuste um número aqui e vale pra todo o app.
+  GRAF_MIN: {
+    peso: 2,          // linha de peso
+    imc: 2,
+    composicao: 2,
+    medidas: 2,
+    exercicio: 1,     // 1 semana com treino já mostra
+    exames: 2,        // por marcador: precisa de 2 pontos p/ virar linha
+    consumo_gasto: 3  // dias com registro razoável de alimentação
+  },
+  // Gate reutilizável: se n < min, esconde o canvas e mostra um aviso
+  // amigável no lugar (elemento com id = canvasId + 'Vazio', se existir).
+  _grafGate(canvasEl, n, min, msg) {
+    if (!canvasEl) return false;
+    const wrap = canvasEl.parentElement;
+    let aviso = wrap ? wrap.querySelector('.graf-vazio') : null;
+    if (n < min) {
+      canvasEl.style.display = 'none';
+      if (wrap && !aviso) {
+        aviso = document.createElement('div');
+        aviso.className = 'graf-vazio';
+        aviso.style.cssText = 'padding:26px 18px;text-align:center;color:var(--textm);font-size:12.5px;line-height:1.6;border:1px dashed var(--border2);border-radius:12px';
+        wrap.appendChild(aviso);
+      }
+      if (aviso) { aviso.textContent = msg || `Precisa de pelo menos ${min} registros para montar este gráfico.`; aviso.style.display = 'block'; }
+      return false;
+    }
+    canvasEl.style.display = '';
+    if (aviso) aviso.style.display = 'none';
+    return true;
+  },
   state: {
     profile: null,
     healthProfile: null,
@@ -152,6 +186,7 @@ const VITALE_CORE = {
       try { this.renderRefeicoes(); } catch (e) { console.warn('renderRefeicoes', e); }
       try { this.renderBalancoCalorico(); } catch (e) { console.warn('renderBalancoCalorico', e); }
       try { this.renderExercicioHome(); } catch (e) { console.warn('renderExercicioHome', e); }
+      try { this.renderConsumoGasto(); } catch (e) { console.warn('renderConsumoGasto', e); }
       try { this.buildComposicaoChart(); } catch (e) { console.warn('buildComposicaoChart', e); }
       try { this.renderBadgeResumo(); } catch (e) { console.warn('renderBadgeResumo', e); }
 
@@ -976,6 +1011,7 @@ const VITALE_CORE = {
       this.renderExercicios();
       this.renderBalancoCalorico();
       try { this.renderExercicioHome(); } catch (e) {}
+    try { this.renderConsumoGasto(); } catch (e) {}
       this._invalidateCoachCache();
       const efr = document.getElementById('exercFotoResult'); if (efr) efr.innerHTML = '';
       const efp = document.getElementById('exercFotoPreview'); if (efp) efp.innerHTML = '';
@@ -1739,6 +1775,98 @@ const VITALE_CORE = {
   },
 
   // v5.18 — Balanço do dia: consumo × gasto, proteína e leitura POR OBJETIVO.
+  // v5.47 — CONSUMO × GASTO (o gráfico central de um app metabólico).
+  // Por dia: gasto = TMB + rotina (TMB×(fator−1)) + treino do dia; consumo =
+  // soma das calorias do diário. HONESTIDADE: só entram dias com registro
+  // alimentar "razoável" (senão o app mostraria um déficit falso). Dias
+  // parciais não viram déficit — o gráfico só aparece com o mínimo de dias.
+  CONSUMO_DIA_MIN: { refeicoes: 2, kcal: 800 }, // dia "válido" p/ consumo
+  renderConsumoGasto() {
+    const card = document.getElementById('consumoGastoCard');
+    if (!card) return;
+    const tmbInfo = this._getTMB && this._getTMB();
+    const hp = this.state.healthProfile || {};
+    const refs = this.state.refeicoes || [];
+    // sem TMB não dá pra calcular gasto — ensina em vez de sumir
+    if (!tmbInfo) {
+      card.style.display = '';
+      const canvas = document.getElementById('consumoGastoChart');
+      this._grafGate(canvas, 0, 1, 'Complete sexo, nascimento e altura (aba Perfil) para o app calcular seu gasto e montar o Consumo × Gasto.');
+      const r = document.getElementById('consumoGastoResumo'); if (r) r.innerHTML = '';
+      const n = document.getElementById('consumoGastoNota'); if (n) n.innerHTML = '';
+      return;
+    }
+    card.style.display = '';
+    const norm = v => this._normData ? this._normData(v) : String(v).slice(0, 10);
+    const fator = hp.fator_atividade || 1.3;
+    const gastoBaseDia = Math.round(tmbInfo.valor * fator); // basal + rotina
+    // janela: respeita o filtro do dashboard; padrão 14 dias
+    const filtroDe = this.dashFiltro?.de ? norm(this.dashFiltro.de) : null;
+    const corte = filtroDe || new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10);
+
+    // agrega por dia
+    const refPorDia = {}, treinoPorDia = {};
+    refs.forEach(r => { const d = norm(r.data); if (d < corte) return; (refPorDia[d] = refPorDia[d] || { kcal: 0, n: 0 }); refPorDia[d].kcal += (r.calorias || 0); refPorDia[d].n += 1; });
+    (this.state.exercicios || []).forEach(e => { const d = norm(e.data); if (d < corte) return; treinoPorDia[d] = (treinoPorDia[d] || 0) + (e.calorias || 0); });
+
+    // dias com consumo VÁLIDO (evita o déficit-mentira dos dias parciais)
+    const min = this.CONSUMO_DIA_MIN;
+    const dias = Object.keys(refPorDia).filter(d => refPorDia[d].n >= min.refeicoes || refPorDia[d].kcal >= min.kcal).sort();
+    const pontos = dias.map(d => ({
+      d, consumo: Math.round(refPorDia[d].kcal),
+      gasto: gastoBaseDia + Math.round(treinoPorDia[d] || 0)
+    }));
+
+    const canvas = document.getElementById('consumoGastoChart');
+    const MINDIAS = (this.GRAF_MIN && this.GRAF_MIN.consumo_gasto) || 3;
+    const resumo = document.getElementById('consumoGastoResumo');
+    const nota = document.getElementById('consumoGastoNota');
+    if (!this._grafGate(canvas, pontos.length, MINDIAS,
+      `Registre a alimentação de pelo menos ${MINDIAS} dias (com as refeições do dia) para o app comparar consumo × gasto sem inventar déficit.`)) {
+      if (resumo) resumo.innerHTML = '';
+      if (nota) nota.innerHTML = `<span style="color:var(--textm)">Dias válidos até agora: <strong>${pontos.length}</strong> de ${MINDIAS}. Dias com pouco registro não entram para não mostrar um déficit falso.</span>`;
+      return;
+    }
+
+    const mediaCons = Math.round(pontos.reduce((a, p) => a + p.consumo, 0) / pontos.length);
+    const mediaGasto = Math.round(pontos.reduce((a, p) => a + p.gasto, 0) / pontos.length);
+    const saldo = mediaCons - mediaGasto; // <0 = déficit
+    const saldoTxt = saldo < 0 ? `déficit de ${Math.abs(saldo)}` : `superávit de ${saldo}`;
+    const saldoCor = saldo < 0 ? 'var(--em)' : 'var(--gold)';
+
+    if (resumo) resumo.innerHTML = `
+      <div><div style="font-size:22px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums">${mediaCons}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">CONSUMO médio</div></div>
+      <div><div style="font-size:22px;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums">${mediaGasto}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">GASTO médio</div></div>
+      <div><div style="font-size:22px;font-weight:700;color:${saldoCor};font-variant-numeric:tabular-nums">${saldo < 0 ? '−' : '+'}${Math.abs(saldo)}</div><div style="font-size:10.5px;color:var(--textm);letter-spacing:.5px">SALDO/dia</div></div>`;
+
+    if (nota) nota.innerHTML = `Média diária: <strong style="color:${saldoCor}">${saldoTxt} kcal</strong> — nos <strong>${pontos.length}</strong> dias com registro. Barra clara = consumo, dourada = gasto; a linha é o saldo.`;
+
+    if (this._consumoGastoChart) this._consumoGastoChart.destroy();
+    const fmtDia = d => { const p = d.split('-'); return `${+p[2]}/${+p[1]}`; };
+    this._consumoGastoChart = new Chart(canvas, {
+      data: {
+        labels: pontos.map(p => fmtDia(p.d)),
+        datasets: [
+          { type: 'bar', label: 'Gasto', data: pontos.map(p => p.gasto), backgroundColor: 'rgba(212,168,67,0.55)', borderColor: '#d4a843', borderWidth: 1, borderRadius: 4, order: 2 },
+          { type: 'bar', label: 'Consumo', data: pontos.map(p => p.consumo), backgroundColor: 'rgba(93,173,226,0.55)', borderColor: '#5dade2', borderWidth: 1, borderRadius: 4, order: 2 },
+          { type: 'line', label: 'Saldo', data: pontos.map(p => p.consumo - p.gasto), borderColor: '#27c47d', backgroundColor: 'rgba(39,196,125,0.12)', tension: 0.3, pointRadius: 3, yAxisID: 'ySaldo', order: 1, fill: false }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: true, labels: { color: '#8c8880', font: { size: 10 }, boxWidth: 12 } },
+          tooltip: { callbacks: { afterBody: items => { const i = items[0].dataIndex; const s = pontos[i].consumo - pontos[i].gasto; return (s < 0 ? 'Déficit ' : 'Superávit ') + Math.abs(s) + ' kcal'; } } }
+        },
+        scales: {
+          x: { ticks: { color: '#8c8880', font: { size: 9 } }, grid: { display: false } },
+          y: { ticks: { color: '#8c8880', font: { size: 9 } }, title: { display: false } },
+          ySaldo: { position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#8c8880', font: { size: 9 } } }
+        }
+      }
+    });
+  },
+
   // Nunca some da tela: sem TMB, mostra o que dá e ensina como completar.
   // v5.41 — card de exercícios na home. Incentivo visual: barras de
   // treino/semana (8 semanas) coloridas conforme a meta da OMS (150 min),
@@ -1770,7 +1898,7 @@ const VITALE_CORE = {
       // + musculação). Contar "dias ativos" (datas distintas) faz mais sentido
       // do que contar sessões. Minutos continua sendo a soma real.
       const diasAtivos = new Set(doSem.map(e => norm(e.data))).size;
-      return { label: `${ini.getDate()}/${ini.getMonth() + 1}`, min: doSem.reduce((s, e) => s + (e.duracao_min || 0), 0), n: diasAtivos };
+      return { label: `${ini.getDate()}/${ini.getMonth() + 1}`, iniS, fimS, min: doSem.reduce((s, e) => s + (e.duracao_min || 0), 0), n: diasAtivos };
     });
 
     // streak: semanas consecutivas (terminando na atual) com pelo menos 1 dia ativo
@@ -1786,8 +1914,12 @@ const VITALE_CORE = {
     const rotPer = filtroDe ? 'DIAS ATIVOS' : 'DIAS ATIVOS · 7d';
 
     // média semanal para comparar com a meta da OMS (150 min/sem)
-    const semanasNoPer = Math.max(1, janelaDias / 7);
-    const mediaSemanal = Math.round(minP / semanasNoPer);
+    // v5.47 — divide pelas SEMANAS REAIS exibidas dentro do período (as mesmas
+    // barras do gráfico), não pela janela fracionada. Antes dava número
+    // inconsistente/inflado (ex.: 1095 min ÷ 2,1 = 511).
+    const semDoPeriodo = semanas.filter(s => s.fimS >= corte);
+    const nSemReais = Math.max(1, semDoPeriodo.length);
+    const mediaSemanal = Math.round(semDoPeriodo.reduce((a, s) => a + s.min, 0) / nSemReais);
 
     const stEl = document.getElementById('exercHomeStreak');
     if (stEl) stEl.innerHTML = streak >= 2 ? `🔥 ${streak} semanas seguidas ativo` : '';
@@ -2178,6 +2310,7 @@ const VITALE_CORE = {
   updateDashboard() {
     // v5.43 — garante o card de exercícios ao voltar para a home
     try { this.renderExercicioHome(); } catch (e) {}
+    try { this.renderConsumoGasto(); } catch (e) {}
     if (!this.state.weights.length) {
       this.renderEmptyDashboard();
       return;
@@ -2342,6 +2475,14 @@ const VITALE_CORE = {
     { id: 'tsh', nome: 'TSH', unidade: 'µUI/mL', ref_min: 0.4, ref_max: 4.3, grupo: 'Tireoide' },
     { id: 't4_livre', nome: 'T4 Livre', unidade: 'ng/dL', ref_min: 0.89, ref_max: 1.76, grupo: 'Tireoide' },
     { id: 'testosterona_total', nome: 'Testosterona Total', unidade: 'ng/dL', ref_min: 164, ref_max: 753, grupo: 'Hormônios' },
+    { id: 'testosterona_livre', nome: 'Testosterona Livre', unidade: 'pg/mL', ref_min: 8.7, ref_max: 25.1, grupo: 'Hormônios' },
+    { id: 'estradiol', nome: 'Estradiol', unidade: 'pg/mL', ref_min: 11, ref_max: 44, grupo: 'Hormônios' },
+    { id: 'shbg', nome: 'SHBG', unidade: 'nmol/L', ref_min: 18.3, ref_max: 54.1, grupo: 'Hormônios' },
+    { id: 'lh', nome: 'LH', unidade: 'mUI/mL', ref_min: 1.7, ref_max: 8.6, grupo: 'Hormônios' },
+    { id: 'cortisol', nome: 'Cortisol (manhã)', unidade: 'µg/dL', ref_min: 6.2, ref_max: 19.4, grupo: 'Hormônios' },
+    { id: 'psa_total', nome: 'PSA Total', unidade: 'ng/mL', ref_min: null, ref_max: 4.0, grupo: 'Hormônios' },
+    { id: 't3_total', nome: 'T3 Total', unidade: 'ng/dL', ref_min: 80, ref_max: 200, grupo: 'Tireoide' },
+    { id: 'apolipoproteina_b', nome: 'Apolipoproteína B', unidade: 'mg/dL', ref_min: null, ref_max: 100, grupo: 'Lipídios' },
     { id: 'vitamina_d', nome: 'Vitamina D (25-OH)', unidade: 'ng/mL', ref_min: 30, ref_max: 100, grupo: 'Vitaminas' },
     { id: 'vitamina_b12', nome: 'Vitamina B12', unidade: 'pg/mL', ref_min: 223, ref_max: 672, grupo: 'Vitaminas' },
     { id: 'pcr', nome: 'PCR Ultrassensível', unidade: 'mg/dL', ref_min: null, ref_max: 0.3, grupo: 'Inflamação' },
@@ -2514,7 +2655,14 @@ const VITALE_CORE = {
     ldl: ['ldl'], hdl: ['hdl'], triglicerides: ['triglic'], tgo: ['tgo', 'ast', 'oxalac'],
     tgp: ['tgp', 'alt', 'piruv'], ggt: ['ggt', 'gama'], creatinina: ['creatinina'],
     ureia: ['ureia', 'uréia'], acido_urico: ['úrico', 'urico'], tsh: ['tsh'],
-    t4_livre: ['t4'], testosterona_total: ['testosterona'], vitamina_d: ['vitamina d', '25-hidroxi', 'hidroxivitamina'],
+    t4_livre: ['t4 livre', 't4'], t3_total: ['t3 total', 't3'],
+    testosterona_livre: ['testosterona livre', 'testo livre'],
+    testosterona_total: ['testosterona total', 'testosterona', 'testo total'],
+    estradiol: ['estradiol', 'e2'], shbg: ['shbg', 'globulina ligadora'],
+    lh: ['hormônio luteinizante', 'luteinizante', 'lh '], cortisol: ['cortisol'],
+    psa_total: ['psa total', 'psa', 'antígeno prostático'],
+    apolipoproteina_b: ['apolipoproteína b', 'apolipoproteina b', 'apo b', 'apob'],
+    vitamina_d: ['vitamina d', '25-hidroxi', 'hidroxivitamina'],
     vitamina_b12: ['b12', 'b-12'], pcr: ['pcr', 'proteína c'], ferritina: ['ferritina']
   },
 
@@ -3235,29 +3383,54 @@ const VITALE_CORE = {
     const exames = this.state.exames || [];
     const porMarcador = {};
     exames.forEach(e => { (porMarcador[e.marcador] = porMarcador[e.marcador] || []).push(e); });
-    const comHistorico = Object.entries(porMarcador).filter(([, r]) => r.length >= 2);
-    if (!comHistorico.length) { cont.innerHTML = '<p style="color:var(--textm);font-size:12px;text-align:center;padding:10px 0">Registre o mesmo marcador em 2+ datas para ver a tendência em gráfico.</p>'; return; }
+    // v5.47 — DEDUPE por data (registro manual + importado no mesmo dia faziam
+    // a linha ziguezaguear) e coage p/ número. Um ponto por data (o último).
+    const MIN = (this.GRAF_MIN && this.GRAF_MIN.exames) || 2;
+    const serie = {};
+    Object.entries(porMarcador).forEach(([mid, regs]) => {
+      const porData = {};
+      regs.forEach(r => {
+        const v = Number(r.valor);
+        if (!isFinite(v)) return;
+        const d = (this._normData ? this._normData(r.data) : String(r.data).slice(0, 10));
+        porData[d] = { data: d, valor: v, id: r.id }; // último do dia vence
+      });
+      const pts = Object.values(porData).sort((a, b) => new Date(a.data) - new Date(b.data));
+      if (pts.length >= MIN) serie[mid] = pts;
+    });
+    const comHistorico = Object.entries(serie);
+    if (!comHistorico.length) { cont.innerHTML = `<p style="color:var(--textm);font-size:12px;text-align:center;padding:10px 0">Registre o mesmo marcador em ${MIN}+ datas diferentes para ver a tendência em gráfico.</p>`; return; }
     cont.innerHTML = comHistorico.map(([mid]) => {
       const info = this._marcInfo(mid);
       return `<div style="margin-bottom:18px"><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${info.nome}</div><canvas id="examChart_${mid}" height="120"></canvas></div>`;
     }).join('');
-    comHistorico.forEach(([mid, regs]) => {
+    comHistorico.forEach(([mid, ord]) => {
       const info = this._marcInfo(mid);
-      const ord = [...regs].sort((a, b) => new Date(a.data) - new Date(b.data));
       const ctx = document.getElementById(`examChart_${mid}`);
       if (!ctx) return;
       this._examChartInstances = this._examChartInstances || {};
       if (this._examChartInstances[mid]) this._examChartInstances[mid].destroy();
+      const vals = ord.map(r => r.valor);
       const datasets = [{
-        label: info.nome, data: ord.map(r => r.valor),
-        borderColor: '#d4a843', backgroundColor: 'rgba(212,168,67,0.1)', tension: 0.3, fill: true, pointRadius: 4
+        label: info.nome, data: vals,
+        borderColor: '#d4a843', backgroundColor: 'rgba(212,168,67,0.1)', tension: 0.25, fill: true, pointRadius: 4, spanGaps: true
       }];
       if (info.ref_max != null) datasets.push({ label: 'máx', data: ord.map(() => info.ref_max), borderColor: 'rgba(232,80,74,0.5)', borderDash: [5, 5], pointRadius: 0, fill: false });
       if (info.ref_min != null) datasets.push({ label: 'mín', data: ord.map(() => info.ref_min), borderColor: 'rgba(39,196,125,0.5)', borderDash: [5, 5], pointRadius: 0, fill: false });
+      // escala Y guiada pelos DADOS (não deixa a linha de referência achatar tudo)
+      const cand = vals.concat(info.ref_max != null ? [info.ref_max] : [], info.ref_min != null ? [info.ref_min] : []);
+      const lo = Math.min(...cand), hi = Math.max(...cand), pad = Math.max(1, (hi - lo) * 0.15);
       this._examChartInstances[mid] = new Chart(ctx, {
         type: 'line',
         data: { labels: ord.map(r => this.fmt(r.data)), datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#8c8880', font: { size: 9 } } }, y: { ticks: { color: '#8c8880', font: { size: 9 } } } } }
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${c.parsed.y} ${info.unidade || ''}`.trim() } } },
+          scales: {
+            x: { ticks: { color: '#8c8880', font: { size: 9 } } },
+            y: { suggestedMin: lo - pad, suggestedMax: hi + pad, ticks: { color: '#8c8880', font: { size: 9 } } }
+          }
+        }
       });
     });
   },
@@ -3716,6 +3889,7 @@ const VITALE_CORE = {
     try { if (this.buildComposicaoChart) this.buildComposicaoChart(); } catch (e) {}
     try { if (this.buildMedidasChart) this.buildMedidasChart(); } catch (e) {}
     try { this.renderExercicioHome(); } catch (e) {}
+    try { this.renderConsumoGasto(); } catch (e) {}
     try { this.renderMoodHistorico(); } catch (e) {}
     this._atualizarInfoFiltro();
   },
