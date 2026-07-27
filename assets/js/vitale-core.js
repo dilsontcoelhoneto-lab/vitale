@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.36 · Portal: escolha de conta não-médica · A36 · 2026-07-22';
+const VITALE_VERSION = 'v5.37 · Fix QR do 2FA + dados de teste · A37 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -6578,7 +6578,12 @@ const VITALE_CORE = {
     const { data, error } = await window.sb.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'VITALE ' + Date.now() });
     if (error) { qr.innerHTML = ''; return this._msg2FA('Não foi possível gerar: ' + error.message); }
     this._enroll2FA = data.id;
-    qr.innerHTML = `<img src="${data.totp.qr_code}" alt="QR code" style="width:190px;height:190px;background:#fff;padding:8px;border-radius:10px">`;
+    // v5.37 — data-URI SVG com aspas quebra o src via innerHTML; seta por propriedade
+    qr.innerHTML = '';
+    const _qi = document.createElement('img');
+    _qi.src = data.totp.qr_code; _qi.alt = 'QR code';
+    _qi.style.cssText = 'width:190px;height:190px;background:#fff;padding:8px;border-radius:10px';
+    qr.appendChild(_qi);
     document.getElementById('seg2faSegredo').textContent = data.totp.secret;
   },
 

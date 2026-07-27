@@ -10,7 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<script src="/config.js?v=A36"></script>
+<script src="/config.js?v=A37"></script>
 <style>
 /* ===== PAPEL CLÍNICO ===== */
 :root{
@@ -570,7 +570,13 @@ const PORTAL = {
     this.tela('telaMfaCadastro');
     this._msg('mfaCadMsg','');
     this._mfaFactorId=data.id;
-    document.getElementById('mfaQr').innerHTML=`<img src="${data.totp.qr_code}" alt="QR code do autenticador" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:8px">`;
+    // v5.37 — o qr_code do Supabase é um data-URI SVG com aspas duplas;
+    // montar via innerHTML quebra o atributo src. Seta por propriedade.
+    const _qr=document.getElementById('mfaQr'); _qr.innerHTML='';
+    const _img=document.createElement('img');
+    _img.src=data.totp.qr_code; _img.alt='QR code do autenticador';
+    _img.style.cssText='width:200px;height:200px;background:#fff;padding:8px;border-radius:8px';
+    _qr.appendChild(_img);
     document.getElementById('mfaSegredo').textContent=data.totp.secret;
     return true;
   },

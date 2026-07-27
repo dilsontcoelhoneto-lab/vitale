@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VITALE — Torre de Comando</title>
-<link rel="stylesheet" href="/assets/css/vitale.css?v=A36">
+<link rel="stylesheet" href="/assets/css/vitale.css?v=A37">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <!-- v5.13 — TORRE em tema "papel clínico" (override do vitale.css) -->
 <style>
@@ -27,7 +27,7 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Credenciais Supabase: ficam em /config.js (NUNCA sobrescrito por entregas de código) -->
-<script src="/config.js?v=A36"></script>
+<script src="/config.js?v=A37"></script>
 </head>
 <body>
 <div id="initLoader"><div class="loader-ring"></div><p style="color:var(--textm);font-size:12px;letter-spacing:2px">VERIFICANDO ACESSO ADMIN...</p></div>
@@ -191,7 +191,7 @@
   </div>
 </div>
 
-<script src="/assets/js/supabase-client.js?v=A36"></script>
+<script src="/assets/js/supabase-client.js?v=A37"></script>
 <script>
 let allFlags = [], allUsers = [];
 
@@ -661,12 +661,16 @@ async function garantirMfaAdmin() {
   window._mfaFactorId = data.id;
   _telaMfa(`<h2 style="color:var(--gold);font-size:22px;margin-bottom:8px">Ative a verificação em duas etapas</h2>
     <p style="font-size:13px;color:var(--textm);margin-bottom:16px">A Torre acessa dados de todos os usuários. Escaneie o código com Google Authenticator, Authy ou 1Password.</p>
-    <div style="text-align:center"><img src="${data.totp.qr_code}" alt="QR code" style="width:190px;height:190px;background:#fff;padding:8px;border-radius:8px"></div>
+    <div style="text-align:center"><span id="mfaQrHolder"></span></div>
     <p style="font-family:monospace;font-size:11px;color:var(--textm);word-break:break-all;margin:12px 0;text-align:center">${esc(data.totp.secret)}</p>
     <input id="mfaCod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"
       style="width:100%;text-align:center;letter-spacing:8px;font-family:monospace;font-size:20px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text)">
     <p id="mfaMsg" style="font-size:12px;margin-top:10px;min-height:16px"></p>
     <button class="btn btn-primary" onclick="mfaCadastrarAdmin()" style="width:100%;margin-top:8px">Ativar e entrar</button>`);
+  // v5.37 — seta o QR por propriedade (data-URI SVG quebra via innerHTML)
+  const _qh = document.getElementById('mfaQrHolder');
+  if (_qh) { const _qi = document.createElement('img'); _qi.src = data.totp.qr_code; _qi.alt = 'QR code';
+    _qi.style.cssText = 'width:190px;height:190px;background:#fff;padding:8px;border-radius:8px'; _qh.appendChild(_qi); }
   return false;
 }
 
