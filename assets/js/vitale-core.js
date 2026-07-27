@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.47 · consumo×gasto + regra de mínimo p/ gráficos + fix treino/exames + marcadores · A47 · 2026-07-27';
+const VITALE_VERSION = 'v5.48 · treino dia a dia + ritmo no cabeçalho + paleta única (V7) · A48 · 2026-07-27';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -28,6 +28,13 @@ const VITALE_CORE = {
     exercicio: 1,     // 1 semana com treino já mostra
     exames: 2,        // por marcador: precisa de 2 pontos p/ virar linha
     consumo_gasto: 3  // dias com registro razoável de alimentação
+  },
+  // v5.48 (V7) — paleta ÚNICA dos gráficos, pra todas as telas "conversarem"
+  // e facilitar virar app. Mudar aqui muda em todo lugar.
+  CHART_CORES: {
+    peso: '#27c47d', consumo: '#5dade2', gasto: '#d4a843', saldo: '#27c47d',
+    treino: '#27c47d', marca: '#d4a843', ref: 'rgba(232,80,74,0.5)',
+    grid: 'rgba(255,255,255,0.05)', tick: '#a5a096'
   },
   // Gate reutilizável: se n < min, esconde o canvas e mostra um aviso
   // amigável no lugar (elemento com id = canvasId + 'Vazio', se existir).
@@ -1954,31 +1961,40 @@ const VITALE_CORE = {
 
     const nota = document.getElementById('exercHomeNota');
     if (nota) nota.innerHTML = mediaSemanal >= 150
-      ? `<strong style="color:var(--em)">✅ média de ${mediaSemanal} min/semana</strong> — acima da recomendação da OMS (150 min). Barras verdes = semanas no alvo.`
-      : `Média de <strong>${mediaSemanal} min/semana</strong> no período — a OMS recomenda 150. As barras verdes são as semanas que bateram a meta.`;
+      ? `<strong style="color:var(--em)">✅ média de ${mediaSemanal} min/semana</strong> — acima da recomendação da OMS (150 min). Cada barra é um dia.`
+      : `Média de <strong>${mediaSemanal} min/semana</strong> no período — a OMS recomenda 150. Cada barra é um dia treinado.`;
 
+    // v5.48 — DIA A DIA (barras finas), não agrupado por semana (pedido do Dilson).
+    // Janela: filtro do dashboard; sem filtro, 30 dias. Inclui dias zerados.
+    const iniDaily = filtroDe || new Date(hoje.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+    const minPorDia = {};
+    exs.forEach(e => { const d = norm(e.data); if (d < iniDaily) return; minPorDia[d] = (minPorDia[d] || 0) + (e.duracao_min || 0); });
+    const dias = [];
+    for (let t = new Date(iniDaily + 'T12:00:00'); t <= hoje; t.setDate(t.getDate() + 1)) {
+      const ds = t.toISOString().slice(0, 10);
+      dias.push({ ds, min: minPorDia[ds] || 0, label: `${t.getDate()}/${t.getMonth() + 1}` });
+    }
+    const C = this.CHART_CORES;
     const ctx = document.getElementById('exercHomeChart');
-    if (ctx) {
+    if (ctx && this._grafGate(ctx, dias.length, (this.GRAF_MIN.exercicio || 1), 'Registre treinos para ver o dia a dia.')) {
       if (this._exercHomeChart) this._exercHomeChart.destroy();
       this._exercHomeChart = new Chart(ctx, {
         type: 'bar',
         data: {
-          labels: semanas.map(s => s.label),
+          labels: dias.map(d => d.label),
           datasets: [{
-            label: 'Minutos/semana', data: semanas.map(s => s.min),
-            backgroundColor: semanas.map(s => s.min >= 150 ? 'rgba(39,196,125,0.75)' : 'rgba(212,168,67,0.5)'),
-            borderRadius: 6
+            label: 'Minutos no dia', data: dias.map(d => d.min),
+            backgroundColor: dias.map(d => d.min > 0 ? 'rgba(39,196,125,0.8)' : 'rgba(255,255,255,0.05)'),
+            borderWidth: 0, borderRadius: 1, barPercentage: 1.0, categoryPercentage: 0.92
           }]
         },
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false },
-            tooltip: { callbacks: { label: c => `${c.parsed.y} min · ${semanas[c.dataIndex].n} dia(s) ativo(s)` } } },
+            tooltip: { callbacks: { title: items => dias[items[0].dataIndex].label, label: c => `${c.parsed.y} min` } } },
           scales: {
-            x: { ticks: { color: '#a5a096', font: { size: 9 } }, grid: { display: false } },
-            y: { ticks: { color: '#a5a096', font: { size: 9 } }, grid: { color: 'rgba(255,255,255,0.04)' },
-              // linha de referência visual dos 150 min via sugestão de max
-              suggestedMax: 200 }
+            x: { ticks: { color: C.tick, font: { size: 8 }, maxTicksLimit: 12, autoSkip: true }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: C.tick, font: { size: 9 } }, grid: { color: C.grid } }
           }
         }
       });
