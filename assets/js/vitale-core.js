@@ -10,7 +10,7 @@
 //       + Fix: compressão de imagem antes do OCR
 // =====================================================
 
-const VITALE_VERSION = 'v5.43 · DNA + exames históricos + TMB · A43 · 2026-07-22';
+const VITALE_VERSION = 'v5.44 · 2FA off no app do paciente (teste) · A44 · 2026-07-22';
 
 const VITALE_CORE = {
   VERSION: VITALE_VERSION,
@@ -6678,7 +6678,13 @@ const VITALE_CORE = {
   },
 
   // Portão de 2FA na abertura do app. Devolve true se pode seguir.
+  // v5.44 — 2FA no app do PACIENTE é opcional. Durante a fase de teste este
+  // portão fica desligado (o Dilson não quer o desafio no login do paciente).
+  // Para reativar, mude para true. No portal do médico o 2FA é controlado à parte.
+  PORTAO_2FA_PACIENTE: false,
+
   async _exigir2FA() {
+    if (!this.PORTAO_2FA_PACIENTE) return true;       // fase de teste: sem desafio
     let n;
     try { n = (await window.sb.auth.mfa.getAuthenticatorAssuranceLevel()).data; }
     catch (e) { return true; }                       // MFA off no projeto
